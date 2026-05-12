@@ -51,15 +51,34 @@ curl http://localhost:11434/api/tags
 ## Architecture
 
 ```
-backend/
-  config.py         # STANDARD_SCHEMA, detection, auto-mapping
-  main.py           # FastAPI app (30+ endpoints)
-  db/               # SQLite persistence (datasets, sessions, results)
-  cleaning/         # Source-specific cleaning (ncdc, kpm, myvass, kkm)
-  eda/              # Analysis pipeline (who_zscore, indicators, quality, ...)
-  export/           # CSV/XLSX/Tableau export
-  utils/            # IC validator, age, geo, normaliser
-data/
-  zscore/           # WHO 2006 LMS tables (required)
-  smartdqc.db       # SQLite DB (auto-created on first run)
+SmartDQC/
+├── backend/          # FastAPI app (30+ endpoints, dual namespace /eda/* + /clean/*)
+│   ├── main.py       # All route definitions
+│   ├── config.py     # STANDARD_SCHEMA, detection, auto-mapping hints
+│   ├── db/           # DuckDB persistence (datasets, sessions, analysis_results)
+│   ├── cleaning/     # Source-specific cleaning (kkm, kpm, myvass, ncdc)
+│   ├── eda/          # Analysis pipeline (who_zscore, indicators, quality, ...)
+│   ├── export/       # CSV/XLSX/Tableau export
+│   └── utils/        # IC validator, age, geo, normaliser
+├── frontend/         # React app — Day 6 scope
+├── tests/
+│   ├── backend/      # Unit + integration tests
+│   └── e2e/          # Playwright end-to-end tests
+├── scripts/          # Utility scripts
+├── data/
+│   ├── zscore/       # WHO 2006 LMS tables (manual placement required)
+│   └── smartdqc.duckdb  # DuckDB file (auto-created on first run; gitignored)
+└── Docs/             # Reference documentation
 ```
+
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| [`Docs/SmartDQC_Master.md`](Docs/SmartDQC_Master.md) | Single source of truth — features, decisions, timeline, open items |
+| [`Docs/architecture.md`](Docs/architecture.md) | System components, repo structure, persistence schema, API surface |
+| [`Docs/decisions.md`](Docs/decisions.md) | Architecture Decision Records — why we built it this way |
+| [`Docs/known_issues.md`](Docs/known_issues.md) | Open items, risk register, audit findings, post-v1 scope gaps |
+| [`Docs/workflows.md`](Docs/workflows.md) | End-to-end workflows: schema mapping, cleaning, AI narrative, multi-dataset |
+| [`Docs/SmartDQC_Tool_Flow.md`](Docs/SmartDQC_Tool_Flow.md) | Per-dataset step-by-step processing (MyVASS, NCDC, KPM, KKM) |
+| [`Docs/SmartDQC_UI_Spec.md`](Docs/SmartDQC_UI_Spec.md) | UI layout, navigation, and component specifications |
