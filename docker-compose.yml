@@ -1,0 +1,49 @@
+﻿services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - WHO_ZSCORE_DIR=/app/data/zscore
+      - SMARTDQC_DB_PATH=/app/data/smartdqc.duckdb
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  ollama-init:
+    image: curlimages/curl:latest
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama...' &&
+        until curl -sf http://ollama:11434/api/tags; do sleep 3; done &&
+        echo 'Pulling model: '$$OLLAMA_MODEL &&
+        curl -s http://ollama:11434/api/pull -d '{\"name\":\"'$$OLLAMA_MODEL'\"}' &&
+        echo 'Model ready.'
+      "
+    restart: on-failure
+
+volumes:
+  ollama_models:
