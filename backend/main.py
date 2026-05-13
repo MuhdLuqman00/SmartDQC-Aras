@@ -30,6 +30,7 @@ from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
 from .ml.corrections import flag_anomalies
 from .ml.risk_score import compute_risk_scores
+from .ml.zscore_history import forecast_district_risk
 from .export.report import build_pptx_bytes, build_pdf_bytes
 from .eda.kpi import compute_kpi_dashboard
 
@@ -1212,6 +1213,15 @@ async def risk_score_endpoint(
         raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
     result = compute_risk_scores(entry["df"])
     return JSONResponse(content=json_safe(result))
+
+
+class ForecastRequest(BaseModel):
+    records: list[dict]
+
+@app.post("/risk/forecast")
+async def risk_forecast(req: ForecastRequest):
+    """Compute next-quarter district risk forecast from historical zscore_archive records."""
+    return forecast_district_risk(req.records)
 
 
 # --- KPI NAMESPACE --------------------------------------------------------------
