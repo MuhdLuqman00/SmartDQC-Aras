@@ -29,6 +29,7 @@ from .db.models import Dataset, Session as DBSession, AnalysisResult
 from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
 from .ml.corrections import flag_anomalies
+from .ml.risk_score import compute_risk_scores
 from .export.report import build_pptx_bytes, build_pdf_bytes
 
 from datetime import datetime
@@ -1196,6 +1197,20 @@ async def report_pdf_endpoint(req: ReportRequest):
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="SmartDQC_Report.pdf"'},
     )
+
+
+# --- RISK NAMESPACE -------------------------------------------------------------
+
+@app.post("/risk/score")
+async def risk_score_endpoint(
+    cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+):
+    """Compute per-child composite risk score (0-100) and district aggregation."""
+    entry = _cleaned_cache.get(cache_id)
+    if entry is None:
+        raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
+    result = compute_risk_scores(entry["df"])
+    return JSONResponse(content=json_safe(result))
 
 
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────
