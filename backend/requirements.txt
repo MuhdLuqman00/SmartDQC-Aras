@@ -4,5 +4,7 @@ pandas
 numpy
 openpyxl
 python-multipart
-duckdb
 httpx
+sqlalchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+psycopg2-binary>=2.9

@@ -1,23 +1,30 @@
-﻿import os
-from pathlib import Path
+import logging
+import os
 
-import duckdb
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, Session
 
-from .models import CREATE_STATEMENTS
+logger = logging.getLogger(__name__)
 
-
-_DB_PATH: str = ""
+engine = None
+SessionLocal = None
 
 
 def init_db() -> None:
-    global _DB_PATH
-    _DB_PATH = os.environ.get("SMARTDQC_DB_PATH", "/app/data/smartdqc.duckdb")
-    Path(_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect(_DB_PATH) as conn:
-        for stmt in CREATE_STATEMENTS:
-            conn.execute(stmt)
+    global engine, SessionLocal
+
+    url = os.environ["DATABASE_URL"]  # Hard fail — no silent fallback
+    engine = create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10)
+    SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    logger.info("Database connection verified.")
 
 
-def get_db() -> duckdb.DuckDBPyConnection:
-    path = _DB_PATH or os.environ.get("SMARTDQC_DB_PATH", "/app/data/smartdqc.duckdb")
-    return duckdb.connect(path)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

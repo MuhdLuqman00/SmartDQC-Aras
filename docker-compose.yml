@@ -1,4 +1,19 @@
-﻿services:
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartdqc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartdqc}
+      POSTGRES_DB: ${POSTGRES_DB:-smartdqc}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartdqc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   api:
     image: luqmanzulkefli/smartdqc-api:latest
     ports:
@@ -7,11 +22,14 @@
       - ./data:/app/data
     environment:
       - WHO_ZSCORE_DIR=/app/data/zscore
-      - SMARTDQC_DB_PATH=/app/data/smartdqc.duckdb
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-smartdqc}:${POSTGRES_PASSWORD:-smartdqc}@postgres/${POSTGRES_DB:-smartdqc}
     depends_on:
-      - ollama
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     restart: unless-stopped
 
   ollama:
@@ -47,3 +65,4 @@
 
 volumes:
   ollama_models:
+  postgres_data:

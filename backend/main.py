@@ -5,12 +5,16 @@ All endpoints. Business logic lives in backend/eda/, backend/cleaning/, and back
 
 import io
 import json
+import logging
 import re
+import uuid
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -21,8 +25,12 @@ from .eda.runner import run_eda, json_safe
 from .export.tableau import build_aggregated_table, to_excel as tbl_excel, to_csv as tbl_csv
 from .export.cleaned import to_excel as cln_excel, to_csv as cln_csv
 from .db.init_db import init_db, get_db
+from .db.models import Dataset, Session as DBSession, AnalysisResult
 from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
+
+from datetime import datetime
+from sqlalchemy.orm import Session as SASession
 
 
 @asynccontextmanager
@@ -1532,24 +1540,42 @@ class NLQRequest(BaseModel):
 
 
 @app.post("/ai/narrative")
-async def ai_narrative(req: NarrativeRequest):
+async def ai_narrative(req: NarrativeRequest, db: SASession = Depends(get_db)):
     """Generate AI narrative (insights + recommendations) from EDA results."""
     try:
         narrative = generate_narrative(req.eda_result)
     except Exception as e:
         raise HTTPException(500, f"Narrative generation failed: {e}")
 
-    import uuid
-    conn = get_db()
+    now = datetime.utcnow()
+    PLACEHOLDER_DATASET_ID = "00000000-0000-0000-0000-000000000000"
     try:
-        conn.execute(
-            "INSERT INTO analysis_results (id, session_id, result_type, result_json, created_at) VALUES (?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), req.session_id, "narrative", json.dumps(narrative), pd.Timestamp.now()),
-        )
-    except Exception:
-        pass
-    finally:
-        conn.close()
+        if not db.get(Dataset, PLACEHOLDER_DATASET_ID):
+            db.add(Dataset(
+                id=PLACEHOLDER_DATASET_ID,
+                name="__placeholder__",
+                filename="__placeholder__",
+                created_at=now,
+            ))
+        if not db.get(DBSession, req.session_id):
+            db.add(DBSession(
+                id=req.session_id,
+                dataset_id=PLACEHOLDER_DATASET_ID,
+                notes=None,
+                created_at=now,
+                updated_at=now,
+            ))
+        db.add(AnalysisResult(
+            id=str(uuid.uuid4()),
+            session_id=req.session_id,
+            result_type="narrative",
+            result_json=json.dumps(narrative),
+            created_at=now,
+        ))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Failed to persist analysis_result: %s", exc)
 
     return narrative
 
