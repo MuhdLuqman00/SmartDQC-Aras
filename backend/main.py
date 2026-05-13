@@ -32,7 +32,7 @@ from .ml.corrections import flag_anomalies
 from .ml.risk_score import compute_risk_scores
 from .ml.zscore_history import forecast_district_risk
 from .export.report import build_pptx_bytes, build_pdf_bytes
-from .eda.kpi import compute_kpi_dashboard
+from .eda.kpi import compute_kpi_dashboard, compute_trajectory_narratives
 
 from datetime import datetime
 from sqlalchemy.orm import Session as SASession
@@ -1236,6 +1236,16 @@ async def kpi_dashboard_endpoint(
         raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
     result = compute_kpi_dashboard(entry["df"])
     return JSONResponse(content=json_safe(result))
+
+
+class TrajectoryRequest(BaseModel):
+    historical_snapshots: list[dict]
+    current_breakdown: list[dict] = []
+
+@app.post("/kpi/trajectory")
+async def kpi_trajectory(req: TrajectoryRequest):
+    """Compute per-district trajectory narratives and 2027 target forecast from indicator snapshots."""
+    return compute_trajectory_narratives(req.historical_snapshots, req.current_breakdown)
 
 
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────
