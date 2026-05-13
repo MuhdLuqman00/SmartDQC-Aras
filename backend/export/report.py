@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from io import BytesIO
 from datetime import date
 
@@ -20,10 +21,27 @@ _TEAL  = RGBColor(0x08, 0x91, 0xB2)
 _GRAY  = RGBColor(0x64, 0x74, 0x8B)
 _WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
+_METHODOLOGY_LINES = [
+    "Data Sources: myVASS, CCMS, KPM, NCDC",
+    "Z-Score Standard: WHO 2006 Child Growth Standards (WHO_Anthro v3.2.2)",
+    "Classification: WAZ<-2 SD=Underweight; HAZ<-2 SD=Stunted; WHZ<-2 SD=Wasted",
+    "Quality Rules: KKM-defined completeness, consistency, and range checks",
+    "Anomaly Detection: IsolationForest (contamination=0.05) + 3x IQR fence",
+    "Pattern Classification: Decimal shift (x10/div10), digit transposition, column swap",
+    "Risk Scoring: Weighted flag-sum (Stunting x25, Wasting x30, Underweight x20)",
+    "KPI Benchmarks: NPAN 2021-2025 national targets; WHO Global Targets 2025",
+    "Trend Analysis: Ordinary least-squares linear regression (>=3 periods per district)",
+    "Trajectory: Forecasts 4 periods ahead; On Track if forecast <= NPAN target",
+]
 
-# ── PPTX ──────────────────────────────────────────────────────────────────────
 
-def build_pptx_bytes(eda_result: dict, narrative: dict) -> bytes:
+# == PPTX ======================================================================
+
+def build_pptx_bytes(
+    eda_result: dict,
+    narrative: dict,
+    kpi_result: dict | None = None,
+) -> bytes:
     prs = Presentation()
     prs.slide_width  = Inches(13.33)
     prs.slide_height = Inches(7.5)
@@ -33,6 +51,10 @@ def build_pptx_bytes(eda_result: dict, narrative: dict) -> bytes:
     _add_quality_slide(prs, blank, eda_result)
     _add_narrative_slide(prs, blank, narrative)
     _add_recommendations_slide(prs, blank, narrative)
+
+    if kpi_result:
+        _add_indicator_table_slide(prs, blank, kpi_result)
+        _add_methodology_slide(prs, blank)
 
     buf = BytesIO()
     prs.save(buf)
@@ -101,9 +123,9 @@ def _add_narrative_slide(prs, layout, narrative):
     _txt(s, "AI Analysis Summary", 0.5, 0.3, 10, 0.6, size=24, bold=True)
     exec_sum = narrative.get("executive_summary", {})
     _txt(s, "Bahasa Malaysia", 0.5, 1.1, 5, 0.4, size=11, bold=True, color=_TEAL)
-    _txt(s, exec_sum.get("bm", "–"), 0.5, 1.55, 5.8, 4.5, size=12)
+    _txt(s, exec_sum.get("bm", "-"), 0.5, 1.55, 5.8, 4.5, size=12)
     _txt(s, "English", 6.9, 1.1, 5, 0.4, size=11, bold=True, color=_TEAL)
-    _txt(s, exec_sum.get("en", "–"), 6.9, 1.55, 5.8, 4.5, size=12)
+    _txt(s, exec_sum.get("en", "-"), 6.9, 1.55, 5.8, 4.5, size=12)
 
 
 def _add_recommendations_slide(prs, layout, narrative):
@@ -119,9 +141,72 @@ def _add_recommendations_slide(prs, layout, narrative):
         _txt(s, rec.get("en", ""), 0.5, y + 0.45, 12, 1.3, size=11, color=_GRAY)
 
 
-# ── PDF ───────────────────────────────────────────────────────────────────────
+def _add_indicator_table_slide(prs, layout, kpi_result: dict):
+    """Add a per-district indicator rate table slide."""
+    breakdown = kpi_result.get("district_breakdown") or []
+    if not breakdown:
+        return
 
-def build_pdf_bytes(eda_result: dict, narrative: dict) -> bytes:
+    s = prs.slides.add_slide(layout)
+    _bg(s, 0xF0, 0xF7, 0xFA)
+    _txt(s, "Indicator Summary by District", 0.5, 0.2, 12, 0.55,
+         size=20, bold=True, color=_NAVY)
+
+    headers    = ["District", "N", "Stunting %", "Wasting %", "Underweight %", "Overweight %"]
+    table_rows = [headers]
+    for row in breakdown[:10]:
+        table_rows.append([
+            str(row.get("district", "")),
+            str(row.get("n_records", "")),
+            str(row.get("stunting_rate_rate",    "-")),
+            str(row.get("wasting_rate_rate",     "-")),
+            str(row.get("underweight_rate_rate", "-")),
+            str(row.get("overweight_rate_rate",  "-")),
+        ])
+
+    n_rows = len(table_rows)
+    n_cols = len(headers)
+    tbl    = s.shapes.add_table(
+        n_rows, n_cols,
+        Inches(0.4), Inches(0.9),
+        Inches(12.5), Inches(min(0.45 * n_rows, 6.3)),
+    ).table
+
+    for r_idx, row_data in enumerate(table_rows):
+        for c_idx, cell_val in enumerate(row_data):
+            cell = tbl.cell(r_idx, c_idx)
+            tf   = cell.text_frame
+            tf.clear()
+            para = tf.paragraphs[0]
+            run  = para.add_run()
+            run.text      = cell_val
+            run.font.size = Pt(11 if r_idx == 0 else 10)
+            run.font.bold = (r_idx == 0)
+            if r_idx == 0:
+                run.font.color.rgb = _WHITE
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = _NAVY
+            elif r_idx % 2 == 0:
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = RGBColor(0xF0, 0xF7, 0xFA)
+
+
+def _add_methodology_slide(prs, layout):
+    """Add a methodology appendix slide."""
+    s = prs.slides.add_slide(layout)
+    _bg(s, 0x1A, 0x3A, 0x5C)
+    _txt(s, "Methodology Appendix", 0.5, 0.3, 12, 0.55, size=22, bold=True)
+    body = "\n".join(f"- {line}" for line in _METHODOLOGY_LINES)
+    _txt(s, body, 0.5, 1.05, 12.3, 6.0, size=11)
+
+
+# == PDF =======================================================================
+
+def build_pdf_bytes(
+    eda_result: dict,
+    narrative: dict,
+    kpi_result: dict | None = None,
+) -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
                             leftMargin=2*cm, rightMargin=2*cm,
@@ -139,7 +224,7 @@ def build_pdf_bytes(eda_result: dict, narrative: dict) -> bytes:
     today   = date.today().strftime("%d %B %Y")
     summary = eda_result.get("summary", {})
 
-    story.append(Paragraph("SmartDQC — Data Quality Report", h1))
+    story.append(Paragraph("SmartDQC - Data Quality Report", h1))
     story.append(Paragraph(
         f"Source: {summary.get('source_type','N/A').upper()}  |  "
         f"Records: {summary.get('total_rows','N/A')}  |  {today}", sm))
@@ -167,15 +252,15 @@ def build_pdf_bytes(eda_result: dict, narrative: dict) -> bytes:
 
     tbl = Table(q_rows, colWidths=[10*cm, 6*cm])
     tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, 0), rl_colors.HexColor("#1A3A5C")),
-        ("TEXTCOLOR",     (0, 0), (-1, 0), rl_colors.white),
-        ("FONTSIZE",      (0, 0), (-1, -1), 10),
-        ("GRID",          (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#E2EEF4")),
-        ("ROWBACKGROUNDS",(0, 1), (-1, -1),
+        ("BACKGROUND",     (0, 0), (-1, 0), rl_colors.HexColor("#1A3A5C")),
+        ("TEXTCOLOR",      (0, 0), (-1, 0), rl_colors.white),
+        ("FONTSIZE",       (0, 0), (-1, -1), 10),
+        ("GRID",           (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#E2EEF4")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
          [rl_colors.white, rl_colors.HexColor("#F0F7FA")]),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING",     (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 6),
     ]))
     story.append(tbl)
     story.append(Spacer(1, 0.6*cm))
@@ -199,5 +284,50 @@ def build_pdf_bytes(eda_result: dict, narrative: dict) -> bytes:
             story.append(Paragraph(rec.get("en", ""), bod))
             story.append(Spacer(1, 0.2*cm))
 
+    if kpi_result:
+        _build_pdf_indicator_table(story, kpi_result, h2, sm)
+        _build_pdf_methodology_appendix(story, h2, sm)
+
     doc.build(story)
     return buf.getvalue()
+
+
+def _build_pdf_indicator_table(story: list, kpi_result: dict, h2, sm):
+    breakdown = kpi_result.get("district_breakdown") or []
+    if not breakdown:
+        return
+
+    story.append(Paragraph("Indicator Summary by District", h2))
+    headers    = ["District", "N", "Stunting %", "Wasting %", "Underweight %", "Overweight %"]
+    table_data = [headers]
+    for row in breakdown:
+        table_data.append([
+            str(row.get("district", "")),
+            str(row.get("n_records", "")),
+            str(row.get("stunting_rate_rate",    "-")),
+            str(row.get("wasting_rate_rate",     "-")),
+            str(row.get("underweight_rate_rate", "-")),
+            str(row.get("overweight_rate_rate",  "-")),
+        ])
+
+    tbl = Table(table_data, colWidths=[4*cm, 1.5*cm, 3*cm, 2.5*cm, 3.5*cm, 3*cm])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",     (0, 0), (-1, 0), rl_colors.HexColor("#1A3A5C")),
+        ("TEXTCOLOR",      (0, 0), (-1, 0), rl_colors.white),
+        ("FONTSIZE",       (0, 0), (-1, -1), 9),
+        ("GRID",           (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#E2EEF4")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [rl_colors.white, rl_colors.HexColor("#F0F7FA")]),
+        ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING",     (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 5),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1, 0.6*cm))
+
+
+def _build_pdf_methodology_appendix(story: list, h2, sm):
+    story.append(Paragraph("Methodology Appendix", h2))
+    for line in _METHODOLOGY_LINES:
+        story.append(Paragraph(f"- {line}", sm))
+    story.append(Spacer(1, 0.3*cm))

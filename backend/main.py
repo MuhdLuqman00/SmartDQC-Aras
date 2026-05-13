@@ -1180,7 +1180,7 @@ async def report_pptx_endpoint(req: ReportRequest):
     """Generate a PPTX report from EDA results and AI narrative."""
     if _cleaned_cache.get(req.cache_id) is None:
         raise HTTPException(404, "cache_id not found — run /clean/run first")
-    data = build_pptx_bytes(req.eda_result, req.narrative)
+    data = build_pptx_bytes(req.eda_result, req.narrative, kpi_result=req.kpi_result)
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -1193,7 +1193,7 @@ async def report_pdf_endpoint(req: ReportRequest):
     """Generate a PDF report from EDA results and AI narrative."""
     if _cleaned_cache.get(req.cache_id) is None:
         raise HTTPException(404, "cache_id not found — run /clean/run first")
-    data = build_pdf_bytes(req.eda_result, req.narrative)
+    data = build_pdf_bytes(req.eda_result, req.narrative, kpi_result=req.kpi_result)
     return Response(
         content=data,
         media_type="application/pdf",
@@ -1757,6 +1757,7 @@ class ReportRequest(BaseModel):
     cache_id: str
     eda_result: dict
     narrative: dict = {}
+    kpi_result: dict | None = None
 
 
 class NarrativeRequest(BaseModel):
