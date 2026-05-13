@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -29,6 +29,7 @@ from .db.models import Dataset, Session as DBSession, AnalysisResult
 from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
 from .ml.corrections import flag_anomalies
+from .export.report import build_pptx_bytes, build_pdf_bytes
 
 from datetime import datetime
 from sqlalchemy.orm import Session as SASession
@@ -1169,6 +1170,34 @@ async def ml_suggest_endpoint(cache_id: str = Query(..., description="UUID from 
     return JSONResponse(content=json_safe(result))
 
 
+# --- REPORT NAMESPACE -----------------------------------------------------------
+
+@app.post("/report/pptx")
+async def report_pptx_endpoint(req: ReportRequest):
+    """Generate a PPTX report from EDA results and AI narrative."""
+    if _cleaned_cache.get(req.cache_id) is None:
+        raise HTTPException(404, "cache_id not found — run /clean/run first")
+    data = build_pptx_bytes(req.eda_result, req.narrative)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": 'attachment; filename="SmartDQC_Report.pptx"'},
+    )
+
+
+@app.post("/report/pdf")
+async def report_pdf_endpoint(req: ReportRequest):
+    """Generate a PDF report from EDA results and AI narrative."""
+    if _cleaned_cache.get(req.cache_id) is None:
+        raise HTTPException(404, "cache_id not found — run /clean/run first")
+    data = build_pdf_bytes(req.eda_result, req.narrative)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="SmartDQC_Report.pdf"'},
+    )
+
+
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────
 
 def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.BytesIO:
@@ -1673,6 +1702,12 @@ async def download_report_endpoint(
 
 
 # ─── AI ENDPOINTS ─────────────────────────────────────────────────────────────
+
+class ReportRequest(BaseModel):
+    cache_id: str
+    eda_result: dict
+    narrative: dict = {}
+
 
 class NarrativeRequest(BaseModel):
     session_id: str
