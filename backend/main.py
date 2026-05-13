@@ -28,6 +28,7 @@ from .db.init_db import init_db, get_db
 from .db.models import Dataset, Session as DBSession, AnalysisResult
 from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
+from .ml.corrections import flag_anomalies
 
 from datetime import datetime
 from sqlalchemy.orm import Session as SASession
@@ -54,13 +55,23 @@ app.add_middleware(
 def read_file(content: bytes, filename: str, sheet: str | None = None):
     fn = (filename or "").lower()
     if fn.endswith(".csv"):
-        return pd.read_csv(io.BytesIO(content), dtype=str), None
+        buf = io.BytesIO(content)
+        if len(content) > 50_000_000:
+            chunks = pd.read_csv(buf, dtype=str, chunksize=100_000)
+            return pd.concat(chunks, ignore_index=True), None
+        return pd.read_csv(buf, dtype=str), None
     elif fn.endswith((".xlsx", ".xls")):
         xl     = pd.ExcelFile(io.BytesIO(content))
         sheets = xl.sheet_names
         target = sheet if sheet and sheet in sheets else sheets[0]
         return pd.read_excel(io.BytesIO(content), sheet_name=target, dtype=str), sheets
     raise ValueError("Hanya CSV, XLSX, XLS disokong.")
+
+
+def _csv_stream(df: pd.DataFrame, chunksize: int = 10_000):
+    yield df.iloc[0:0].to_csv(index=False)
+    for start in range(0, len(df), chunksize):
+        yield df.iloc[start:start + chunksize].to_csv(index=False, header=False)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
@@ -637,6 +648,69 @@ def _cache_cleaned(df: pd.DataFrame, stats: dict | None = None) -> str:
     return key
 
 
+def _resolve_source(file: bytes | None, filename: str | None, cache_id: str | None) -> "pd.DataFrame":
+    """Resolve a join source to a DataFrame from either a raw upload or the cleaned cache."""
+    if cache_id is not None:
+        entry = _cleaned_cache.get(cache_id)
+        if entry is None:
+            raise HTTPException(400, f"Cache ID '{cache_id}' not found — re-run cleaning first.")
+        return entry["df"].copy()
+    if file is not None:
+        df, _ = read_file(file, filename or "upload.csv")
+        return df
+    raise HTTPException(400, "Provide either a file upload or a cache_id for each side of the join.")
+
+
+def _perform_join(
+    df_left: "pd.DataFrame",
+    df_right: "pd.DataFrame",
+    join_type: str,
+    key_cols: list[str] | None,
+    dedup: bool,
+) -> "tuple[pd.DataFrame, dict]":
+    """Execute a join/union and return (result_df, stats_dict)."""
+    if join_type == "union":
+        result = pd.concat([df_left, df_right], ignore_index=True)
+        if dedup:
+            before = len(result)
+            result = result.drop_duplicates()
+            dupes_removed = before - len(result)
+        else:
+            dupes_removed = 0
+        stats = {
+            "left_rows": len(df_left),
+            "right_rows": len(df_right),
+            "result_rows": len(result),
+            "duplicates_removed": dupes_removed,
+        }
+        return result, stats
+
+    # Horizontal join (inner / left / right / outer)
+    if not key_cols:
+        raise HTTPException(400, "key_cols is required for inner/left/right/outer joins.")
+    missing_left = [c for c in key_cols if c not in df_left.columns]
+    missing_right = [c for c in key_cols if c not in df_right.columns]
+    if missing_left:
+        raise HTTPException(400, f"Key column(s) {missing_left} not found in left dataset.")
+    if missing_right:
+        raise HTTPException(400, f"Key column(s) {missing_right} not found in right dataset.")
+
+    # Match stats based on first key column
+    key = key_cols[0]
+    left_keys = set(df_left[key].dropna().astype(str))
+    right_keys = set(df_right[key].dropna().astype(str))
+    stats = {
+        "matched_keys": len(left_keys & right_keys),
+        "left_only_keys": len(left_keys - right_keys),
+        "right_only_keys": len(right_keys - left_keys),
+        "result_rows": 0,  # filled after merge
+    }
+
+    result = pd.merge(df_left, df_right, on=key_cols, how=join_type)
+    stats["result_rows"] = len(result)
+    return result, stats
+
+
 def _profile_columns(df: pd.DataFrame) -> list[dict]:
     """Return column-level profile of a DataFrame."""
     cols = []
@@ -826,10 +900,8 @@ async def clean_download_endpoint(
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'}
         )
     else:
-        output = io.StringIO()
-        cleaned_df.to_csv(output, index=False)
         return StreamingResponse(
-            iter([output.getvalue()]),
+            _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'}
         )
@@ -980,10 +1052,8 @@ async def clean_download_multi_endpoint(
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.xlsx"'}
         )
     else:
-        output = io.StringIO()
-        cleaned_df.to_csv(output, index=False)
         return StreamingResponse(
-            iter([output.getvalue()]),
+            _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.csv"'}
         )
@@ -1015,13 +1085,88 @@ async def download_cached_endpoint(
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'}
         )
     else:
-        output = io.StringIO()
-        cleaned_df.to_csv(output, index=False)
         return StreamingResponse(
-            iter([output.getvalue()]),
+            _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'}
         )
+
+
+# ── Dataset Join (horizontal / vertical union) ───────────────────────────────
+
+_JOIN_TYPES = {"inner", "left", "right", "outer", "union"}
+
+
+@app.post("/join/preview")
+async def join_preview_endpoint(
+    file_left: UploadFile | None = File(None),
+    file_right: UploadFile | None = File(None),
+    cache_id_left: str | None = Query(None),
+    cache_id_right: str | None = Query(None),
+    join_type: str = Query(..., pattern="^(inner|left|right|outer|union)$"),
+    key_cols: str | None = Query(None, description="Comma-separated key column names (horizontal joins)"),
+    dedup: bool = Query(False, description="Remove duplicate rows after union"),
+):
+    """Preview a join of two datasets. Returns first 50 rows plus shape and stats."""
+    left_bytes = (await file_left.read()) if file_left else None
+    right_bytes = (await file_right.read()) if file_right else None
+
+    df_left = _resolve_source(left_bytes, file_left.filename if file_left else None, cache_id_left)
+    df_right = _resolve_source(right_bytes, file_right.filename if file_right else None, cache_id_right)
+
+    parsed_keys = [c.strip() for c in key_cols.split(",")] if key_cols else None
+    result, stats = _perform_join(df_left, df_right, join_type, parsed_keys, dedup)
+
+    return {
+        "preview": result.head(50).to_dict(orient="records"),
+        "columns": list(result.columns),
+        "left_columns": list(df_left.columns),
+        "right_columns": list(df_right.columns),
+        "shape": {"rows": len(result), "cols": len(result.columns)},
+        "left_shape": {"rows": len(df_left), "cols": len(df_left.columns)},
+        "right_shape": {"rows": len(df_right), "cols": len(df_right.columns)},
+        "join_stats": stats,
+    }
+
+
+@app.post("/join/run")
+async def join_run_endpoint(
+    file_left: UploadFile | None = File(None),
+    file_right: UploadFile | None = File(None),
+    cache_id_left: str | None = Query(None),
+    cache_id_right: str | None = Query(None),
+    join_type: str = Query(..., pattern="^(inner|left|right|outer|union)$"),
+    key_cols: str | None = Query(None, description="Comma-separated key column names (horizontal joins)"),
+    dedup: bool = Query(False, description="Remove duplicate rows after union"),
+):
+    """Execute a full join and cache the result. Returns cache_id for download or EDA."""
+    left_bytes = (await file_left.read()) if file_left else None
+    right_bytes = (await file_right.read()) if file_right else None
+
+    df_left = _resolve_source(left_bytes, file_left.filename if file_left else None, cache_id_left)
+    df_right = _resolve_source(right_bytes, file_right.filename if file_right else None, cache_id_right)
+
+    parsed_keys = [c.strip() for c in key_cols.split(",")] if key_cols else None
+    result, stats = _perform_join(df_left, df_right, join_type, parsed_keys, dedup)
+
+    cache_id = _cache_cleaned(result)
+    return {
+        "cache_id": cache_id,
+        "shape": {"rows": len(result), "cols": len(result.columns)},
+        "join_stats": stats,
+    }
+
+
+# --- ML NAMESPACE ---------------------------------------------------------------
+
+@app.post("/ml/suggest")
+async def ml_suggest_endpoint(cache_id: str = Query(..., description="UUID from /clean/run or /join/run")):
+    """Flag anomalous rows and suggest corrections using IsolationForest."""
+    entry = _cleaned_cache.get(cache_id)
+    if entry is None:
+        raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
+    result = flag_anomalies(entry["df"])
+    return JSONResponse(content=json_safe(result))
 
 
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────
@@ -1569,7 +1714,7 @@ async def ai_narrative(req: NarrativeRequest, db: SASession = Depends(get_db)):
             id=str(uuid.uuid4()),
             session_id=req.session_id,
             result_type="narrative",
-            result_json=json.dumps(narrative),
+            result_json=narrative,
             created_at=now,
         ))
         db.commit()
