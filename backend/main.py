@@ -1842,3 +1842,58 @@ async def ai_nlq(req: NLQRequest):
         raise HTTPException(500, f"NLQ failed: {e}")
 
     return result
+
+
+# ── Entity Resolution ────────────────────────────────────────────────────────
+
+from backend.ml.entity import link_records, persist_linkage
+
+
+class EntityLinkRequest(BaseModel):
+    dataset_ids: list[str]
+
+
+@app.post("/entity/link")
+async def entity_link(req: EntityLinkRequest):
+    """Link child records across 2+ datasets by IC. Writes to entity_linkage table."""
+    from backend.db.models import Dataset, AnalysisResult
+    from backend.db.init_db import SessionLocal
+
+    if len(req.dataset_ids) < 2:
+        raise HTTPException(400, "Provide at least 2 dataset_ids to link.")
+
+    records = []
+    with SessionLocal() as db:
+        for ds_id in req.dataset_ids:
+            ds = db.get(Dataset, ds_id)
+            if ds is None:
+                continue
+            ar = (
+                db.query(AnalysisResult)
+                .filter(AnalysisResult.dataset_id == ds_id)
+                .order_by(AnalysisResult.created_at.desc())
+                .first()
+            )
+            if ar is None or not ar.result_json:
+                continue
+            summary = ar.result_json.get("summary", {})
+            records.append({
+                "ic":          summary.get("ic", ""),
+                "source_type": ds.source_type or "unknown",
+                "dataset_id":  ds_id,
+                "name":        summary.get("name", ""),
+                "dob":         summary.get("dob", ""),
+            })
+
+        groups       = link_records(records)
+        rows_written = persist_linkage(groups, db)
+
+    linked   = [g for g in groups if len(g["sources"]) > 1]
+    unlinked = [g for g in groups if len(g["sources"]) == 1]
+    return {
+        "total_groups":  len(groups),
+        "linked_groups": len(linked),
+        "unlinked":      len(unlinked),
+        "rows_written":  rows_written,
+        "profiles":      linked[:50],
+    }
