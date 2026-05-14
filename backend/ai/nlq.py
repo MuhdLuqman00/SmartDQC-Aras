@@ -1,8 +1,69 @@
+import base64
+import io
 import json
 import re
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from .ollama_client import generate
 from .sandbox import safe_exec
+
+_NLQ_TEAL = "#00697A"
+_NLQ_NAVY = "#1A3A5C"
+
+
+def _result_to_chart(result) -> str | None:
+    """Convert NLQ result to base64 PNG bar chart. Returns None if not chartable."""
+    if result is None or isinstance(result, (str, int, float, bool)):
+        return None
+
+    if isinstance(result, dict):
+        if not all(isinstance(v, (int, float)) for v in result.values()):
+            return None
+        labels = list(result.keys())[:15]
+        values = [result[k] for k in labels]
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.barh(labels, values, color=_NLQ_TEAL)
+        ax.set_facecolor("#FAFCFC")
+        for spine in ["top", "right"]:
+            ax.spines[spine].set_visible(False)
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode()
+
+    if isinstance(result, list):
+        if not result:
+            return None
+        try:
+            df = pd.DataFrame(result)
+        except Exception:
+            return None
+        num_cols = df.select_dtypes(include="number").columns.tolist()
+        if not num_cols:
+            return None
+        str_cols = [c for c in df.columns if c not in num_cols]
+        label_col = str_cols[0] if str_cols else None
+        value_col = num_cols[0]
+        labels = df[label_col].astype(str).tolist()[:15] if label_col else [str(i) for i in df.index[:15]]
+        values = df[value_col].tolist()[:15]
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.barh(labels, values, color=_NLQ_TEAL)
+        ax.set_xlabel(value_col, color=_NLQ_NAVY, fontsize=9)
+        ax.set_facecolor("#FAFCFC")
+        for spine in ["top", "right"]:
+            ax.spines[spine].set_visible(False)
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode()
+
+    return None
 
 CODE_SYSTEM = """You are a Python/pandas code generator for KKM health data analysis.
 Given a user question and a DataFrame schema, write pandas code to answer it.
@@ -83,8 +144,11 @@ Respond with this exact JSON:
     except Exception:
         answer_json = {"answer": {"bm": raw_answer[:300], "en": raw_answer[:300]}}
 
+    chart_b64 = _result_to_chart(result_safe)
+
     return {
-        "answer": answer_json.get("answer", {"bm": "", "en": ""}),
-        "result": result_safe,
+        "answer":    answer_json.get("answer", {"bm": "", "en": ""}),
+        "result":    result_safe,
         "code_used": code,
+        "chart_b64": chart_b64,
     }
