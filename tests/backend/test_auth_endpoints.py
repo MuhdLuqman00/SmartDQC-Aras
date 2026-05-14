@@ -73,6 +73,11 @@ def test_me_without_token(client):
     assert resp.status_code == 401
 
 
+def test_me_with_invalid_bearer_token(client):
+    resp = client.get("/auth/me", headers={"Authorization": "Bearer thisisnotavalidjwt"})
+    assert resp.status_code == 401
+
+
 def test_logout_returns_ok(client):
     resp = client.post("/auth/logout")
     assert resp.status_code == 200
