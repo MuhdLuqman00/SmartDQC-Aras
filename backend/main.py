@@ -599,6 +599,7 @@ async def merge_preview(
     merged.to_csv(merged_buf, index=False, encoding="utf-8-sig")
     merged_bytes = merged_buf.getvalue()
 
+    _log_audit(action="upload.preview", detail=",".join(f[0] for f in file_contents))
     return JSONResponse(content=json_safe({
         "merge_stats": stats,
         "source_type": source_type,
@@ -769,6 +770,26 @@ def _persist_session(
         created_at=now,
     ))
     db.commit()
+
+
+def _log_audit(
+    action: str,
+    dataset_id: int | None = None,
+    detail: str | None = None,
+    user_id: int | None = None,
+) -> None:
+    """Best-effort audit write — never raises."""
+    try:
+        from .db.session import SessionLocal
+        from .db.models import AuditLog
+        db = SessionLocal()
+        try:
+            db.add(AuditLog(action=action, dataset_id=dataset_id, detail=detail, user_id=user_id))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
 
 def _resolve_source(file: bytes | None, filename: str | None, cache_id: str | None) -> "pd.DataFrame":
@@ -977,6 +998,7 @@ async def clean_run_endpoint(
     except Exception:
         pass  # best-effort — never fail the clean run for a DB write error
 
+    _log_audit(action="clean.run", detail=f"cache_id={cache_id}")
     return JSONResponse(content=json_safe({
         "success": True,
         "data_type": data_type,
@@ -1326,6 +1348,7 @@ async def report_pdf_endpoint(req: ReportRequest):
     if _cleaned_cache.get(req.cache_id) is None:
         raise HTTPException(404, "cache_id not found — run /clean/run first")
     data = build_pdf_bytes(req.eda_result, req.narrative, kpi_result=req.kpi_result)
+    _log_audit(action="report.pdf", detail=f"cache_id={req.cache_id}")
     return Response(
         content=data,
         media_type="application/pdf",
@@ -2097,6 +2120,26 @@ def list_sessions(db=Depends(get_db)):
             "filename": r.filename,
             "source_type": r.source_type,
             "row_count": r.row_count,
+        }
+        for r in rows
+    ]
+
+
+@app.get("/audit/log")
+def get_audit_log(dataset_id: int | None = None, limit: int = 100, db=Depends(get_db)):
+    from .db.models import AuditLog
+    q = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+    if dataset_id is not None:
+        q = q.filter(AuditLog.dataset_id == dataset_id)
+    rows = q.limit(limit).all()
+    return [
+        {
+            "id": r.id,
+            "action": r.action,
+            "dataset_id": r.dataset_id,
+            "detail": r.detail,
+            "user_id": r.user_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
     ]
