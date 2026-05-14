@@ -121,3 +121,41 @@ System overview: recent sessions, quality trend, quick-action buttons.
 - `QualitySparkline` — recharts LineChart, navy stroke
 - `SessionsTable` — sortable, row click navigates to /quality
 - `QuickActions` — 3 navy CTA buttons
+
+---
+
+## §4 — Upload Page (`/upload`)
+
+### Purpose
+Ingest one or two CSV/Excel files, preview detected schema, confirm mapping, trigger cleaning.
+
+### Layout
+- Tab 1 "Fail Tunggal": drag-drop zone + source type radio (MyVASS / Klinik Kesihatan / Auto-detect)
+- Tab 2 "Gabungkan (2 Fail)": two drop zones side by side
+- Below: Schema Preview accordion (appears after upload completes)
+
+### Schema Preview Table
+| Your Column | Detected Standard Field | AI Confidence | Override |
+|-------------|------------------------|---------------|----------|
+| Nama        | name                   | 98%           | dropdown |
+| Tarikh_L    | dob                    | 72%           | dropdown |
+
+Override dropdown lists all 22 STANDARD_SCHEMA fields + "Abaikan" (Ignore).
+
+### APIs
+- `POST /upload/preview` — body: `{ file_b64, filename, source_type }`
+  Response: `{ cache_id, rows, columns, sample, auto_mapping, ai_suggestions, unmapped_columns }`
+- `POST /upload/merge-preview` — body: `{ file_a_b64, file_b_b64, filename_a, filename_b, source_type }`
+  Response: same shape as above for merged frame
+
+### Behaviour
+1. File dropped → base64 encode client-side → POST /upload/preview
+2. Response renders Schema Preview accordion
+3. User reviews; can override any mapping via dropdown
+4. "Lanjutkan ke Pembersihan" → POST /clean/run `{ cache_id, column_map }` → navigate to /cleaning
+
+### Components
+- `FileDropzone` — react-dropzone, accepts .csv .xlsx
+- `SourceTypeSelector` — radio group
+- `SchemaMappingTable` — table with dropdowns per row
+- `MappingConfidenceBadge` — coloured % pill
