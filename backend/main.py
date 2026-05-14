@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from .config import STANDARD_SCHEMA, auto_suggest_mapping, detect_source_type
+from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, json_safe
 from .export.tableau import build_aggregated_table, to_excel as tbl_excel, to_csv as tbl_csv
 from .export.cleaned import to_excel as cln_excel, to_csv as cln_csv
@@ -154,6 +155,14 @@ async def upload_preview(
 
     source_type = detect_source_type(df.columns.tolist())
     auto_map    = auto_suggest_mapping(df.columns.tolist(), source_type)
+
+    if _needs_ai_assist(auto_map):
+        sample_values = {col: df[col].dropna().head(3).astype(str).tolist()
+                         for col in df.columns[:30]}
+        ai_map = ai_suggest_mapping(df.columns.tolist(), sample_values, source_type=source_type)
+        for field, val in ai_map.items():
+            if auto_map.get(field) is None and val is not None:
+                auto_map[field] = val
 
     total_rows = len(df)
     start      = (page - 1) * page_size
@@ -519,6 +528,14 @@ async def merge_preview(
 
     source_type = detect_source_type(merged.columns.tolist())
     auto_map = auto_suggest_mapping(merged.columns.tolist(), source_type)
+
+    if _needs_ai_assist(auto_map):
+        sample_values = {col: merged[col].dropna().head(3).astype(str).tolist()
+                         for col in merged.columns[:30]}
+        ai_map = ai_suggest_mapping(merged.columns.tolist(), sample_values, source_type=source_type)
+        for field, val in ai_map.items():
+            if auto_map.get(field) is None and val is not None:
+                auto_map[field] = val
 
     total_rows = len(merged)
     start = (page - 1) * page_size
