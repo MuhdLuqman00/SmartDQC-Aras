@@ -13,8 +13,12 @@ interface CleanResponse {
   cache_id: string;
   rows_before: number;
   rows_after: number;
-  actions_taken: CleanAction[];
-  quality_score: number;
+  actions_taken?: CleanAction[];
+  quality_score?: number;
+  stats?: {
+    actions?: CleanAction[];
+    quality_score?: number;
+  };
 }
 
 function qColor(score: number): string {
@@ -214,7 +218,7 @@ export function CleaningPage() {
 
             <button
               style={s.btnAccent}
-              onClick={() => navigate('/reports')}
+              onClick={() => navigate(`/reports?cache_id=${result?.cache_id || ''}`)}
             >
               Teruskan ke Laporan
             </button>

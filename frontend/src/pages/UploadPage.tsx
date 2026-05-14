@@ -160,11 +160,11 @@ export function UploadPage() {
     setError(null);
     try {
       const fd = new FormData();
-      fd.append('file_a', nextA);
-      fd.append('file_b', nextB);
-      fd.append('source_type', sourceType);
-      const res = await api.post<{ shape: [number, number] }>('/upload/merge-preview', fd);
-      setMergeShape(res.data.shape);
+      // Backend expects files as a list
+      fd.append('files', nextA);
+      fd.append('files', nextB);
+      const res = await api.post<{ total_rows: number; total_columns: number; columns: string[]; preview: unknown[]; auto_mapping: Record<string, string> }>('/upload/merge-preview', fd);
+      setMergeShape([res.data.total_rows, res.data.total_columns]);
     } catch {
       setError('Gagal pratonton cantuman.');
     } finally { setLoading(false); }

@@ -12,7 +12,7 @@ export function AIPage() {
   const { t } = useLang();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
-  const [sessionId, setSessionId] = useState<string>('');
+  const [cacheId, setCacheId] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState<boolean>(false);
@@ -20,8 +20,9 @@ export function AIPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const sid = searchParams.get('session_id') ?? '';
-    setSessionId(sid);
+    // Support both cache_id and session_id for backward compatibility
+    const cid = searchParams.get('cache_id') ?? searchParams.get('session_id') ?? '';
+    setCacheId(cid);
   }, [searchParams]);
 
   useEffect(() => {
@@ -30,12 +31,12 @@ export function AIPage() {
 
   const sendQuery = async (): Promise<void> => {
     const query = input.trim();
-    if (!query || !sessionId) return;
+    if (!query || !cacheId) return;
     setMessages(m => [...m, { role: 'user', text: query }]);
     setInput('');
     setLoading(true);
     try {
-      const res = await api.post<NLQResponse>('/ai/nlq', { query, session_id: sessionId });
+      const res = await api.post<NLQResponse>('/ai/nlq', { query, session_id: cacheId });
       setMessages(m => [...m, { role: 'assistant', text: res.data.answer, chart_b64: res.data.chart_b64 }]);
     } catch {
       setMessages(m => [...m, { role: 'assistant', text: t('Error: Unable to process query.', 'Ralat: Tidak dapat memproses pertanyaan.') }]);
@@ -45,7 +46,7 @@ export function AIPage() {
   const generateNarrative = async (): Promise<void> => {
     setNarrativeLoading(true);
     try {
-      const res = await api.post<NarrativeResponse>('/ai/narrative', { eda_result: {}, session_id: sessionId });
+      const res = await api.post<NarrativeResponse>('/ai/narrative', { eda_result: {}, session_id: cacheId });
       setNarrative(res.data);
       setNarrativeOpen(true);
     } catch { /* silently fail */ }
@@ -55,8 +56,8 @@ export function AIPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* No session banner */}
-      {!sessionId && (
+      {/* No cache_id banner */}
+      {!cacheId && (
         <div style={{
           margin: '12px 20px',
           padding: '10px 14px',
@@ -67,7 +68,7 @@ export function AIPage() {
           color: 'var(--text-secondary)',
           flexShrink: 0,
         }}>
-          {t('Enter session_id from a cleaning session to start. Append', 'Masukkan session_id dari sesi pembersihan untuk bermula. Tambah')} <code>?session_id=X</code> {t('to the URL.', 'ke URL.')}
+          {t('Enter cache_id from a cleaning session to start. Append', 'Masukkan cache_id dari sesi pembersihan untuk bermula. Tambah')} <code>?cache_id=X</code> {t('to the URL.', 'ke URL.')}
         </div>
       )}
 

@@ -21,13 +21,24 @@ interface EDAResponse {
   columns: ColumnProfile[];
 }
 
+interface CleanedDataResponse {
+  cache_id: string;
+  rows_before: number;
+  rows_after: number;
+  columns: string[];
+  sample: Record<string, unknown>[];
+}
+
 export function ExplorerPage() {
   const { t } = useLang();
   const [eda, setEda] = useState<EDAResponse | null>(null);
+  const [cleanedData, setCleanedData] = useState<CleanedDataResponse | null>(null);
   const [selectedCol, setSelectedCol] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
   const [page, setPage] = useState<number>(1);
+  const [cleanedPage, setCleanedPage] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
+  const [cleanedLoading, setCleanedLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [dataType, setDataType] = useState<string>('auto');
   const [dragOver, setDragOver] = useState<boolean>(false);
@@ -71,6 +82,20 @@ export function ExplorerPage() {
     },
     [runEda],
   );
+
+  // ── Tab 1: Fetch cleaned data ────────────────────────────────────────────────
+  const fetchCleanedData = useCallback(() => {
+    if (!eda?.cache_id) return;
+    setCleanedLoading(true);
+    api
+      .post<CleanedDataResponse>('/clean/run', { cache_id: eda.cache_id })
+      .then(r => {
+        setCleanedData(r.data);
+        setCleanedPage(1);
+      })
+      .catch(() => setError(t('Failed to load cleaned data.', 'Gagal memuatkan data bersih.')))
+      .finally(() => setCleanedLoading(false));
+  }, [eda?.cache_id, t]);
 
   // ── Tab 0: sample rows ──────────────────────────────────────────────────────
   const sampleRows = React.useMemo<unknown[]>(() => {
@@ -249,9 +274,97 @@ export function ExplorerPage() {
 
               {/* Tab 1 — Clean Data */}
               {activeTab === 1 && (
-                <div style={s.infoMsg}>
-                  {t('Clean data requires a separate cache_id. Please run cleaning first.', 'Data bersih memerlukan cache_id berasingan. Sila jalankan pembersihan terlebih dahulu.')}
-                </div>
+                <>
+                  {!cleanedData && !cleanedLoading && (
+                    <div style={s.centered}>
+                      <button
+                        style={s.loadCleanBtn}
+                        onClick={fetchCleanedData}
+                        disabled={!eda?.cache_id}
+                      >
+                        {t('Load Cleaned Data', 'Muatkan Data Bersih')}
+                      </button>
+                    </div>
+                  )}
+                  
+                  {cleanedLoading && (
+                    <div style={s.centred}>
+                      <span style={s.loadingText}>{t('Loading cleaned data...', 'Memuatkan data bersih...')}</span>
+                    </div>
+                  )}
+                  
+                  {cleanedData && !cleanedLoading && (
+                    <>
+                      <div style={s.cleanStats}>
+                        <div style={s.statBox}>
+                          <div style={s.statLabel}>{t('Rows Before', 'Baris Sebelum')}</div>
+                          <div style={s.statValue}>{cleanedData.rows_before?.toLocaleString?.() || 'N/A'}</div>
+                        </div>
+                        <div style={s.statBox}>
+                          <div style={s.statLabel}>{t('Rows After', 'Baris Selepas')}</div>
+                          <div style={s.statValue}>{cleanedData.rows_after?.toLocaleString?.() || 'N/A'}</div>
+                        </div>
+                        <div style={s.statBox}>
+                          <div style={s.statLabel}>{t('Removed', 'Dibuang')}</div>
+                          <div style={{...s.statValue, color: 'var(--danger)'}}>
+                            {((cleanedData.rows_before || 0) - (cleanedData.rows_after || 0)).toLocaleString?.() || '0'}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {cleanedData.sample?.length > 0 ? (
+                        <>
+                          <div style={s.tableWrap}>
+                            <table style={s.table}>
+                              <thead>
+                                <tr>
+                                  {cleanedData.columns?.map((col: string) => (
+                                    <th key={col} style={s.th}>{col}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cleanedData.sample.slice((cleanedPage - 1) * 50, cleanedPage * 50).map((row: Record<string, unknown>, ri: number) => (
+                                  <tr key={ri}>
+                                    {cleanedData.columns?.map((col: string) => (
+                                      <td key={col} style={s.td}>
+                                        {row[col] == null ? '—' : String(row[col])}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          
+                          {cleanedData.sample.length > 50 && (
+                            <div style={s.pagination}>
+                              <button
+                                style={{ ...s.pgBtn, transition: 'all 0.15s ease' }}
+                                disabled={cleanedPage === 1}
+                                onClick={() => setCleanedPage(p => Math.max(1, p - 1))}
+                              >
+                                ← {t('Prev', 'Sebelum')}
+                              </button>
+                              <span style={s.pgInfo}>
+                                {t('Page', 'Halaman')} {cleanedPage} / {Math.ceil(cleanedData.sample.length / 50)}
+                              </span>
+                              <button
+                                style={{ ...s.pgBtn, transition: 'all 0.15s ease' }}
+                                disabled={cleanedPage >= Math.ceil(cleanedData.sample.length / 50)}
+                                onClick={() => setCleanedPage(p => p + 1)}
+                              >
+                                {t('Next', 'Seterus')} →
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={s.emptyMsg}>{t('No cleaned data available.', 'Tiada data bersih tersedia.')}</div>
+                      )}
+                    </>
+                  )}
+                </>
               )}
 
               {/* Tab 2 — Profil Statistik */}
@@ -504,6 +617,46 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     cursor: 'pointer',
   },
+  
+  // Clean data tab styles
+  loadCleanBtn: {
+    padding: '12px 24px',
+    background: 'var(--navy)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  cleanStats: {
+    display: 'flex',
+    gap: 20,
+    marginBottom: 20,
+    padding: 16,
+    background: 'var(--surface-2)',
+    borderRadius: 8,
+    border: '0.5px solid var(--border)',
+  },
+  statBox: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
+  pgInfo: { fontSize: 12, color: 'var(--text-muted)' },
   pgInfo: { fontSize: 12, color: 'var(--text-muted)' },
 
   profileGrid: {

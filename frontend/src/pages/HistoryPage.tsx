@@ -206,7 +206,7 @@ export function HistoryPage() {
                       style={styles.actionBtnSecondary}
                       onClick={() =>
                         window.open(
-                          `${BASE}/clean/export?cache_id=${session.cache_id}`
+                          `${BASE}/clean/download-cached/${session.cache_id}`
                         )
                       }
                     >

@@ -2,6 +2,7 @@
 SmartDQC API — FastAPI application
 All endpoints. Business logic lives in backend/eda/, backend/cleaning/, and backend/export/.
 """
+
 from __future__ import annotations
 
 import io
@@ -15,7 +16,16 @@ logger = logging.getLogger(__name__)
 
 import pandas as pd
 import numpy as np
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
@@ -25,9 +35,20 @@ from typing import List, Optional
 from .config import STANDARD_SCHEMA, auto_suggest_mapping, detect_source_type
 from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, json_safe
-from .export.tableau import build_aggregated_table, to_excel as tbl_excel, to_csv as tbl_csv
+from .export.tableau import (
+    build_aggregated_table,
+    to_excel as tbl_excel,
+    to_csv as tbl_csv,
+)
 from .export.cleaned import to_excel as cln_excel, to_csv as cln_csv
-from .auth import hash_password, verify_password, create_access_token, decode_access_token, TokenExpiredError, InvalidTokenError
+from .auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_access_token,
+    TokenExpiredError,
+    InvalidTokenError,
+)
 from .db.init_db import init_db, get_db
 from .db.models import Dataset, Session as DBSession, AnalysisResult, User
 from .ai.narrative import generate_narrative
@@ -51,14 +72,17 @@ async def lifespan(app: FastAPI):
 
 def _seed_admin():
     from .db.init_db import SessionLocal
+
     db = SessionLocal()
     try:
         if not db.query(User).filter_by(username="admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("ADMIN_SEED_PASSWORD_PLACEHOLDER"),
-                role="admin",
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("ADMIN_SEED_PASSWORD_PLACEHOLDER"),
+                    role="admin",
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -76,6 +100,7 @@ app.add_middleware(
 
 # ─── FILE READER ──────────────────────────────────────────────────────────────
 
+
 def read_file(content: bytes, filename: str, sheet: str | None = None):
     fn = (filename or "").lower()
     if fn.endswith(".csv"):
@@ -85,7 +110,7 @@ def read_file(content: bytes, filename: str, sheet: str | None = None):
             return pd.concat(chunks, ignore_index=True), None
         return pd.read_csv(buf, dtype=str), None
     elif fn.endswith((".xlsx", ".xls")):
-        xl     = pd.ExcelFile(io.BytesIO(content))
+        xl = pd.ExcelFile(io.BytesIO(content))
         sheets = xl.sheet_names
         target = sheet if sheet and sheet in sheets else sheets[0]
         return pd.read_excel(io.BytesIO(content), sheet_name=target, dtype=str), sheets
@@ -95,10 +120,11 @@ def read_file(content: bytes, filename: str, sheet: str | None = None):
 def _csv_stream(df: pd.DataFrame, chunksize: int = 10_000):
     yield df.iloc[0:0].to_csv(index=False)
     for start in range(0, len(df), chunksize):
-        yield df.iloc[start:start + chunksize].to_csv(index=False, header=False)
+        yield df.iloc[start : start + chunksize].to_csv(index=False, header=False)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
+
 
 @app.get("/")
 def root():
@@ -111,6 +137,7 @@ def health():
 
 
 # ─── AUTH ENDPOINTS ───────────────────────────────────────────────────────────
+
 
 @app.post("/auth/login")
 def login(form: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
@@ -152,52 +179,170 @@ def get_schema():
 @app.get("/data-dictionary")
 def data_dictionary():
     derived = {
-        "id_cleaned":            {"type": "identifier",  "derived": True, "description": "IC/MyKid selepas dibersih (12 digit)"},
-        "id_type":               {"type": "categorical", "derived": True, "description": "Jenis ID: valid_ic / short_id / system_id / missing / invalid_ic"},
-        "is_valid_ic":           {"type": "boolean",     "derived": True, "description": "True = IC 12 digit sah"},
-        "age_months_computed":   {"type": "numerical",   "derived": True, "description": "Umur dalam bulan (dikira dari tarikh_lahir dan tarikh_ukur)"},
-        "age_group_computed":    {"type": "categorical", "derived": True, "description": "Kumpulan umur standard WHO"},
-        "bulan_ukur":            {"type": "categorical", "derived": True, "description": "Bulan pengukuran (1–12)"},
-        "suku_tahun":            {"type": "categorical", "derived": True, "description": "Suku tahun pengukuran (S1–S4)"},
-        "kawasan_bahagian":      {"type": "categorical", "derived": True, "description": "Kawasan (Sabah) / Bahagian (Sarawak)"},
-        "flag_bawah_2":          {"type": "boolean",     "derived": True, "description": "True = bawah 2 tahun (< 24 bulan)"},
-        "flag_bawah_5":          {"type": "boolean",     "derived": True, "description": "True = bawah 5 tahun (< 60 bulan)"},
-        "is_missing_critical":   {"type": "boolean",     "derived": True, "description": "True = berat/tinggi/BMI hilang"},
-        "is_missing_age":        {"type": "boolean",     "derived": True, "description": "True = umur tidak dapat dikira"},
-        "flag_bmi_mismatch":     {"type": "boolean",     "derived": True, "description": "True = BMI tidak konsisten dengan berat/tinggi (threshold ±1.0)"},
-        "flag_date_invalid":     {"type": "boolean",     "derived": True, "description": "True = tarikh_ukur < tarikh_lahir (tidak logik)"},
-        "flag_date_future":      {"type": "boolean",     "derived": True, "description": "True = tarikh_ukur dalam masa hadapan"},
-        "status_bmi_grouped":    {"type": "categorical", "derived": True, "description": "BMI grouped: susut/normal/kurang/obes_berlebihan"},
+        "id_cleaned": {
+            "type": "identifier",
+            "derived": True,
+            "description": "IC/MyKid selepas dibersih (12 digit)",
+        },
+        "id_type": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Jenis ID: valid_ic / short_id / system_id / missing / invalid_ic",
+        },
+        "is_valid_ic": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = IC 12 digit sah",
+        },
+        "age_months_computed": {
+            "type": "numerical",
+            "derived": True,
+            "description": "Umur dalam bulan (dikira dari tarikh_lahir dan tarikh_ukur)",
+        },
+        "age_group_computed": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Kumpulan umur standard WHO",
+        },
+        "bulan_ukur": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Bulan pengukuran (1–12)",
+        },
+        "suku_tahun": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Suku tahun pengukuran (S1–S4)",
+        },
+        "kawasan_bahagian": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Kawasan (Sabah) / Bahagian (Sarawak)",
+        },
+        "flag_bawah_2": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = bawah 2 tahun (< 24 bulan)",
+        },
+        "flag_bawah_5": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = bawah 5 tahun (< 60 bulan)",
+        },
+        "is_missing_critical": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = berat/tinggi/BMI hilang",
+        },
+        "is_missing_age": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = umur tidak dapat dikira",
+        },
+        "flag_bmi_mismatch": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = BMI tidak konsisten dengan berat/tinggi (threshold ±1.0)",
+        },
+        "flag_date_invalid": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = tarikh_ukur < tarikh_lahir (tidak logik)",
+        },
+        "flag_date_future": {
+            "type": "boolean",
+            "derived": True,
+            "description": "True = tarikh_ukur dalam masa hadapan",
+        },
+        "status_bmi_grouped": {
+            "type": "categorical",
+            "derived": True,
+            "description": "BMI grouped: susut/normal/kurang/obes_berlebihan",
+        },
         # WHO z-scores
-        "waz":                   {"type": "numerical",   "derived": True, "description": "WHO 2006 Weight-for-Age Z-score"},
-        "haz":                   {"type": "numerical",   "derived": True, "description": "WHO 2006 Height-for-Age Z-score"},
-        "baz":                   {"type": "numerical",   "derived": True, "description": "WHO 2006 BMI-for-Age Z-score"},
-        "waz_class":             {"type": "categorical", "derived": True, "description": "Klasifikasi WAZ (WHO 2006)"},
-        "haz_class":             {"type": "categorical", "derived": True, "description": "Klasifikasi HAZ (WHO 2006)"},
-        "baz_class":             {"type": "categorical", "derived": True, "description": "Klasifikasi BAZ (WHO 2006)"},
+        "waz": {
+            "type": "numerical",
+            "derived": True,
+            "description": "WHO 2006 Weight-for-Age Z-score",
+        },
+        "haz": {
+            "type": "numerical",
+            "derived": True,
+            "description": "WHO 2006 Height-for-Age Z-score",
+        },
+        "baz": {
+            "type": "numerical",
+            "derived": True,
+            "description": "WHO 2006 BMI-for-Age Z-score",
+        },
+        "waz_class": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Klasifikasi WAZ (WHO 2006)",
+        },
+        "haz_class": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Klasifikasi HAZ (WHO 2006)",
+        },
+        "baz_class": {
+            "type": "categorical",
+            "derived": True,
+            "description": "Klasifikasi BAZ (WHO 2006)",
+        },
         # Indicator flags (z-score based)
-        "ind_kurang_berat_zscore":{"type": "boolean",   "derived": True, "description": "Kurang berat badan (WAZ < -2, WHO 2006)"},
-        "ind_bantut_zscore":     {"type": "boolean",    "derived": True, "description": "Bantut (HAZ < -2, WHO 2006)"},
-        "ind_susut_zscore":      {"type": "boolean",    "derived": True, "description": "Susut (BAZ < -2, WHO 2006)"},
-        "ind_obes_zscore":       {"type": "boolean",    "derived": True, "description": "Berlebihan berat badan / obes (BAZ > +2, WHO 2006)"},
+        "ind_kurang_berat_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Kurang berat badan (WAZ < -2, WHO 2006)",
+        },
+        "ind_bantut_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Bantut (HAZ < -2, WHO 2006)",
+        },
+        "ind_susut_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Susut (BAZ < -2, WHO 2006)",
+        },
+        "ind_obes_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Berlebihan berat badan / obes (BAZ > +2, WHO 2006)",
+        },
         # Mismatch flags
-        "flag_status_berat_vs_zscore": {"type": "boolean", "derived": True, "description": "Label sumber status_berat tidak sepadan dengan WAZ z-skor"},
-        "flag_status_tinggi_vs_zscore":{"type": "boolean", "derived": True, "description": "Label sumber status_tinggi tidak sepadan dengan HAZ z-skor"},
-        "flag_status_bmi_vs_zscore":   {"type": "boolean", "derived": True, "description": "Label sumber status_bmi tidak sepadan dengan BAZ z-skor"},
+        "flag_status_berat_vs_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Label sumber status_berat tidak sepadan dengan WAZ z-skor",
+        },
+        "flag_status_tinggi_vs_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Label sumber status_tinggi tidak sepadan dengan HAZ z-skor",
+        },
+        "flag_status_bmi_vs_zscore": {
+            "type": "boolean",
+            "derived": True,
+            "description": "Label sumber status_bmi tidak sepadan dengan BAZ z-skor",
+        },
     }
     return {"source_fields": STANDARD_SCHEMA, "derived_fields": derived}
 
 
 # ─── UPLOAD / PREVIEW ─────────────────────────────────────────────────────────
 
+
 @app.post("/upload/preview")
 async def upload_preview(
     file: UploadFile = File(...),
+    source_type: str = Form("auto"),
     sheet: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, sheets = read_file(content, filename, sheet)
@@ -206,40 +351,71 @@ async def upload_preview(
     except Exception as e:
         raise HTTPException(400, f"Fail tidak dapat dibaca: {e}")
 
-    source_type = detect_source_type(df.columns.tolist())
-    auto_map    = auto_suggest_mapping(df.columns.tolist(), source_type)
+    # Detect source type and generate mapping
+    detected_source_type = (
+        detect_source_type(df.columns.tolist())
+        if source_type == "auto"
+        else source_type
+    )
+
+    auto_map = auto_suggest_mapping(df.columns.tolist(), detected_source_type)
 
     if _needs_ai_assist(auto_map):
-        sample_values = {col: df[col].dropna().head(3).astype(str).tolist()
-                         for col in df.columns[:30]}
-        ai_map = ai_suggest_mapping(df.columns.tolist(), sample_values, source_type=source_type)
+        sample_values = {
+            col: df[col].dropna().head(3).astype(str).tolist()
+            for col in df.columns[:30]
+        }
+        ai_map = ai_suggest_mapping(
+            df.columns.tolist(), sample_values, source_type=detected_source_type
+        )
         for field, val in ai_map.items():
             if auto_map.get(field) is None and val is not None:
                 auto_map[field] = val
 
-    total_rows = len(df)
-    start      = (page - 1) * page_size
-    page_data  = df.iloc[start:start + page_size].copy()
-    page_data  = page_data.replace(r'^\s*$', np.nan, regex=True)
-    page_data  = page_data.where(page_data.notna(), None)
+    # Cache the uploaded DataFrame for subsequent cleaning
+    cache_id = _cache_cleaned(
+        df, {"filename": filename, "source_type": detected_source_type}
+    )
 
-    return JSONResponse(content=json_safe({
-        "filename":     filename,
-        "source_type":  source_type,
-        "total_rows":   total_rows,
-        "total_columns":len(df.columns),
-        "columns":      df.columns.tolist(),
-        "sheets":       sheets or [],
-        "active_sheet": sheet or (sheets[0] if sheets else None),
-        "preview":      page_data.to_dict(orient="records"),
-        "page":         page,
-        "page_size":    page_size,
-        "total_pages":  max(1, (total_rows + page_size - 1) // page_size),
-        "auto_mapping": auto_map,
-    }))
+    # Calculate unmapped columns (columns not in auto_map keys)
+    unmapped = [col for col in df.columns if col not in auto_map]
+
+    total_rows = len(df)
+    start = (page - 1) * page_size
+    page_data = df.iloc[start : start + page_size].copy()
+    page_data = page_data.replace(r"^\s*$", np.nan, regex=True)
+    page_data = page_data.where(page_data.notna(), None)
+
+    # Build response matching frontend expectations
+    mapping_with_confidence: dict = {}
+    for col, standard in auto_map.items():
+        # Calculate confidence based on match quality
+        confidence = 0.95 if standard else 0.0
+        mapping_with_confidence[col] = {"standard": standard, "confidence": confidence}
+
+    return JSONResponse(
+        content=json_safe(
+            {
+                "cache_id": cache_id,
+                "filename": filename,
+                "source_type": detected_source_type,
+                "rows": total_rows,
+                "columns": df.columns.tolist(),
+                "sample": page_data.to_dict(orient="records"),
+                "auto_mapping": mapping_with_confidence,
+                "unmapped_columns": unmapped,
+                "sheets": sheets or [],
+                "active_sheet": sheet or (sheets[0] if sheets else None),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+            }
+        )
+    )
 
 
 # ─── MAPPING VALIDATION ───────────────────────────────────────────────────────
+
 
 @app.post("/mapping/validate")
 async def validate_mapping(
@@ -247,7 +423,7 @@ async def validate_mapping(
     mapping: str = "",
     sheet: Optional[str] = None,
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
@@ -266,40 +442,54 @@ async def validate_mapping(
         if not raw_col:
             continue
         if raw_col not in available_cols:
-            errors.append({"field": std_field, "mapped_to": raw_col,
-                           "issue": f"Kolum '{raw_col}' tidak wujud dalam fail"})
+            errors.append(
+                {
+                    "field": std_field,
+                    "mapped_to": raw_col,
+                    "issue": f"Kolum '{raw_col}' tidak wujud dalam fail",
+                }
+            )
         else:
             schema_type = STANDARD_SCHEMA.get(std_field, {}).get("type", "unknown")
-            col_dtype   = str(df[raw_col].dtype)
+            col_dtype = str(df[raw_col].dtype)
             ok.append({"field": std_field, "mapped_to": raw_col, "dtype": col_dtype})
             if schema_type == "numerical" and col_dtype == "object":
                 pct_numeric = pd.to_numeric(df[raw_col], errors="coerce").notna().mean()
                 if pct_numeric < 0.5:
-                    warnings.append({
-                        "field": std_field, "mapped_to": raw_col,
-                        "issue": f"Kolum kelihatan bukan numerik ({round(pct_numeric*100)}% boleh ditukar)",
-                    })
+                    warnings.append(
+                        {
+                            "field": std_field,
+                            "mapped_to": raw_col,
+                            "issue": f"Kolum kelihatan bukan numerik ({round(pct_numeric * 100)}% boleh ditukar)",
+                        }
+                    )
 
     from .config import CORE_FIELDS
+
     critical_unmapped = [
-        f for f in CORE_FIELDS
-        if f not in mapping_dict or not mapping_dict.get(f)
+        f for f in CORE_FIELDS if f not in mapping_dict or not mapping_dict.get(f)
     ]
     if critical_unmapped:
-        warnings.append({"field": "critical_fields", "mapped_to": None,
-                         "issue": f"Medan kritikal tidak dipetakan: {critical_unmapped}"})
+        warnings.append(
+            {
+                "field": "critical_fields",
+                "mapped_to": None,
+                "issue": f"Medan kritikal tidak dipetakan: {critical_unmapped}",
+            }
+        )
 
     return {
-        "valid":           len(errors) == 0,
-        "errors":          errors,
-        "warnings":        warnings,
-        "ok":              ok,
-        "total_mapped":    len([v for v in mapping_dict.values() if v]),
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "ok": ok,
+        "total_mapped": len([v for v in mapping_dict.values() if v]),
         "available_columns": df.columns.tolist(),
     }
 
 
 # ─── RUN EDA ──────────────────────────────────────────────────────────────────
+
 
 @app.post("/eda/run")
 async def run_eda_endpoint(
@@ -310,7 +500,7 @@ async def run_eda_endpoint(
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
     db=Depends(get_db),
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
@@ -327,6 +517,7 @@ async def run_eda_endpoint(
     # Cache cleaned DF for downstream endpoints
     cleaned_df_data = report.get("_cleaned_data", [])
     import pandas as _pd
+
     cleaned_df = _pd.DataFrame(cleaned_df_data) if cleaned_df_data else df
     cache_id = _cache_cleaned(cleaned_df, report)
 
@@ -354,6 +545,7 @@ async def run_eda_endpoint(
 
 # ─── CLEANED DATA PREVIEW (paginated) ────────────────────────────────────────
 
+
 @app.post("/cleaned/preview")
 async def cleaned_preview(
     file: UploadFile = File(...),
@@ -363,7 +555,7 @@ async def cleaned_preview(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=5, le=200),
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
@@ -371,23 +563,28 @@ async def cleaned_preview(
         raise HTTPException(400, str(e))
 
     mapping_dict = json.loads(mapping) if mapping else {}
-    report       = run_eda(df, mapping_dict, source_type)
-    all_records  = report.get("_cleaned_data", [])
-    cols         = report.get("_cleaned_columns", [])
-    total_rows   = len(all_records)
-    start        = (page - 1) * page_size
+    report = run_eda(df, mapping_dict, source_type)
+    all_records = report.get("_cleaned_data", [])
+    cols = report.get("_cleaned_columns", [])
+    total_rows = len(all_records)
+    start = (page - 1) * page_size
 
-    return JSONResponse(content=json_safe({
-        "total_rows":  total_rows,
-        "total_pages": max(1, (total_rows + page_size - 1) // page_size),
-        "page":        page,
-        "page_size":   page_size,
-        "columns":     cols,
-        "records":     all_records[start:start + page_size],
-    }))
+    return JSONResponse(
+        content=json_safe(
+            {
+                "total_rows": total_rows,
+                "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+                "page": page,
+                "page_size": page_size,
+                "columns": cols,
+                "records": all_records[start : start + page_size],
+            }
+        )
+    )
 
 
 # ─── DOWNLOAD CLEANED DATA ────────────────────────────────────────────────────
+
 
 @app.post("/download/cleaned")
 async def download_cleaned(
@@ -397,33 +594,43 @@ async def download_cleaned(
     sheet: Optional[str] = None,
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
     except Exception as e:
         raise HTTPException(400, str(e))
 
-    mapping_dict    = json.loads(mapping) if mapping else {}
-    report          = run_eda(df, mapping_dict, source_type)
+    mapping_dict = json.loads(mapping) if mapping else {}
+    report = run_eda(df, mapping_dict, source_type)
     cleaned_records = report.get("_cleaned_data", [])
-    cleaned_cols    = report.get("_cleaned_columns", [])
+    cleaned_cols = report.get("_cleaned_columns", [])
     if not cleaned_records:
         raise HTTPException(500, "Tiada data dibersih.")
 
     base = filename.rsplit(".", 1)[0]
     if fmt == "csv":
         data = cln_csv(cleaned_records, cleaned_cols)
-        return StreamingResponse(iter([data]), media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="cleaned_{base}.csv"'})
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="cleaned_{base}.csv"'
+            },
+        )
     else:
         data = cln_excel(cleaned_records, cleaned_cols, base)
-        return StreamingResponse(iter([data]),
+        return StreamingResponse(
+            iter([data]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="cleaned_{base}.xlsx"'})
+            headers={
+                "Content-Disposition": f'attachment; filename="cleaned_{base}.xlsx"'
+            },
+        )
 
 
 # ─── EXPORT AGGREGATED (TABLEAU) — NO ROW CAP ────────────────────────────────
+
 
 @app.post("/export/aggregated")
 async def export_aggregated(
@@ -437,7 +644,7 @@ async def export_aggregated(
     Tableau-ready flat aggregated table — every geo × age_group × indicator row.
     NO row cap. Includes sumber_indikator column (zscore | source_label).
     """
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
@@ -445,33 +652,45 @@ async def export_aggregated(
         raise HTTPException(400, str(e))
 
     mapping_dict = json.loads(mapping) if mapping else {}
-    report       = run_eda(df, mapping_dict, source_type)
+    report = run_eda(df, mapping_dict, source_type)
 
     # Use the full (uncapped) aggregated table from the private key
     agg_rows = report.get("_aggregated_full", build_aggregated_table(report))
     if not agg_rows:
-        raise HTTPException(422, "Tiada data indikator — pastikan status / berat / tinggi dipetakan.")
+        raise HTTPException(
+            422, "Tiada data indikator — pastikan status / berat / tinggi dipetakan."
+        )
 
     base = filename.rsplit(".", 1)[0]
     if fmt == "xlsx":
         data = tbl_excel(agg_rows, base)
-        return StreamingResponse(iter([data]),
+        return StreamingResponse(
+            iter([data]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="tableau_{base}.xlsx"'})
+            headers={
+                "Content-Disposition": f'attachment; filename="tableau_{base}.xlsx"'
+            },
+        )
     else:
         data = tbl_csv(agg_rows)
-        return StreamingResponse(iter([data]), media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="tableau_{base}.csv"'})
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="tableau_{base}.csv"'
+            },
+        )
 
 
 # ─── MYVASS WIDE-TO-LONG PREVIEW ─────────────────────────────────────────────
+
 
 @app.post("/transform/myvass-wide-to-long")
 async def myvass_wide_to_long_endpoint(
     file: UploadFile = File(...),
     sheet: Optional[str] = None,
 ):
-    content  = await file.read()
+    content = await file.read()
     filename = file.filename or ""
     try:
         df, _ = read_file(content, filename, sheet)
@@ -479,22 +698,32 @@ async def myvass_wide_to_long_endpoint(
         raise HTTPException(400, str(e))
 
     from .eda.runner import myvass_wide_to_long
+
     long_df = myvass_wide_to_long(df)
-    return JSONResponse(content=json_safe({
-        "original_rows": len(df),
-        "long_rows":     len(long_df),
-        "columns":       long_df.columns.tolist(),
-        "preview":       long_df.head(10).replace({np.nan: None}).to_dict(orient="records"),
-    }))
+    return JSONResponse(
+        content=json_safe(
+            {
+                "original_rows": len(df),
+                "long_rows": len(long_df),
+                "columns": long_df.columns.tolist(),
+                "preview": long_df.head(10)
+                .replace({np.nan: None})
+                .to_dict(orient="records"),
+            }
+        )
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MYVASS MULTI-FILE MERGE ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _merge_myvass_files(file_contents: list[tuple[str, bytes]],
-                        dose_date_col: str = "DOSE_DATE",
-                        ic_col: str = "IC_NO_PASSPORT") -> tuple[pd.DataFrame, dict]:
+
+def _merge_myvass_files(
+    file_contents: list[tuple[str, bytes]],
+    dose_date_col: str = "DOSE_DATE",
+    ic_col: str = "IC_NO_PASSPORT",
+) -> tuple[pd.DataFrame, dict]:
     """
     Merge multiple MyVASS files:
     1. Validate all headers match
@@ -538,7 +767,9 @@ def _merge_myvass_files(file_contents: list[tuple[str, bytes]],
 
     # Dedup by IC — keep latest DOSE_DATE
     if ic_col not in merged.columns:
-        raise ValueError(f"Column '{ic_col}' not found. Available: {list(merged.columns)}")
+        raise ValueError(
+            f"Column '{ic_col}' not found. Available: {list(merged.columns)}"
+        )
 
     dup_removed = 0
     if dose_date_col in merged.columns:
@@ -559,7 +790,7 @@ def _merge_myvass_files(file_contents: list[tuple[str, bytes]],
 
     # Remove rows with any null
     # First replace empty/whitespace strings with NaN for proper null detection
-    merged = merged.replace(r'^\s*$', np.nan, regex=True)
+    merged = merged.replace(r"^\s*$", np.nan, regex=True)
     null_rows = int(merged.isna().any(axis=1).sum())
     merged = merged.dropna().reset_index(drop=True)
     after_null_removal = len(merged)
@@ -605,16 +836,20 @@ async def merge_preview(
     auto_map = auto_suggest_mapping(merged.columns.tolist(), source_type)
 
     if _needs_ai_assist(auto_map):
-        sample_values = {col: merged[col].dropna().head(3).astype(str).tolist()
-                         for col in merged.columns[:30]}
-        ai_map = ai_suggest_mapping(merged.columns.tolist(), sample_values, source_type=source_type)
+        sample_values = {
+            col: merged[col].dropna().head(3).astype(str).tolist()
+            for col in merged.columns[:30]
+        }
+        ai_map = ai_suggest_mapping(
+            merged.columns.tolist(), sample_values, source_type=source_type
+        )
         for field, val in ai_map.items():
             if auto_map.get(field) is None and val is not None:
                 auto_map[field] = val
 
     total_rows = len(merged)
     start = (page - 1) * page_size
-    page_data = merged.iloc[start:start + page_size].copy()
+    page_data = merged.iloc[start : start + page_size].copy()
     page_data = page_data.where(page_data.notna(), None)
 
     # Save merged data in memory as CSV for subsequent EDA call
@@ -623,18 +858,22 @@ async def merge_preview(
     merged_bytes = merged_buf.getvalue()
 
     _log_audit(action="upload.preview", detail=",".join(f[0] for f in file_contents))
-    return JSONResponse(content=json_safe({
-        "merge_stats": stats,
-        "source_type": source_type,
-        "total_rows": total_rows,
-        "total_columns": len(merged.columns),
-        "columns": merged.columns.tolist(),
-        "preview": page_data.to_dict(orient="records"),
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, (total_rows + page_size - 1) // page_size),
-        "auto_mapping": auto_map,
-    }))
+    return JSONResponse(
+        content=json_safe(
+            {
+                "merge_stats": stats,
+                "source_type": source_type,
+                "total_rows": total_rows,
+                "total_columns": len(merged.columns),
+                "columns": merged.columns.tolist(),
+                "preview": page_data.to_dict(orient="records"),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+                "auto_mapping": auto_map,
+            }
+        )
+    )
 
 
 @app.post("/eda/run-merged")
@@ -669,12 +908,13 @@ async def run_eda_merged(
 
     report = run_eda(merged, mapping_dict, source_type, bmi_threshold=bmi_threshold)
     report["merge_stats"] = merge_stats
-    report["changes_applied"].insert(0,
+    report["changes_applied"].insert(
+        0,
         f"Merged {merge_stats['files_merged']} files: "
         f"{merge_stats['total_rows_before']} total rows → "
         f"{merge_stats['duplicates_removed']} duplicates removed → "
         f"{merge_stats['null_rows_removed']} null rows removed → "
-        f"{merge_stats['final_rows']} final rows"
+        f"{merge_stats['final_rows']} final rows",
     )
 
     for key in ["_cleaned_data", "_cleaned_columns", "_aggregated_full"]:
@@ -713,13 +953,22 @@ async def download_cleaned_merged(
 
     if fmt == "csv":
         data = cln_csv(cleaned_records, cleaned_cols)
-        return StreamingResponse(iter([data]), media_type="text/csv",
-            headers={"Content-Disposition": 'attachment; filename="cleaned_merged_myvass.csv"'})
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": 'attachment; filename="cleaned_merged_myvass.csv"'
+            },
+        )
     else:
         data = cln_excel(cleaned_records, cleaned_cols, "merged_myvass")
-        return StreamingResponse(iter([data]),
+        return StreamingResponse(
+            iter([data]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": 'attachment; filename="cleaned_merged_myvass.xlsx"'})
+            headers={
+                "Content-Disposition": 'attachment; filename="cleaned_merged_myvass.xlsx"'
+            },
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -731,7 +980,7 @@ import uuid as _uuid
 from .eda.cleaning import clean_data, detect_data_type
 
 # ── In-memory cache for cleaned DataFrames (avoids re-upload for download) ────
-_cleaned_cache: dict[str, dict] = {}   # key -> {"df": DataFrame, "stats": dict}
+_cleaned_cache: dict[str, dict] = {}  # key -> {"df": DataFrame, "stats": dict}
 _CACHE_MAX = 10  # keep at most 10 entries
 
 
@@ -785,16 +1034,18 @@ def _persist_session(
     db.add(sess)
     db.flush()
 
-    db.add(AnalysisResult(
-        id=str(_uuid.uuid4()),
-        session_id=sess_id,
-        result_type="quality",
-        result_json={
-            "quality_score": result.get("quality_score"),
-            "issues": result.get("issues", []),
-        },
-        created_at=now,
-    ))
+    db.add(
+        AnalysisResult(
+            id=str(_uuid.uuid4()),
+            session_id=sess_id,
+            result_type="quality",
+            result_json={
+                "quality_score": result.get("quality_score"),
+                "issues": result.get("issues", []),
+            },
+            created_at=now,
+        )
+    )
     db.commit()
 
 
@@ -808,9 +1059,14 @@ def _log_audit(
     try:
         from .db.session import SessionLocal
         from .db.models import AuditLog
+
         db = SessionLocal()
         try:
-            db.add(AuditLog(action=action, dataset_id=dataset_id, detail=detail, user_id=user_id))
+            db.add(
+                AuditLog(
+                    action=action, dataset_id=dataset_id, detail=detail, user_id=user_id
+                )
+            )
             db.commit()
         finally:
             db.close()
@@ -818,17 +1074,23 @@ def _log_audit(
         pass
 
 
-def _resolve_source(file: bytes | None, filename: str | None, cache_id: str | None) -> "pd.DataFrame":
+def _resolve_source(
+    file: bytes | None, filename: str | None, cache_id: str | None
+) -> "pd.DataFrame":
     """Resolve a join source to a DataFrame from either a raw upload or the cleaned cache."""
     if cache_id is not None:
         entry = _cleaned_cache.get(cache_id)
         if entry is None:
-            raise HTTPException(400, f"Cache ID '{cache_id}' not found — re-run cleaning first.")
+            raise HTTPException(
+                400, f"Cache ID '{cache_id}' not found — re-run cleaning first."
+            )
         return entry["df"].copy()
     if file is not None:
         df, _ = read_file(file, filename or "upload.csv")
         return df
-    raise HTTPException(400, "Provide either a file upload or a cache_id for each side of the join.")
+    raise HTTPException(
+        400, "Provide either a file upload or a cache_id for each side of the join."
+    )
 
 
 def _perform_join(
@@ -857,13 +1119,19 @@ def _perform_join(
 
     # Horizontal join (inner / left / right / outer)
     if not key_cols:
-        raise HTTPException(400, "key_cols is required for inner/left/right/outer joins.")
+        raise HTTPException(
+            400, "key_cols is required for inner/left/right/outer joins."
+        )
     missing_left = [c for c in key_cols if c not in df_left.columns]
     missing_right = [c for c in key_cols if c not in df_right.columns]
     if missing_left:
-        raise HTTPException(400, f"Key column(s) {missing_left} not found in left dataset.")
+        raise HTTPException(
+            400, f"Key column(s) {missing_left} not found in left dataset."
+        )
     if missing_right:
-        raise HTTPException(400, f"Key column(s) {missing_right} not found in right dataset.")
+        raise HTTPException(
+            400, f"Key column(s) {missing_right} not found in right dataset."
+        )
 
     # Match stats based on first key column
     key = key_cols[0]
@@ -892,14 +1160,16 @@ def _profile_columns(df: pd.DataFrame) -> list[dict]:
         # infer type
         s = pd.to_numeric(df[c], errors="coerce")
         dtype = "Numeric" if s.notna().sum() > 0.5 * non_null else "Text"
-        cols.append({
-            "name": c,
-            "non_null": non_null,
-            "missing": missing,
-            "missing_pct": missing_pct,
-            "unique": unique,
-            "dtype": dtype,
-        })
+        cols.append(
+            {
+                "name": c,
+                "non_null": non_null,
+                "missing": missing,
+                "missing_pct": missing_pct,
+                "unique": unique,
+                "dtype": dtype,
+            }
+        )
     return cols
 
 
@@ -917,15 +1187,19 @@ async def detect_type_endpoint(
         raise HTTPException(400, str(e))
 
     data_type = detect_data_type(df.columns.tolist(), filename)
-    
-    return JSONResponse(content=json_safe({
-        "filename": filename,
-        "detected_type": data_type,
-        "total_rows": len(df),
-        "total_columns": len(df.columns),
-        "columns": df.columns.tolist(),
-        "sheets": sheets or [],
-    }))
+
+    return JSONResponse(
+        content=json_safe(
+            {
+                "filename": filename,
+                "detected_type": data_type,
+                "total_rows": len(df),
+                "total_columns": len(df.columns),
+                "columns": df.columns.tolist(),
+                "sheets": sheets or [],
+            }
+        )
+    )
 
 
 @app.post("/clean/quality-check")
@@ -948,73 +1222,106 @@ async def quality_check_endpoint(
         "total_columns": len(df.columns),
         "columns": [],
     }
-    
+
     for col in df.columns:
         col_data = df[col]
         non_null = col_data.notna().sum()
         null_count = len(df) - non_null
         unique_count = col_data.nunique()
-        
+
         # Check if numeric
         numeric_vals = pd.to_numeric(col_data, errors="coerce")
         is_numeric = numeric_vals.notna().sum() > non_null * 0.8
-        
+
         col_info = {
             "name": col,
             "non_null": int(non_null),
             "null_count": int(null_count),
-            "null_percent": round((null_count / len(df)) * 100, 1) if len(df) > 0 else 0,
+            "null_percent": round((null_count / len(df)) * 100, 1)
+            if len(df) > 0
+            else 0,
             "unique_count": int(unique_count),
             "is_numeric": is_numeric,
         }
-        
+
         if is_numeric and non_null > 0:
-            col_info["min"] = float(numeric_vals.min()) if numeric_vals.notna().any() else None
-            col_info["max"] = float(numeric_vals.max()) if numeric_vals.notna().any() else None
-            col_info["mean"] = round(float(numeric_vals.mean()), 2) if numeric_vals.notna().any() else None
+            col_info["min"] = (
+                float(numeric_vals.min()) if numeric_vals.notna().any() else None
+            )
+            col_info["max"] = (
+                float(numeric_vals.max()) if numeric_vals.notna().any() else None
+            )
+            col_info["mean"] = (
+                round(float(numeric_vals.mean()), 2)
+                if numeric_vals.notna().any()
+                else None
+            )
         else:
             sample = col_data.dropna().head(5).tolist()
             col_info["sample_values"] = [str(v)[:50] for v in sample]
-        
+
         quality["columns"].append(col_info)
-    
+
     # Overall completeness
     total_cells = len(df) * len(df.columns)
     filled_cells = sum(c["non_null"] for c in quality["columns"])
-    quality["overall_completeness"] = round((filled_cells / total_cells) * 100, 1) if total_cells > 0 else 0
-    
+    quality["overall_completeness"] = (
+        round((filled_cells / total_cells) * 100, 1) if total_cells > 0 else 0
+    )
+
     return JSONResponse(content=json_safe(quality))
 
 
 @app.post("/clean/run")
 async def clean_run_endpoint(
-    file: UploadFile = File(...),
-    data_type: str = "myvass",
-    sheet: Optional[str] = None,
+    file: UploadFile = File(default=None),
+    cache_id: str = Form(default=None),
+    data_type: str = Form("myvass"),
+    sheet: Optional[str] = Form(None),
     db=Depends(get_db),
 ):
-    """Run the cleaning process and return cleaned data with statistics."""
-    content = await file.read()
-    filename = file.filename or ""
-    try:
-        df, _ = read_file(content, filename, sheet)
-    except Exception as e:
-        raise HTTPException(400, str(e))
+    """Run the cleaning process and return cleaned data with statistics.
+
+    Accepts either:
+    1. A file upload directly (file parameter)
+    2. A cache_id referencing previously uploaded data
+    """
+    df = None
+    filename = ""
+
+    # Try to get DataFrame from cache_id first
+    if cache_id:
+        entry = _cleaned_cache.get(cache_id)
+        if entry:
+            df = entry["df"]
+            filename = entry.get("stats", {}).get("filename", "cached_data")
+
+    # If no cache_id or not found, try file upload
+    if df is None and file:
+        content = await file.read()
+        filename = file.filename or ""
+        try:
+            df, _ = read_file(content, filename, sheet)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    if df is None:
+        raise HTTPException(400, "Provide either a file or a valid cache_id")
 
     try:
         cleaned_df, stats = clean_data(df, data_type)
     except Exception as e:
         raise HTTPException(500, f"Cleaning error: {str(e)}")
-    
+
     # Convert cleaned data to records
     cleaned_records = cleaned_df.replace({np.nan: None}).to_dict(orient="records")
 
     # Cache cleaned DF so download doesn't need re-upload
-    cache_id = _cache_cleaned(cleaned_df, stats)
+    new_cache_id = _cache_cleaned(cleaned_df, stats)
 
     try:
         _persist_session(
-            cache_id=cache_id,
+            cache_id=new_cache_id,
             filename=filename,
             source_type=data_type,
             row_count=len(cleaned_df),
@@ -1024,17 +1331,23 @@ async def clean_run_endpoint(
     except Exception:
         pass  # best-effort — never fail the clean run for a DB write error
 
-    _log_audit(action="clean.run", detail=f"cache_id={cache_id}")
-    return JSONResponse(content=json_safe({
-        "success": True,
-        "data_type": data_type,
-        "stats": stats,
-        "cleaned_columns": cleaned_df.columns.tolist(),
-        "cleaned_column_profile": _profile_columns(cleaned_df),
-        "cleaned_count": len(cleaned_df),
-        "preview": cleaned_records[:100],  # First 100 rows for preview
-        "cache_id": cache_id,
-    }))
+    _log_audit(action="clean.run", detail=f"cache_id={new_cache_id}")
+    return JSONResponse(
+        content=json_safe(
+            {
+                "success": True,
+                "data_type": data_type,
+                "stats": stats,
+                "cleaned_columns": cleaned_df.columns.tolist(),
+                "cleaned_column_profile": _profile_columns(cleaned_df),
+                "cleaned_count": len(cleaned_df),
+                "preview": cleaned_records[:100],  # First 100 rows for preview
+                "cache_id": new_cache_id,
+                "rows_before": len(df),
+                "rows_after": len(cleaned_df),
+            }
+        )
+    )
 
 
 @app.post("/clean/download")
@@ -1062,32 +1375,38 @@ async def clean_download_endpoint(
 
     base = filename.rsplit(".", 1)[0]
     timestamp = pd.Timestamp.now().strftime("%Y%m%d")
-    
+
     if fmt == "xlsx":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             # Cleaned data sheet
             cleaned_df.to_excel(writer, sheet_name="Cleaned Data", index=False)
-            
+
             # Stats sheet
-            stats_df = pd.DataFrame([
-                {"Metric": k, "Value": v} 
-                for k, v in stats.items() 
-                if not isinstance(v, dict)
-            ])
+            stats_df = pd.DataFrame(
+                [
+                    {"Metric": k, "Value": v}
+                    for k, v in stats.items()
+                    if not isinstance(v, dict)
+                ]
+            )
             stats_df.to_excel(writer, sheet_name="Cleaning Stats", index=False)
-        
+
         output.seek(0)
         return StreamingResponse(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'
+            },
         )
     else:
         return StreamingResponse(
             _csv_stream(cleaned_df),
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'
+            },
         )
 
 
@@ -1130,14 +1449,24 @@ async def quality_check_multi_endpoint(
             "name": col,
             "non_null": int(non_null),
             "null_count": int(null_count),
-            "null_percent": round((null_count / len(df)) * 100, 1) if len(df) > 0 else 0,
+            "null_percent": round((null_count / len(df)) * 100, 1)
+            if len(df) > 0
+            else 0,
             "unique_count": int(unique_count),
             "is_numeric": is_numeric,
         }
         if is_numeric and non_null > 0:
-            col_info["min"] = float(numeric_vals.min()) if numeric_vals.notna().any() else None
-            col_info["max"] = float(numeric_vals.max()) if numeric_vals.notna().any() else None
-            col_info["mean"] = round(float(numeric_vals.mean()), 2) if numeric_vals.notna().any() else None
+            col_info["min"] = (
+                float(numeric_vals.min()) if numeric_vals.notna().any() else None
+            )
+            col_info["max"] = (
+                float(numeric_vals.max()) if numeric_vals.notna().any() else None
+            )
+            col_info["mean"] = (
+                round(float(numeric_vals.mean()), 2)
+                if numeric_vals.notna().any()
+                else None
+            )
         else:
             sample = col_data.dropna().head(5).tolist()
             col_info["sample_values"] = [str(v)[:50] for v in sample]
@@ -1145,7 +1474,9 @@ async def quality_check_multi_endpoint(
 
     total_cells = len(df) * len(df.columns)
     filled_cells = sum(c["non_null"] for c in quality["columns"])
-    quality["overall_completeness"] = round((filled_cells / total_cells) * 100, 1) if total_cells > 0 else 0
+    quality["overall_completeness"] = (
+        round((filled_cells / total_cells) * 100, 1) if total_cells > 0 else 0
+    )
 
     return JSONResponse(content=json_safe(quality))
 
@@ -1180,16 +1511,20 @@ async def clean_run_multi_endpoint(
     # Cache cleaned DF so download doesn't need re-upload
     cache_id = _cache_cleaned(cleaned_df, stats)
 
-    return JSONResponse(content=json_safe({
-        "success": True,
-        "data_type": data_type,
-        "stats": stats,
-        "cleaned_columns": cleaned_df.columns.tolist(),
-        "cleaned_column_profile": _profile_columns(cleaned_df),
-        "cleaned_count": len(cleaned_df),
-        "preview": cleaned_records[:100],
-        "cache_id": cache_id,
-    }))
+    return JSONResponse(
+        content=json_safe(
+            {
+                "success": True,
+                "data_type": data_type,
+                "stats": stats,
+                "cleaned_columns": cleaned_df.columns.tolist(),
+                "cleaned_column_profile": _profile_columns(cleaned_df),
+                "cleaned_count": len(cleaned_df),
+                "preview": cleaned_records[:100],
+                "cache_id": cache_id,
+            }
+        )
+    )
 
 
 # ── Multi-file download ───────────────────────────────────────────────────────
@@ -1226,20 +1561,34 @@ async def clean_download_multi_endpoint(
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             cleaned_df.to_excel(writer, sheet_name="Cleaned Data", index=False)
-            stats_rows = [{"Metric": k, "Value": v} for k, v in stats.items() if not isinstance(v, dict)]
-            merge_rows = [{"Metric": f"merge_{k}", "Value": v} for k, v in merge_stats.items() if not isinstance(v, (dict, list))]
-            pd.DataFrame(stats_rows + merge_rows).to_excel(writer, sheet_name="Cleaning Stats", index=False)
+            stats_rows = [
+                {"Metric": k, "Value": v}
+                for k, v in stats.items()
+                if not isinstance(v, dict)
+            ]
+            merge_rows = [
+                {"Metric": f"merge_{k}", "Value": v}
+                for k, v in merge_stats.items()
+                if not isinstance(v, (dict, list))
+            ]
+            pd.DataFrame(stats_rows + merge_rows).to_excel(
+                writer, sheet_name="Cleaning Stats", index=False
+            )
         output.seek(0)
         return StreamingResponse(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.xlsx"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.xlsx"'
+            },
         )
     else:
         return StreamingResponse(
             _csv_stream(cleaned_df),
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.csv"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.csv"'
+            },
         )
 
 
@@ -1266,13 +1615,17 @@ async def download_cached_endpoint(
         return StreamingResponse(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'
+            },
         )
     else:
         return StreamingResponse(
             _csv_stream(cleaned_df),
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'
+            },
         )
 
 
@@ -1288,15 +1641,21 @@ async def join_preview_endpoint(
     cache_id_left: str | None = Query(None),
     cache_id_right: str | None = Query(None),
     join_type: str = Query(..., pattern="^(inner|left|right|outer|union)$"),
-    key_cols: str | None = Query(None, description="Comma-separated key column names (horizontal joins)"),
+    key_cols: str | None = Query(
+        None, description="Comma-separated key column names (horizontal joins)"
+    ),
     dedup: bool = Query(False, description="Remove duplicate rows after union"),
 ):
     """Preview a join of two datasets. Returns first 50 rows plus shape and stats."""
     left_bytes = (await file_left.read()) if file_left else None
     right_bytes = (await file_right.read()) if file_right else None
 
-    df_left = _resolve_source(left_bytes, file_left.filename if file_left else None, cache_id_left)
-    df_right = _resolve_source(right_bytes, file_right.filename if file_right else None, cache_id_right)
+    df_left = _resolve_source(
+        left_bytes, file_left.filename if file_left else None, cache_id_left
+    )
+    df_right = _resolve_source(
+        right_bytes, file_right.filename if file_right else None, cache_id_right
+    )
 
     parsed_keys = [c.strip() for c in key_cols.split(",")] if key_cols else None
     result, stats = _perform_join(df_left, df_right, join_type, parsed_keys, dedup)
@@ -1320,15 +1679,21 @@ async def join_run_endpoint(
     cache_id_left: str | None = Query(None),
     cache_id_right: str | None = Query(None),
     join_type: str = Query(..., pattern="^(inner|left|right|outer|union)$"),
-    key_cols: str | None = Query(None, description="Comma-separated key column names (horizontal joins)"),
+    key_cols: str | None = Query(
+        None, description="Comma-separated key column names (horizontal joins)"
+    ),
     dedup: bool = Query(False, description="Remove duplicate rows after union"),
 ):
     """Execute a full join and cache the result. Returns cache_id for download or EDA."""
     left_bytes = (await file_left.read()) if file_left else None
     right_bytes = (await file_right.read()) if file_right else None
 
-    df_left = _resolve_source(left_bytes, file_left.filename if file_left else None, cache_id_left)
-    df_right = _resolve_source(right_bytes, file_right.filename if file_right else None, cache_id_right)
+    df_left = _resolve_source(
+        left_bytes, file_left.filename if file_left else None, cache_id_left
+    )
+    df_right = _resolve_source(
+        right_bytes, file_right.filename if file_right else None, cache_id_right
+    )
 
     parsed_keys = [c.strip() for c in key_cols.split(",")] if key_cols else None
     result, stats = _perform_join(df_left, df_right, join_type, parsed_keys, dedup)
@@ -1343,17 +1708,23 @@ async def join_run_endpoint(
 
 # --- ML NAMESPACE ---------------------------------------------------------------
 
+
 @app.post("/ml/suggest")
-async def ml_suggest_endpoint(cache_id: str = Query(..., description="UUID from /clean/run or /join/run")):
+async def ml_suggest_endpoint(
+    cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+):
     """Flag anomalous rows and suggest corrections using IsolationForest."""
     entry = _cleaned_cache.get(cache_id)
     if entry is None:
-        raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
+        raise HTTPException(
+            404, "cache_id not found — run /clean/run first or check the UUID"
+        )
     result = flag_anomalies(entry["df"])
     return JSONResponse(content=json_safe(result))
 
 
 # --- REPORT NAMESPACE -----------------------------------------------------------
+
 
 @app.post("/report/pptx")
 async def report_pptx_endpoint(req: ReportRequest):
@@ -1384,6 +1755,7 @@ async def report_pdf_endpoint(req: ReportRequest):
 
 # --- RISK NAMESPACE -------------------------------------------------------------
 
+
 @app.post("/risk/score")
 async def risk_score_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
@@ -1391,13 +1763,16 @@ async def risk_score_endpoint(
     """Compute per-child composite risk score (0-100) and district aggregation."""
     entry = _cleaned_cache.get(cache_id)
     if entry is None:
-        raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
+        raise HTTPException(
+            404, "cache_id not found — run /clean/run first or check the UUID"
+        )
     result = compute_risk_scores(entry["df"])
     return JSONResponse(content=json_safe(result))
 
 
 class ForecastRequest(BaseModel):
     records: list[dict]
+
 
 @app.post("/risk/forecast")
 async def risk_forecast(req: ForecastRequest):
@@ -1407,6 +1782,7 @@ async def risk_forecast(req: ForecastRequest):
 
 # --- KPI NAMESPACE --------------------------------------------------------------
 
+
 @app.post("/kpi/dashboard")
 async def kpi_dashboard_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
@@ -1414,7 +1790,9 @@ async def kpi_dashboard_endpoint(
     """Return RAG traffic-light KPI status benchmarked against Malaysian national targets."""
     entry = _cleaned_cache.get(cache_id)
     if entry is None:
-        raise HTTPException(404, "cache_id not found — run /clean/run first or check the UUID")
+        raise HTTPException(
+            404, "cache_id not found — run /clean/run first or check the UUID"
+        )
     result = compute_kpi_dashboard(entry["df"])
     return JSONResponse(content=json_safe(result))
 
@@ -1423,13 +1801,17 @@ class TrajectoryRequest(BaseModel):
     historical_snapshots: list[dict]
     current_breakdown: list[dict] = []
 
+
 @app.post("/kpi/trajectory")
 async def kpi_trajectory(req: TrajectoryRequest):
     """Compute per-district trajectory narratives and 2027 target forecast from indicator snapshots."""
-    return compute_trajectory_narratives(req.historical_snapshots, req.current_breakdown)
+    return compute_trajectory_narratives(
+        req.historical_snapshots, req.current_breakdown
+    )
 
 
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────
+
 
 def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.BytesIO:
     """Build a multi-tab Excel data quality report from cleaned data + cleaning stats."""
@@ -1445,10 +1827,14 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
 
     def _style_sheet(ws, header_row=1, freeze_row=2):
         hdr_font = Font(bold=True, color="FFFFFF", size=11)
-        hdr_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+        hdr_fill = PatternFill(
+            start_color="2F5496", end_color="2F5496", fill_type="solid"
+        )
         thin_border = Border(
-            left=Side(style="thin"), right=Side(style="thin"),
-            top=Side(style="thin"), bottom=Side(style="thin"),
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
         )
         for cell in ws[header_row]:
             cell.font = hdr_font
@@ -1470,22 +1856,22 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         ws.freeze_panes = ws.cell(row=freeze_row, column=1)
 
     # Rule-level stats
-    dropped_gender   = stats.get("dropped_invalid_gender", 0)
-    dropped_dob      = stats.get("dropped_date_before_dob", 0)
-    dropped_age      = stats.get("dropped_age_over5", stats.get("dropped_age_invalid", 0))
-    dropped_outlier  = stats.get("dropped_measurement_outlier", 0)
-    dropped_bmi      = stats.get("dropped_bmi_outlier", 0)
-    dropped_no_meas  = stats.get("dropped_no_measurement", 0)
-    dropped_zscore   = stats.get("dropped_null_zscore", 0)
+    dropped_gender = stats.get("dropped_invalid_gender", 0)
+    dropped_dob = stats.get("dropped_date_before_dob", 0)
+    dropped_age = stats.get("dropped_age_over5", stats.get("dropped_age_invalid", 0))
+    dropped_outlier = stats.get("dropped_measurement_outlier", 0)
+    dropped_bmi = stats.get("dropped_bmi_outlier", 0)
+    dropped_no_meas = stats.get("dropped_no_measurement", 0)
+    dropped_zscore = stats.get("dropped_null_zscore", 0)
 
     rules_ordered = [
-        ("Rule 1", "Jantina 'Others'",           dropped_gender),
-        ("Rule 4", "Assessment before DOB",       dropped_dob),
-        ("Rule 3", "Age > 5 years",               dropped_age),
-        ("Rule 2", "Measurement outliers",        dropped_outlier),
-        ("Rule 5", "Implausible BMI > 40",        dropped_bmi),
-        ("Rule 6", "No measurement (both null)",  dropped_no_meas),
-        ("Rule 7", "Null z-score(s)",             dropped_zscore),
+        ("Rule 1", "Jantina 'Others'", dropped_gender),
+        ("Rule 4", "Assessment before DOB", dropped_dob),
+        ("Rule 3", "Age > 5 years", dropped_age),
+        ("Rule 2", "Measurement outliers", dropped_outlier),
+        ("Rule 5", "Implausible BMI > 40", dropped_bmi),
+        ("Rule 6", "No measurement (both null)", dropped_no_meas),
+        ("Rule 7", "Null z-score(s)", dropped_zscore),
     ]
 
     # TAB 1 — Executive Summary
@@ -1498,16 +1884,22 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
     ]
     for rule_id, label, count in rules_ordered:
         exec_rows.append([f"Dropped \u2014 {label}", count, pct(count, raw), rule_id])
-    exec_rows.append(["Final cleaned records", final, pct(final, raw), "After all rules"])
+    exec_rows.append(
+        ["Final cleaned records", final, pct(final, raw), "After all rules"]
+    )
     exec_rows.append([])
 
     # WAZ distribution
     exec_rows.append(["WAZ \u2014 Weight-for-Age", "Count", "% of Cleaned", ""])
     if "WAZ_Status" in df.columns:
         waz_vc = df["WAZ_Status"].value_counts()
-        for code, label in [("berat_badan_normal", "Berat Badan Normal"), ("risiko_kurang_berat_badan", "Risiko Kurang Berat Badan"),
-                            ("kurang_berat_badan", "Kurang Berat Badan"), ("kurang_berat_badan_teruk", "Kurang Berat Badan Teruk"),
-                            ("mungkin_masalah_pertumbuhan", "Mungkin Masalah Pertumbuhan")]:
+        for code, label in [
+            ("berat_badan_normal", "Berat Badan Normal"),
+            ("risiko_kurang_berat_badan", "Risiko Kurang Berat Badan"),
+            ("kurang_berat_badan", "Kurang Berat Badan"),
+            ("kurang_berat_badan_teruk", "Kurang Berat Badan Teruk"),
+            ("mungkin_masalah_pertumbuhan", "Mungkin Masalah Pertumbuhan"),
+        ]:
             cnt = int(waz_vc.get(code, 0))
             exec_rows.append([label, cnt, pct(cnt, final), ""])
     exec_rows.append([])
@@ -1516,9 +1908,13 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
     exec_rows.append(["HAZ \u2014 Height-for-Age", "Count", "% of Cleaned", ""])
     if "HAZ_Status" in df.columns:
         haz_vc = df["HAZ_Status"].value_counts()
-        for code, label in [("normal", "Panjang/Tinggi Normal"), ("risiko_bantut", "Risiko Bantut"),
-                            ("bantut", "Bantut"), ("bantut_teruk", "Bantut Teruk"),
-                            ("mungkin_masalah_endokrin", "Mungkin Masalah Endokrin")]:
+        for code, label in [
+            ("normal", "Panjang/Tinggi Normal"),
+            ("risiko_bantut", "Risiko Bantut"),
+            ("bantut", "Bantut"),
+            ("bantut_teruk", "Bantut Teruk"),
+            ("mungkin_masalah_endokrin", "Mungkin Masalah Endokrin"),
+        ]:
             cnt = int(haz_vc.get(code, 0))
             exec_rows.append([label, cnt, pct(cnt, final), ""])
     exec_rows.append([])
@@ -1527,10 +1923,15 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
     exec_rows.append(["BAZ \u2014 BMI-for-Age", "Count", "% of Cleaned", ""])
     if "BAZ_Status" in df.columns:
         baz_vc = df["BAZ_Status"].value_counts()
-        for code, label in [("normal", "Berat Badan Normal"), ("berisiko_susut", "Berisiko Susut"),
-                            ("susut", "Susut"), ("susut_teruk", "Susut Teruk"),
-                            ("risiko_lebih_berat_badan", "Risiko Lebih Berat Badan"),
-                            ("berlebihan_berat_badan", "Berlebihan Berat Badan"), ("obes", "Obes")]:
+        for code, label in [
+            ("normal", "Berat Badan Normal"),
+            ("berisiko_susut", "Berisiko Susut"),
+            ("susut", "Susut"),
+            ("susut_teruk", "Susut Teruk"),
+            ("risiko_lebih_berat_badan", "Risiko Lebih Berat Badan"),
+            ("berlebihan_berat_badan", "Berlebihan Berat Badan"),
+            ("obes", "Obes"),
+        ]:
             cnt = int(baz_vc.get(code, 0))
             exec_rows.append([label, cnt, pct(cnt, final), ""])
     exec_rows.append([])
@@ -1545,33 +1946,71 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         bawah2, bawah5 = 0, final
     exec_rows.append(["Age Group", "Count", "% of Cleaned", "Definition"])
     exec_rows.append(["Bawah 2 Tahun", bawah2, pct(bawah2, final), "0 \u2013 23 bulan"])
-    exec_rows.append(["Bawah 5 Tahun", bawah5, pct(bawah5, final), "24 \u2013 59 bulan"])
+    exec_rows.append(
+        ["Bawah 5 Tahun", bawah5, pct(bawah5, final), "24 \u2013 59 bulan"]
+    )
 
     # TAB 2 — Cleaning Rules
     rules_detail = [
         ["CLEANING RULES APPLIED", "", "", "", "", ""],
         [],
         ["Rule", "Column(s)", "Condition", "Action", "Rows Affected", "% of Raw"],
-        ["Rule 1", "Jantina", "Jantina = 'Others'", "Drop row",
-         dropped_gender, pct(dropped_gender, raw)],
-        ["Rule 2", "Berat / Panjang",
-         "Berat \u2264 0.5 or > 35.0 kg | Panjang \u2264 30.0 or > 130.0 cm",
-         "Drop row", dropped_outlier, pct(dropped_outlier, raw)],
-        ["Rule 3", "Tarikh Lahir / Tarikh Antropometri",
-         "Age at assessment \u2265 60 months (> 5 years)",
-         "Drop row", dropped_age, pct(dropped_age, raw)],
-        ["Rule 4", "Tarikh Lahir / Tarikh Antropometri",
-         "Tarikh Antropometri < Tarikh Lahir",
-         "Drop row", dropped_dob, pct(dropped_dob, raw)],
-        ["Rule 5", "Berat + Panjang",
-         "BMI > 40.0 (implausible weight/height combination)",
-         "Drop row", dropped_bmi, pct(dropped_bmi, raw)],
-        ["Rule 6", "Berat + Panjang",
-         "Both weight AND height are NULL",
-         "Drop row", dropped_no_meas, pct(dropped_no_meas, raw)],
-        ["Rule 7", "WAZ / HAZ / BAZ",
-         "Any z-score is NULL after computation",
-         "Drop row", dropped_zscore, pct(dropped_zscore, raw)],
+        [
+            "Rule 1",
+            "Jantina",
+            "Jantina = 'Others'",
+            "Drop row",
+            dropped_gender,
+            pct(dropped_gender, raw),
+        ],
+        [
+            "Rule 2",
+            "Berat / Panjang",
+            "Berat \u2264 0.5 or > 35.0 kg | Panjang \u2264 30.0 or > 130.0 cm",
+            "Drop row",
+            dropped_outlier,
+            pct(dropped_outlier, raw),
+        ],
+        [
+            "Rule 3",
+            "Tarikh Lahir / Tarikh Antropometri",
+            "Age at assessment \u2265 60 months (> 5 years)",
+            "Drop row",
+            dropped_age,
+            pct(dropped_age, raw),
+        ],
+        [
+            "Rule 4",
+            "Tarikh Lahir / Tarikh Antropometri",
+            "Tarikh Antropometri < Tarikh Lahir",
+            "Drop row",
+            dropped_dob,
+            pct(dropped_dob, raw),
+        ],
+        [
+            "Rule 5",
+            "Berat + Panjang",
+            "BMI > 40.0 (implausible weight/height combination)",
+            "Drop row",
+            dropped_bmi,
+            pct(dropped_bmi, raw),
+        ],
+        [
+            "Rule 6",
+            "Berat + Panjang",
+            "Both weight AND height are NULL",
+            "Drop row",
+            dropped_no_meas,
+            pct(dropped_no_meas, raw),
+        ],
+        [
+            "Rule 7",
+            "WAZ / HAZ / BAZ",
+            "Any z-score is NULL after computation",
+            "Drop row",
+            dropped_zscore,
+            pct(dropped_zscore, raw),
+        ],
     ]
 
     # TAB 3 — Records Dropped
@@ -1612,7 +2051,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
     # ── Helper: build pivot table (4 sections) for one z-score indicator ──────
     age_cats = ["Bawah 2 Tahun", "Bawah 5 Tahun"]
 
-    def _build_pivot_tab(geo_col, geo_label, status_col, detail_labels, combine_map, combine_order, title):
+    def _build_pivot_tab(
+        geo_col, geo_label, status_col, detail_labels, combine_map, combine_order, title
+    ):
         """
         Build rows for one pivot tab.
         detail_labels: ordered list of classification codes
@@ -1645,7 +2086,11 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         rows_out.append(sub_hdr1_2)
 
         # Group data
-        grouped = df.groupby([geo_col, "Kategori_Umur", status_col]).size().reset_index(name="count")
+        grouped = (
+            df.groupby([geo_col, "Kategori_Umur", status_col])
+            .size()
+            .reset_index(name="count")
+        )
         geo_totals = df.groupby(geo_col).size()
 
         detail_data = []
@@ -1671,7 +2116,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         grand = ["Grand Total", len(df)]
         for lbl in detail_labels:
             for age_cat in age_cats:
-                mask = (grouped["Kategori_Umur"] == age_cat) & (grouped[status_col] == lbl)
+                mask = (grouped["Kategori_Umur"] == age_cat) & (
+                    grouped[status_col] == lbl
+                )
                 grand.append(int(grouped.loc[mask, "count"].sum()))
             mask_all = grouped[status_col] == lbl
             grand.append(int(grouped.loc[mask_all, "count"].sum()))
@@ -1713,7 +2160,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         rows_out.append([])
 
         # --- SECTION 3: Combined Count ---
-        rows_out.append([f"Count of {status_col.replace('_Status', '_COMBINE')}", "Column Labels"])
+        rows_out.append(
+            [f"Count of {status_col.replace('_Status', '_COMBINE')}", "Column Labels"]
+        )
         sub_c1 = ["", ""]
         for clbl in combine_order:
             sub_c1.extend([clbl, "", f"{clbl} Total"])
@@ -1746,7 +2195,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
                 idx_base = 2
                 for i, lbl in enumerate(detail_labels):
                     if lbl in codes:
-                        s_total += row[idx_base + i * (len(age_cats) + 1) + len(age_cats)]
+                        s_total += row[
+                            idx_base + i * (len(age_cats) + 1) + len(age_cats)
+                        ]
                 crow.append(s_total)
             crow.append(total)
             combine_data.append(crow)
@@ -1778,7 +2229,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         rows_out.append([])
 
         # --- SECTION 4: Combined Percentage ---
-        rows_out.append([f"Count of {status_col.replace('_Status', '_COMBINE')}", "Column Labels"])
+        rows_out.append(
+            [f"Count of {status_col.replace('_Status', '_COMBINE')}", "Column Labels"]
+        )
         rows_out.append(sub_c1)
         rows_out.append(sub_c2)
 
@@ -1810,32 +2263,57 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         return rows_out
 
     # ── WAZ config ─────────────────────────────────────────────────────────────
-    waz_detail = ["kurang_berat_badan_teruk", "kurang_berat_badan",
-                  "risiko_kurang_berat_badan", "berat_badan_normal",
-                  "mungkin_masalah_pertumbuhan"]
+    waz_detail = [
+        "kurang_berat_badan_teruk",
+        "kurang_berat_badan",
+        "risiko_kurang_berat_badan",
+        "berat_badan_normal",
+        "mungkin_masalah_pertumbuhan",
+    ]
     waz_combine = {
         "Kurang Berat Badan": ["kurang_berat_badan_teruk", "kurang_berat_badan"],
         "risiko_kurang_berat_badan": ["risiko_kurang_berat_badan"],
         "berat_badan_normal": ["berat_badan_normal"],
         "mungkin_masalah_pertumbuhan": ["mungkin_masalah_pertumbuhan"],
     }
-    waz_combine_order = ["Kurang Berat Badan", "risiko_kurang_berat_badan",
-                         "berat_badan_normal", "mungkin_masalah_pertumbuhan"]
+    waz_combine_order = [
+        "Kurang Berat Badan",
+        "risiko_kurang_berat_badan",
+        "berat_badan_normal",
+        "mungkin_masalah_pertumbuhan",
+    ]
 
     # ── HAZ config ─────────────────────────────────────────────────────────────
-    haz_detail = ["bantut_teruk", "bantut", "risiko_bantut", "normal",
-                  "mungkin_masalah_endokrin"]
+    haz_detail = [
+        "bantut_teruk",
+        "bantut",
+        "risiko_bantut",
+        "normal",
+        "mungkin_masalah_endokrin",
+    ]
     haz_combine = {
         "Bantut": ["bantut_teruk", "bantut"],
         "risiko_bantut": ["risiko_bantut"],
         "normal": ["normal"],
         "mungkin_masalah_endokrin": ["mungkin_masalah_endokrin"],
     }
-    haz_combine_order = ["Bantut", "risiko_bantut", "normal", "mungkin_masalah_endokrin"]
+    haz_combine_order = [
+        "Bantut",
+        "risiko_bantut",
+        "normal",
+        "mungkin_masalah_endokrin",
+    ]
 
     # ── BAZ config ─────────────────────────────────────────────────────────────
-    baz_detail = ["susut_teruk", "susut", "berisiko_susut", "normal",
-                  "risiko_lebih_berat_badan", "berlebihan_berat_badan", "obes"]
+    baz_detail = [
+        "susut_teruk",
+        "susut",
+        "berisiko_susut",
+        "normal",
+        "risiko_lebih_berat_badan",
+        "berlebihan_berat_badan",
+        "obes",
+    ]
     baz_combine = {
         "Susut": ["susut_teruk", "susut"],
         "berisiko_susut": ["berisiko_susut"],
@@ -1843,41 +2321,101 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         "risiko_lebih_berat_badan": ["risiko_lebih_berat_badan"],
         "Berlebihan Berat Badan": ["berlebihan_berat_badan", "obes"],
     }
-    baz_combine_order = ["Susut", "berisiko_susut", "normal",
-                         "risiko_lebih_berat_badan", "Berlebihan Berat Badan"]
+    baz_combine_order = [
+        "Susut",
+        "berisiko_susut",
+        "normal",
+        "risiko_lebih_berat_badan",
+        "Berlebihan Berat Badan",
+    ]
 
     # Build pivot tabs
-    waz_negeri = _build_pivot_tab(state_col, "Negeri", "WAZ_Status", waz_detail, waz_combine, waz_combine_order, "WAZ Negeri")
-    waz_daerah = _build_pivot_tab(district_col, "Daerah", "WAZ_Status", waz_detail, waz_combine, waz_combine_order, "WAZ Daerah")
-    haz_negeri = _build_pivot_tab(state_col, "Negeri", "HAZ_Status", haz_detail, haz_combine, haz_combine_order, "HAZ Negeri")
-    haz_daerah = _build_pivot_tab(district_col, "Daerah", "HAZ_Status", haz_detail, haz_combine, haz_combine_order, "HAZ Daerah")
-    baz_negeri = _build_pivot_tab(state_col, "Negeri", "BAZ_Status", baz_detail, baz_combine, baz_combine_order, "BAZ Negeri")
-    baz_daerah = _build_pivot_tab(district_col, "Daerah", "BAZ_Status", baz_detail, baz_combine, baz_combine_order, "BAZ Daerah")
+    waz_negeri = _build_pivot_tab(
+        state_col,
+        "Negeri",
+        "WAZ_Status",
+        waz_detail,
+        waz_combine,
+        waz_combine_order,
+        "WAZ Negeri",
+    )
+    waz_daerah = _build_pivot_tab(
+        district_col,
+        "Daerah",
+        "WAZ_Status",
+        waz_detail,
+        waz_combine,
+        waz_combine_order,
+        "WAZ Daerah",
+    )
+    haz_negeri = _build_pivot_tab(
+        state_col,
+        "Negeri",
+        "HAZ_Status",
+        haz_detail,
+        haz_combine,
+        haz_combine_order,
+        "HAZ Negeri",
+    )
+    haz_daerah = _build_pivot_tab(
+        district_col,
+        "Daerah",
+        "HAZ_Status",
+        haz_detail,
+        haz_combine,
+        haz_combine_order,
+        "HAZ Daerah",
+    )
+    baz_negeri = _build_pivot_tab(
+        state_col,
+        "Negeri",
+        "BAZ_Status",
+        baz_detail,
+        baz_combine,
+        baz_combine_order,
+        "BAZ Negeri",
+    )
+    baz_daerah = _build_pivot_tab(
+        district_col,
+        "Daerah",
+        "BAZ_Status",
+        baz_detail,
+        baz_combine,
+        baz_combine_order,
+        "BAZ Daerah",
+    )
 
     # Write workbook
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         pd.DataFrame(exec_rows).to_excel(
-            writer, sheet_name="Executive Summary", index=False, header=False)
+            writer, sheet_name="Executive Summary", index=False, header=False
+        )
         _style_sheet(writer.sheets["Executive Summary"], header_row=4, freeze_row=5)
 
         pd.DataFrame(rules_detail).to_excel(
-            writer, sheet_name="Cleaning Rules", index=False, header=False)
+            writer, sheet_name="Cleaning Rules", index=False, header=False
+        )
         _style_sheet(writer.sheets["Cleaning Rules"], header_row=3, freeze_row=4)
 
         pd.DataFrame(dropped_rows).to_excel(
-            writer, sheet_name="Records Dropped", index=False, header=False)
+            writer, sheet_name="Records Dropped", index=False, header=False
+        )
         _style_sheet(writer.sheets["Records Dropped"], header_row=3, freeze_row=4)
 
         # 6 pivot tabs
         pivot_tabs = [
-            ("WAZ Negeri", waz_negeri), ("WAZ Daerah", waz_daerah),
-            ("HAZ Negeri", haz_negeri), ("HAZ Daerah", haz_daerah),
-            ("BAZ Negeri", baz_negeri), ("BAZ Daerah", baz_daerah),
+            ("WAZ Negeri", waz_negeri),
+            ("WAZ Daerah", waz_daerah),
+            ("HAZ Negeri", haz_negeri),
+            ("HAZ Daerah", haz_daerah),
+            ("BAZ Negeri", baz_negeri),
+            ("BAZ Daerah", baz_daerah),
         ]
         for sheet_name, rows_data in pivot_tabs:
             pd.DataFrame(rows_data).to_excel(
-                writer, sheet_name=sheet_name, index=False, header=False)
+                writer, sheet_name=sheet_name, index=False, header=False
+            )
             ws = writer.sheets[sheet_name]
             # Style header rows and section dividers
             for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
@@ -1892,7 +2430,9 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
                 if val == "Row Labels":
                     for cell in row:
                         cell.font = Font(bold=True, color="FFFFFF", size=10)
-                        cell.fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
+                        cell.fill = PatternFill(
+                            start_color="2F5496", end_color="2F5496", fill_type="solid"
+                        )
                         cell.alignment = Alignment(horizontal="center")
                 if val == "Grand Total":
                     for cell in row:
@@ -1926,13 +2466,13 @@ async def download_report_endpoint(
         iter([report_buf.read()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition":
-                f'attachment; filename="{data_type.upper()}_Data_Quality_Report_{timestamp}.xlsx"'
+            "Content-Disposition": f'attachment; filename="{data_type.upper()}_Data_Quality_Report_{timestamp}.xlsx"'
         },
     )
 
 
 # ─── AI ENDPOINTS ─────────────────────────────────────────────────────────────
+
 
 class ReportRequest(BaseModel):
     cache_id: str
@@ -1963,27 +2503,33 @@ async def ai_narrative(req: NarrativeRequest, db: SASession = Depends(get_db)):
     PLACEHOLDER_DATASET_ID = "00000000-0000-0000-0000-000000000000"
     try:
         if not db.get(Dataset, PLACEHOLDER_DATASET_ID):
-            db.add(Dataset(
-                id=PLACEHOLDER_DATASET_ID,
-                name="__placeholder__",
-                filename="__placeholder__",
-                created_at=now,
-            ))
+            db.add(
+                Dataset(
+                    id=PLACEHOLDER_DATASET_ID,
+                    name="__placeholder__",
+                    filename="__placeholder__",
+                    created_at=now,
+                )
+            )
         if not db.get(DBSession, req.session_id):
-            db.add(DBSession(
-                id=req.session_id,
-                dataset_id=PLACEHOLDER_DATASET_ID,
-                notes=None,
+            db.add(
+                DBSession(
+                    id=req.session_id,
+                    dataset_id=PLACEHOLDER_DATASET_ID,
+                    notes=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        db.add(
+            AnalysisResult(
+                id=str(uuid.uuid4()),
+                session_id=req.session_id,
+                result_type="narrative",
+                result_json=narrative,
                 created_at=now,
-                updated_at=now,
-            ))
-        db.add(AnalysisResult(
-            id=str(uuid.uuid4()),
-            session_id=req.session_id,
-            result_type="narrative",
-            result_json=narrative,
-            created_at=now,
-        ))
+            )
+        )
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -1997,7 +2543,9 @@ async def ai_nlq(req: NLQRequest):
     """Answer a natural language query against the cleaned dataset for a session."""
     entry = _cleaned_cache.get(req.session_id)
     if entry is None:
-        raise HTTPException(404, "Session not found in cache — please re-run cleaning first.")
+        raise HTTPException(
+            404, "Session not found in cache — please re-run cleaning first."
+        )
 
     df = entry["df"]
     try:
@@ -2023,12 +2571,12 @@ async def list_datasets():
         datasets = db.query(Dataset).order_by(Dataset.created_at.desc()).all()
         return [
             {
-                "id":          ds.id,
-                "name":        ds.name,
-                "filename":    ds.filename,
+                "id": ds.id,
+                "name": ds.name,
+                "filename": ds.filename,
                 "source_type": ds.source_type,
-                "row_count":   ds.row_count,
-                "created_at":  ds.created_at.isoformat(),
+                "row_count": ds.row_count,
+                "created_at": ds.created_at.isoformat(),
             }
             for ds in datasets
         ]
@@ -2060,22 +2608,24 @@ async def datasets_compare(req: DatasetCompareRequest):
                 .first()
             )
             quality_score = None
-            indicators    = {}
+            indicators = {}
             if ar and ar.result_json:
-                rj            = ar.result_json
+                rj = ar.result_json
                 quality_score = rj.get("quality", {}).get("overall_score")
-                ind           = rj.get("indicators", {})
+                ind = rj.get("indicators", {})
                 for k in _INDICATOR_KEYS:
                     if k in ind:
                         indicators[k] = ind[k]
-            summaries.append({
-                "dataset_id":    ds_id,
-                "source_type":   ds.source_type or "unknown",
-                "quality_score": quality_score,
-                "indicators":    indicators,
-                "name":          ds.name,
-                "created_at":    ds.created_at.isoformat(),
-            })
+            summaries.append(
+                {
+                    "dataset_id": ds_id,
+                    "source_type": ds.source_type or "unknown",
+                    "quality_score": quality_score,
+                    "indicators": indicators,
+                    "name": ds.name,
+                    "created_at": ds.created_at.isoformat(),
+                }
+            )
 
     return compare_datasets(summaries)
 
@@ -2113,25 +2663,27 @@ async def entity_link(req: EntityLinkRequest):
             if ar is None or not ar.result_json:
                 continue
             summary = ar.result_json.get("summary", {})
-            records.append({
-                "ic":          summary.get("ic", ""),
-                "source_type": ds.source_type or "unknown",
-                "dataset_id":  ds_id,
-                "name":        summary.get("name", ""),
-                "dob":         summary.get("dob", ""),
-            })
+            records.append(
+                {
+                    "ic": summary.get("ic", ""),
+                    "source_type": ds.source_type or "unknown",
+                    "dataset_id": ds_id,
+                    "name": summary.get("name", ""),
+                    "dob": summary.get("dob", ""),
+                }
+            )
 
-        groups       = link_records(records)
+        groups = link_records(records)
         rows_written = persist_linkage(groups, db)
 
-    linked   = [g for g in groups if len(g["sources"]) > 1]
+    linked = [g for g in groups if len(g["sources"]) > 1]
     unlinked = [g for g in groups if len(g["sources"]) == 1]
     return {
-        "total_groups":  len(groups),
+        "total_groups": len(groups),
         "linked_groups": len(linked),
-        "unlinked":      len(unlinked),
-        "rows_written":  rows_written,
-        "profiles":      linked[:50],
+        "unlinked": len(unlinked),
+        "rows_written": rows_written,
+        "profiles": linked[:50],
     }
 
 
@@ -2139,6 +2691,7 @@ async def entity_link(req: EntityLinkRequest):
 def list_sessions(db=Depends(get_db)):
     """List the 100 most recent cleaned sessions persisted to the database."""
     from .db.models import Dataset
+
     rows = db.query(Dataset).order_by(Dataset.created_at.desc()).limit(100).all()
     return [
         {
@@ -2155,6 +2708,7 @@ def list_sessions(db=Depends(get_db)):
 @app.get("/audit/log")
 def get_audit_log(dataset_id: int | None = None, limit: int = 100, db=Depends(get_db)):
     from .db.models import AuditLog
+
     q = db.query(AuditLog).order_by(AuditLog.created_at.desc())
     if dataset_id is not None:
         q = q.filter(AuditLog.dataset_id == dataset_id)
@@ -2184,15 +2738,25 @@ _DEFAULT_THRESHOLDS = {
     "outlier_zscore_threshold": 3.0,
 }
 
-_DEFAULT_RULES: dict = {k: {"enabled": True} for k in [
-    "duplicate_check", "missing_value_check", "ic_format_check",
-    "age_range_check", "height_range_check", "weight_range_check",
-    "bmi_range_check", "date_format_check", "gender_value_check",
-]}
+_DEFAULT_RULES: dict = {
+    k: {"enabled": True}
+    for k in [
+        "duplicate_check",
+        "missing_value_check",
+        "ic_format_check",
+        "age_range_check",
+        "height_range_check",
+        "weight_range_check",
+        "bmi_range_check",
+        "date_format_check",
+        "gender_value_check",
+    ]
+}
 
 
 def _get_setting(key: str, default, db) -> dict:
     from .db.models import AppSetting
+
     row = db.query(AppSetting).filter_by(key=key).first()
     if row:
         return _json.loads(row.value)
@@ -2201,6 +2765,7 @@ def _get_setting(key: str, default, db) -> dict:
 
 def _set_setting(key: str, value, db) -> None:
     from .db.models import AppSetting
+
     existing = db.query(AppSetting).filter_by(key=key).first()
     if existing:
         existing.value = _json.dumps(value)
