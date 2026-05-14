@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime, ForeignKey, Float
+from sqlalchemy import Boolean, Integer, String, DateTime, ForeignKey, Float, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -87,3 +87,33 @@ class EntityLinkage(Base):
     dob:              Mapped[str | None] = mapped_column(String,  nullable=True)
     match_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at:       Mapped[datetime]   = mapped_column(DateTime, nullable=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id:            Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username:      Mapped[str]      = mapped_column(String(80), unique=True, nullable=False)
+    password_hash: Mapped[str]      = mapped_column(String(200), nullable=False)
+    role:          Mapped[str]      = mapped_column(String(20), nullable=False, default="viewer")
+    is_active:     Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True)
+    created_at:    Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key:        Mapped[str]      = mapped_column(String(120), primary_key=True)
+    value:      Mapped[str]      = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id:         Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id:    Mapped[int | None]    = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action:     Mapped[str]           = mapped_column(String(80), nullable=False)
+    dataset_id: Mapped[str | None]    = mapped_column(String, ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True)
+    detail:     Mapped[str | None]    = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime]      = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
