@@ -273,3 +273,91 @@ Response:
 - `MessageBubble` — user vs assistant styling variant
 - `InlineChart` — renders `<img src={chart_b64}>` if present
 - `QueryInput` — textarea + send button
+
+---
+
+## §9 — Geo Mapping Page (`/geo`)
+
+### Purpose
+District-level choropleth of nutrition indicators + risk score tiers + next-quarter forecast.
+
+### APIs
+- `GET /kpi/dashboard` → `{ districts: [{ name, stunting_rate, wasting_rate, risk_score, trend }] }`
+- `GET /kpi/forecast?district=X` → `{ district, forecast_quarter, predicted_stunting, confidence_interval }`
+
+### Risk Score Tiers
+| Score | Tier        | Colour |
+|-------|-------------|--------|
+| 0–39  | Low Risk    | Green  |
+| 40–69 | Medium Risk | Amber  |
+| 70–100| High Risk   | Red    |
+
+### Layout
+- Left: Malaysia map SVG (choropleth fill by stunting_rate)
+- Right panel: district selector → KPI cards for selected district
+- Bottom: Forecast card (predicted value + CI bar + risk tier badge)
+
+### Components
+- `MalaysiaChoropleth` — SVG map, district fill by rate
+- `DistrictKpiPanel` — 4 metric cards + trend arrows
+- `ForecastCard` — predicted value + CI + tier badge
+
+---
+
+## §10 — Reports Page (`/reports`)
+
+### Purpose
+Generate and download KKM-branded PDF or PPTX report.
+
+### APIs
+- `POST /report/pdf` → binary PDF stream
+- `POST /report/pptx` → binary PPTX stream
+
+Both accept: `{ cache_id: string, include_charts: bool, language: "ms" | "en" }`
+
+### Report Contents (KKM Annual Report Chapter 4 template)
+1. Cover — KKM logo, district name, report date
+2. Executive Summary (bilingual BM/EN)
+3. Data Quality Summary — score gauge, rule breakdown table
+4. Nutrition Indicators — stunting/wasting/underweight/overweight vs WHO targets
+5. District Trend Charts — 3-year sparklines
+6. Methodology Appendix — definitions, data sources
+
+### Layout
+- Left: `ReportOptionsPanel` — format (PDF/PPTX), language, include_charts toggle
+- Right: `ReportPreviewPane` — placeholder preview
+- Bottom: "Jana Laporan" button + download spinner
+
+### Teal → Navy Restyle Required
+The 4 existing components use teal `#00697A`. Restyle to navy `#1B2A4A` before integration:
+- `frontend/src/pages/ReportPage.tsx`
+- `frontend/src/components/report/ReportOptionsPanel.tsx`
+- `frontend/src/components/report/ReportPreviewPane.tsx`
+- `frontend/src/hooks/useReportGeneration.ts`
+
+---
+
+## §11 — Dataset Library Page (`/datasets`)
+
+### Purpose
+Compare 2+ historical dataset summaries side-by-side; view indicator deltas and trend directions.
+
+### APIs
+- `GET /datasets` → `[{ id, cache_id, filename, source_type, row_count, quality_score, created_at }]`
+- `POST /datasets/compare` — body: `{ dataset_ids: int[] }`
+  Response: `{ datasets, deltas: { stunting_rate: -2.1, ... }, trend: { stunting_rate: "improving" } }`
+
+### Delta Display
+- `+X.Xpp` red — worsening indicator (rate increased)
+- `-X.Xpp` green — improving indicator (rate decreased)
+- Trend badge: "Improving ↓" | "Worsening ↑" | "Stable →"
+
+### Layout
+- Left: dataset checkbox list (multi-select, up to 5) with quality score badges
+- "Bandingkan" button → POST /datasets/compare
+- Comparison table: rows = indicators, columns = selected datasets + delta
+
+### Components
+- `DatasetSelector` — checkbox list
+- `ComparisonTable` — indicator rows, dataset columns, delta column
+- `TrendBadge` — coloured arrow badge
