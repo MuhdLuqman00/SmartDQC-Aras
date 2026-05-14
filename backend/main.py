@@ -721,6 +721,56 @@ def _cache_cleaned(df: pd.DataFrame, stats: dict | None = None) -> str:
     return key
 
 
+def _persist_session(
+    cache_id: str,
+    filename: str,
+    source_type: str,
+    row_count: int,
+    result: dict,
+    db,
+) -> None:
+    """Upsert Dataset + Session + AnalysisResult so session data survives server restart."""
+    from .db.models import Dataset, Session as _Session, AnalysisResult
+    from datetime import datetime as _dt
+
+    now = _dt.utcnow()
+
+    ds = db.query(Dataset).filter_by(id=cache_id).first()
+    if ds is None:
+        ds = Dataset(
+            id=cache_id,
+            name=filename,
+            filename=filename,
+            source_type=source_type,
+            row_count=row_count,
+            created_at=now,
+        )
+        db.add(ds)
+        db.flush()
+
+    sess_id = str(_uuid.uuid4())
+    sess = _Session(
+        id=sess_id,
+        dataset_id=cache_id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(sess)
+    db.flush()
+
+    db.add(AnalysisResult(
+        id=str(_uuid.uuid4()),
+        session_id=sess_id,
+        result_type="quality",
+        result_json={
+            "quality_score": result.get("quality_score"),
+            "issues": result.get("issues", []),
+        },
+        created_at=now,
+    ))
+    db.commit()
+
+
 def _resolve_source(file: bytes | None, filename: str | None, cache_id: str | None) -> "pd.DataFrame":
     """Resolve a join source to a DataFrame from either a raw upload or the cleaned cache."""
     if cache_id is not None:
@@ -894,6 +944,7 @@ async def clean_run_endpoint(
     file: UploadFile = File(...),
     data_type: str = "myvass",
     sheet: Optional[str] = None,
+    db=Depends(get_db),
 ):
     """Run the cleaning process and return cleaned data with statistics."""
     content = await file.read()
@@ -913,6 +964,18 @@ async def clean_run_endpoint(
 
     # Cache cleaned DF so download doesn't need re-upload
     cache_id = _cache_cleaned(cleaned_df, stats)
+
+    try:
+        _persist_session(
+            cache_id=cache_id,
+            filename=filename,
+            source_type=data_type,
+            row_count=len(cleaned_df),
+            result=stats or {},
+            db=db,
+        )
+    except Exception:
+        pass  # best-effort — never fail the clean run for a DB write error
 
     return JSONResponse(content=json_safe({
         "success": True,
@@ -2021,3 +2084,19 @@ async def entity_link(req: EntityLinkRequest):
         "rows_written":  rows_written,
         "profiles":      linked[:50],
     }
+
+
+@app.get("/sessions")
+def list_sessions(db=Depends(get_db)):
+    """List the 100 most recent cleaned sessions persisted to the database."""
+    from .db.models import Dataset
+    rows = db.query(Dataset).order_by(Dataset.created_at.desc()).limit(100).all()
+    return [
+        {
+            "cache_id": r.id,
+            "filename": r.filename,
+            "source_type": r.source_type,
+            "row_count": r.row_count,
+        }
+        for r in rows
+    ]
