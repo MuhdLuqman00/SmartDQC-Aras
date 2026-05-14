@@ -1,51 +1,53 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useLang } from '../context/LanguageContext';
 
 interface NavItem { path: string; label: string; icon: string; adminOnly?: boolean; }
-
-const GROUPS: { label: string; items: NavItem[] }[] = [
-  {
-    label: 'Utama',
-    items: [{ path: '/', label: 'Papan Pemuka', icon: '⊞' }],
-  },
-  {
-    label: 'Data',
-    items: [
-      { path: '/upload',   label: 'Muat Naik',   icon: '↑' },
-      { path: '/explorer', label: 'Penjelajah',  icon: '◫' },
-      { path: '/quality',  label: 'Kualiti',     icon: '◎' },
-      { path: '/cleaning', label: 'Pembersihan', icon: '✦' },
-    ],
-  },
-  {
-    label: 'AI',
-    items: [
-      { path: '/ai',  label: 'Analisis Pintar', icon: '✧' },
-      { path: '/geo', label: 'Geo & Ramalan',   icon: '◈' },
-    ],
-  },
-  {
-    label: 'Output',
-    items: [
-      { path: '/reports',  label: 'Laporan',      icon: '▤' },
-      { path: '/datasets', label: 'Perpustakaan', icon: '⊟' },
-      { path: '/history',  label: 'Sejarah',      icon: '◷' },
-    ],
-  },
-  {
-    label: 'Admin',
-    items: [
-      { path: '/settings', label: 'Tetapan', icon: '⚙', adminOnly: true },
-      { path: '/audit',    label: 'Audit',   icon: '⊕', adminOnly: true },
-    ],
-  },
-];
 
 interface Props { role?: string; collapsed: boolean; onToggle: () => void; }
 
 export function Sidebar({ role, collapsed, onToggle }: Props): JSX.Element {
   const location = useLocation();
+  const { t } = useLang();
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+
+  const GROUPS: { label: string; items: NavItem[] }[] = [
+    {
+      label: t('Main', 'Utama'),
+      items: [{ path: '/', label: t('Dashboard', 'Papan Pemuka'), icon: '⊞' }],
+    },
+    {
+      label: t('Data', 'Data'),
+      items: [
+        { path: '/upload',   label: t('Upload', 'Muat Naik'),     icon: '↑' },
+        { path: '/explorer', label: t('Explorer', 'Penjelajah'),  icon: '◫' },
+        { path: '/quality',  label: t('Quality', 'Kualiti'),      icon: '◎' },
+        { path: '/cleaning', label: t('Cleaning', 'Pembersihan'), icon: '✦' },
+      ],
+    },
+    {
+      label: 'AI',
+      items: [
+        { path: '/ai',  label: t('Smart Analysis', 'Analisis Pintar'), icon: '✧' },
+        { path: '/geo', label: t('Geo & Forecast', 'Geo & Ramalan'),   icon: '◈' },
+      ],
+    },
+    {
+      label: t('Output', 'Output'),
+      items: [
+        { path: '/reports',  label: t('Reports', 'Laporan'),      icon: '▤' },
+        { path: '/datasets', label: t('Library', 'Perpustakaan'), icon: '⊟' },
+        { path: '/history',  label: t('History', 'Sejarah'),      icon: '◷' },
+      ],
+    },
+    {
+      label: t('Admin', 'Admin'),
+      items: [
+        { path: '/settings', label: t('Settings', 'Tetapan'), icon: '⚙', adminOnly: true },
+        { path: '/audit',    label: t('Audit', 'Audit'),      icon: '⊕', adminOnly: true },
+      ],
+    },
+  ];
 
   const isActive = (path: string): boolean =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);

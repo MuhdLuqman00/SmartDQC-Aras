@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface AuditEntry {
   id: number; action: string; dataset_id?: number;
@@ -30,6 +31,7 @@ const catTextColor: Record<ActionCategory, string> = {
 };
 
 export function AuditPage() {
+  const { t } = useLang();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [datasetFilter, setDatasetFilter] = useState<string>('');
   const [actionFilter, setActionFilter] = useState<string>('');
@@ -42,7 +44,7 @@ export function AuditPage() {
     api.get<AuditEntry[]>('/audit/log', { params: { limit: 100 } })
       .then(r => setEntries(r.data || []))
       .catch(() => {
-        setError('Gagal memuat log audit.');
+        setError(t('Failed to load audit log.', 'Gagal memuat log audit.'));
         setEntries([]);
       })
       .finally(() => setLoading(false));
@@ -66,13 +68,13 @@ export function AuditPage() {
 
   return (
     <div>
-      <h1 style={pg.h1}>Log Audit</h1>
+      <h1 style={pg.h1}>{t('Audit Log', 'Log Audit')}</h1>
 
       <div style={pg.filterBar}>
         <input
           type="text"
           style={pg.input}
-          placeholder="ID Dataset"
+          placeholder={t('Dataset ID', 'ID Dataset')}
           value={datasetFilter}
           onChange={e => setDatasetFilter(e.target.value)}
         />
@@ -81,7 +83,7 @@ export function AuditPage() {
           value={actionFilter}
           onChange={e => setActionFilter(e.target.value)}
         >
-          <option value="">Semua Tindakan</option>
+          <option value="">{t('All Actions', 'Semua Tindakan')}</option>
           <option value="upload">upload</option>
           <option value="clean">clean</option>
           <option value="report">report</option>
@@ -96,19 +98,19 @@ export function AuditPage() {
       )}
 
       {loading ? (
-        <div style={pg.empty}>Memuatkan log audit…</div>
+        <div style={pg.empty}>{t('Loading audit log…', 'Memuatkan log audit…')}</div>
       ) : filtered.length === 0 ? (
-        <div style={pg.empty}>Tiada rekod audit.</div>
+        <div style={pg.empty}>{t('No audit records.', 'Tiada rekod audit.')}</div>
       ) : (
         <div style={pg.tableWrap}>
           <table style={pg.table}>
             <thead>
               <tr>
                 <th style={pg.th}>ID</th>
-                <th style={pg.th}>Masa</th>
-                <th style={pg.th}>Tindakan</th>
-                <th style={pg.th}>Detail</th>
-                <th style={pg.th}>Pengguna</th>
+                <th style={pg.th}>{t('Time', 'Masa')}</th>
+                <th style={pg.th}>{t('Action', 'Tindakan')}</th>
+                <th style={pg.th}>{t('Detail', 'Detail')}</th>
+                <th style={pg.th}>{t('User', 'Pengguna')}</th>
               </tr>
             </thead>
             <tbody>

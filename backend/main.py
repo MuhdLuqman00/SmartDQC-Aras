@@ -2,6 +2,7 @@
 SmartDQC API — FastAPI application
 All endpoints. Business logic lives in backend/eda/, backend/cleaning/, and backend/export/.
 """
+from __future__ import annotations
 
 import io
 import json
@@ -307,6 +308,7 @@ async def run_eda_endpoint(
     source_type: str = "myvass",
     sheet: Optional[str] = None,
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
+    db=Depends(get_db),
 ):
     content  = await file.read()
     filename = file.filename or ""
@@ -322,10 +324,31 @@ async def run_eda_endpoint(
 
     report = run_eda(df, mapping_dict, source_type, bmi_threshold=bmi_threshold)
 
+    # Cache cleaned DF for downstream endpoints
+    cleaned_df_data = report.get("_cleaned_data", [])
+    import pandas as _pd
+    cleaned_df = _pd.DataFrame(cleaned_df_data) if cleaned_df_data else df
+    cache_id = _cache_cleaned(cleaned_df, report)
+
+    try:
+        _persist_session(
+            cache_id=cache_id,
+            filename=filename,
+            source_type=source_type,
+            row_count=len(cleaned_df),
+            result=report,
+            db=db,
+        )
+    except Exception:
+        pass  # best-effort — never fail the EDA run for a DB write error
+
+    _log_audit(action="eda.run", detail=f"cache_id={cache_id}")
+
     # Strip private / large keys from public response
     for key in ["_cleaned_data", "_cleaned_columns", "_aggregated_full"]:
         report.pop(key, None)
 
+    report["cache_id"] = cache_id
     return JSONResponse(content=json_safe(report))
 
 
@@ -744,10 +767,13 @@ def _persist_session(
             filename=filename,
             source_type=source_type,
             row_count=row_count,
+            quality_score=result.get("quality_score"),
             created_at=now,
         )
         db.add(ds)
         db.flush()
+    else:
+        ds.quality_score = result.get("quality_score", ds.quality_score)
 
     sess_id = str(_uuid.uuid4())
     sess = _Session(
@@ -2119,7 +2145,8 @@ def list_sessions(db=Depends(get_db)):
             "cache_id": r.id,
             "filename": r.filename,
             "source_type": r.source_type,
-            "row_count": r.row_count,
+            "row_count": r.row_count or 0,
+            "quality_score": r.quality_score or 0,
         }
         for r in rows
     ]

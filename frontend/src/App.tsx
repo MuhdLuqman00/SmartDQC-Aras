@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
+import { useAuth } from './context/AuthContext';
 import { Layout }             from './components/Layout';
 import { LoginPage }          from './pages/LoginPage';
 import { DashboardPage }      from './pages/DashboardPage';
@@ -17,16 +17,13 @@ import { SettingsPage }       from './pages/SettingsPage';
 import { AuditPage }          from './pages/AuditPage';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
+  if (isInitializing) return null;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 export function App(): JSX.Element {
-  const { isAuthenticated, user, logout, fetchMe } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && !user) fetchMe();
-  }, [isAuthenticated, user, fetchMe]);
+  const { user, logout } = useAuth();
 
   return (
     <BrowserRouter>

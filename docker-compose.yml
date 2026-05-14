@@ -41,6 +41,14 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  frontend:
+    image: luqmanzulkefli/smartdqc-frontend:latest
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama
     ports:

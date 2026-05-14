@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface Dataset {
   id: number;
@@ -40,6 +41,7 @@ function qBadge(score: number): React.CSSProperties {
 }
 
 export function DatasetLibraryPage() {
+  const { t } = useLang();
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
@@ -94,17 +96,17 @@ export function DatasetLibraryPage() {
 
   return (
     <div style={pg.container}>
-      <h1 style={pg.h1}>Perpustakaan Dataset</h1>
+      <h1 style={pg.h1}>{t('Dataset Library', 'Perpustakaan Dataset')}</h1>
 
       <div style={pg.layout}>
         {/* Left Panel */}
         <div style={pg.sidePanel}>
-          <div style={pg.sidePanelTitle}>Senarai Dataset</div>
+          <div style={pg.sidePanelTitle}>{t('Dataset List', 'Senarai Dataset')}</div>
 
           {loading ? (
-            <div style={pg.loadingText}>Memuatkan…</div>
+            <div style={pg.loadingText}>{t('Loading…', 'Memuatkan…')}</div>
           ) : datasets.length === 0 ? (
-            <div style={pg.emptyText}>Tiada dataset ditemui.</div>
+            <div style={pg.emptyText}>{t('No datasets found.', 'Tiada dataset ditemui.')}</div>
           ) : (
             <div style={pg.datasetList}>
               {datasets.map(d => (
@@ -146,7 +148,7 @@ export function DatasetLibraryPage() {
               disabled={selected.length < 2 || comparing}
               onClick={compare}
             >
-              {comparing ? 'Membandingkan…' : 'Bandingkan'}
+              {comparing ? t('Comparing…', 'Membandingkan…') : t('Compare', 'Bandingkan')}
             </button>
             <button
               style={{
@@ -156,7 +158,7 @@ export function DatasetLibraryPage() {
               disabled={selected.length < 2 || linking}
               onClick={linkEntities}
             >
-              {linking ? 'Memautkan…' : 'Pautan Rekod Entiti'}
+              {linking ? t('Linking…', 'Memautkan…') : t('Entity Record Link', 'Pautan Rekod Entiti')}
             </button>
           </div>
         </div>
@@ -164,23 +166,23 @@ export function DatasetLibraryPage() {
         {/* Right Main Area */}
         <div style={pg.main}>
           {!comparison && !entityOpen && (
-            <div style={pg.empty}>Tiada data untuk dipaparkan.</div>
+            <div style={pg.empty}>{t('No data to display.', 'Tiada data untuk dipaparkan.')}</div>
           )}
 
           {comparison && (
             <div style={pg.comparisonCard}>
-              <div style={pg.cardHeader}>Perbandingan Indikator</div>
+              <div style={pg.cardHeader}>{t('Indicator Comparison', 'Perbandingan Indikator')}</div>
               <div style={pg.tableWrapper}>
                 <table style={pg.table}>
                   <thead>
                     <tr>
-                      <th style={pg.th}>Penunjuk</th>
+                      <th style={pg.th}>{t('Indicator', 'Penunjuk')}</th>
                       {comparison.datasets.map(d => (
                         <th key={d.id} style={pg.th}>
                           {d.filename}
                         </th>
                       ))}
-                      <th style={pg.th}>Delta</th>
+                      <th style={pg.th}>{t('Delta', 'Delta')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -234,10 +236,10 @@ export function DatasetLibraryPage() {
                                 >
                                   {TREND_ICON[trend]}{' '}
                                   {trend === 'improving'
-                                    ? 'Lebih baik'
+                                    ? t('Better', 'Lebih baik')
                                     : trend === 'worsening'
-                                      ? 'Memburuk'
-                                      : 'Stabil'}
+                                      ? t('Worsening', 'Memburuk')
+                                      : t('Stable', 'Stabil')}
                                 </span>
                               )}
                             </div>
@@ -254,17 +256,17 @@ export function DatasetLibraryPage() {
           {entityOpen && entityResult && (
             <div style={pg.entityCard}>
               <div style={pg.entityCardHeader}>
-                <div style={pg.cardHeader}>Pautan Rekod Entiti</div>
+                <div style={pg.cardHeader}>{t('Entity Record Link', 'Pautan Rekod Entiti')}</div>
                 <button style={pg.closeBtn} onClick={closeEntity}>
-                  Tutup
+                  {t('Close', 'Tutup')}
                 </button>
               </div>
 
               <div style={pg.entityStats}>
-                <StatPill label="Jumlah Kumpulan" value={entityResult.total_groups} />
-                <StatPill label="Berjaya Dipautkan" value={entityResult.linked_groups} />
-                <StatPill label="Tidak Dipautkan" value={entityResult.unlinked} />
-                <StatPill label="Baris Ditulis" value={entityResult.rows_written} />
+                <StatPill label={t('Total Groups', 'Jumlah Kumpulan')} value={entityResult.total_groups} />
+                <StatPill label={t('Successfully Linked', 'Berjaya Dipautkan')} value={entityResult.linked_groups} />
+                <StatPill label={t('Unlinked', 'Tidak Dipautkan')} value={entityResult.unlinked} />
+                <StatPill label={t('Rows Written', 'Baris Ditulis')} value={entityResult.rows_written} />
               </div>
 
               <div style={pg.profilesContainer}>
@@ -276,7 +278,7 @@ export function DatasetLibraryPage() {
                 ))}
                 {entityResult.profiles.length > 20 && (
                   <div style={pg.moreProfiles}>
-                    … dan {entityResult.profiles.length - 20} profil lagi
+                    {t(`… and ${entityResult.profiles.length - 20} more profiles`, `… dan ${entityResult.profiles.length - 20} profil lagi`)}
                   </div>
                 )}
               </div>

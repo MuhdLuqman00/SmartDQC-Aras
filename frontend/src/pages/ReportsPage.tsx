@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 type ReportFormat = 'pdf' | 'pptx';
 type ReportLanguage = 'ms' | 'en';
@@ -14,6 +15,7 @@ interface ReportOptions {
 
 export function ReportsPage() {
   const [searchParams] = useSearchParams();
+  const { t } = useLang();
   const [options, setOptions] = useState<ReportOptions>({
     cache_id: searchParams.get('cache_id') ?? '',
     format: 'pdf',
@@ -37,7 +39,7 @@ export function ReportsPage() {
       a.click();
       URL.revokeObjectURL(href);
     } catch {
-      setError('Gagal menjana laporan.');
+      setError(t('Failed to generate report.', 'Gagal menjana laporan.'));
     } finally {
       setGenerating(false);
     }
@@ -52,7 +54,7 @@ export function ReportsPage() {
             <label style={pg.label}>Cache ID</label>
             <input
               style={pg.input}
-              placeholder="Masukkan cache_id"
+              placeholder={t('Enter cache_id', 'Masukkan cache_id')}
               value={options.cache_id}
               onChange={e => setOptions({ ...options, cache_id: e.target.value })}
             />
@@ -77,7 +79,7 @@ export function ReportsPage() {
           </div>
 
           <div style={pg.field}>
-            <label style={pg.label}>Bahasa</label>
+            <label style={pg.label}>{t('Language', 'Bahasa')}</label>
             <div style={pg.buttonGroup}>
               {([
                 { code: 'ms', label: 'BM' },
@@ -105,7 +107,7 @@ export function ReportsPage() {
                 onChange={e => setOptions({ ...options, include_charts: e.target.checked })}
                 style={{ marginRight: 8 }}
               />
-              Sertakan carta
+              {t('Include charts', 'Sertakan carta')}
             </label>
           </div>
 
@@ -118,7 +120,7 @@ export function ReportsPage() {
               onClick={generate}
               disabled={generating}
             >
-              {generating ? 'Menjana…' : 'Jana Laporan'}
+              {generating ? t('Generating…', 'Menjana…') : t('Generate Report', 'Jana Laporan')}
             </button>
           </div>
 
@@ -127,16 +129,16 @@ export function ReportsPage() {
 
         {/* Right column — ReportPreviewPane */}
         <div style={pg.previewCard}>
-          <div style={pg.previewHeader}>Pratonton Laporan</div>
+          <div style={pg.previewHeader}>{t('Report Preview', 'Pratonton Laporan')}</div>
           <ol style={pg.chapterList}>
-            <li style={pg.chapter}>Ringkasan Eksekutif</li>
-            <li style={pg.chapter}>Gambaran Keseluruhan Kualiti Data</li>
-            <li style={pg.chapter}>Analisis Lajur Terperinci</li>
-            <li style={pg.chapter}>Anomali dan Pencilan Dikenal Pasti</li>
-            <li style={pg.chapter}>Tindakan Pembersihan Dilakukan</li>
-            <li style={pg.chapter}>Cadangan dan Penemuan</li>
+            <li style={pg.chapter}>{t('Executive Summary', 'Ringkasan Eksekutif')}</li>
+            <li style={pg.chapter}>{t('Data Quality Overview', 'Gambaran Keseluruhan Kualiti Data')}</li>
+            <li style={pg.chapter}>{t('Detailed Column Analysis', 'Analisis Lajur Terperinci')}</li>
+            <li style={pg.chapter}>{t('Identified Anomalies & Outliers', 'Anomali dan Pencilan Dikenal Pasti')}</li>
+            <li style={pg.chapter}>{t('Cleaning Actions Taken', 'Tindakan Pembersihan Dilakukan')}</li>
+            <li style={pg.chapter}>{t('Recommendations & Findings', 'Cadangan dan Penemuan')}</li>
           </ol>
-          <div style={pg.previewNote}>Pratonton sebenar akan dijana selepas klik Jana Laporan</div>
+          <div style={pg.previewNote}>{t('Actual preview will be generated after clicking Generate Report', 'Pratonton sebenar akan dijana selepas klik Jana Laporan')}</div>
         </div>
       </div>
     </div>

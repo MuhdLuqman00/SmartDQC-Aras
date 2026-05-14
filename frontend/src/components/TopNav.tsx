@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useLang } from '../context/LanguageContext';
 
 interface Props { title: string; subtitle: string; onLogout: () => void; }
 
 export function TopNav({ title, subtitle, onLogout }: Props): JSX.Element {
   const { darkMode, toggleDarkMode } = useTheme();
+  const { lang, setLang } = useLang();
   const navigate = useNavigate();
   const [logoutHovered, setLogoutHovered] = useState<boolean>(false);
 
@@ -36,6 +38,20 @@ export function TopNav({ title, subtitle, onLogout }: Props): JSX.Element {
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button
+          style={{
+            ...iconBtn,
+            width: 'auto',
+            padding: '0 10px',
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+          }}
+          onClick={() => setLang(lang === 'EN' ? 'MY' : 'EN')}
+          title="Toggle language"
+        >
+          {lang === 'EN' ? 'MY' : 'EN'}
+        </button>
         <button style={iconBtn} onClick={toggleDarkMode} title="Toggle dark mode">
           {darkMode ? '☀' : '◑'}
         </button>

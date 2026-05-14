@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface Message { role: 'user' | 'assistant'; text: string; chart_b64?: string | null; }
 interface NLQResponse { answer: string; result: unknown; code?: string; chart_b64?: string | null; }
@@ -8,6 +9,7 @@ interface NarrativeResponse { insights: string[]; recommendations: string[]; sum
 
 export function AIPage() {
   const [searchParams] = useSearchParams();
+  const { t } = useLang();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [sessionId, setSessionId] = useState<string>('');
@@ -36,7 +38,7 @@ export function AIPage() {
       const res = await api.post<NLQResponse>('/ai/nlq', { query, session_id: sessionId });
       setMessages(m => [...m, { role: 'assistant', text: res.data.answer, chart_b64: res.data.chart_b64 }]);
     } catch {
-      setMessages(m => [...m, { role: 'assistant', text: 'Ralat: Tidak dapat memproses pertanyaan.' }]);
+      setMessages(m => [...m, { role: 'assistant', text: t('Error: Unable to process query.', 'Ralat: Tidak dapat memproses pertanyaan.') }]);
     } finally { setLoading(false); }
   };
 
@@ -65,7 +67,7 @@ export function AIPage() {
           color: 'var(--text-secondary)',
           flexShrink: 0,
         }}>
-          Masukkan session_id dari sesi pembersihan untuk bermula. Tambah <code>?session_id=X</code> ke URL.
+          {t('Enter session_id from a cleaning session to start. Append', 'Masukkan session_id dari sesi pembersihan untuk bermula. Tambah')} <code>?session_id=X</code> {t('to the URL.', 'ke URL.')}
         </div>
       )}
 
@@ -115,7 +117,7 @@ export function AIPage() {
             color: 'var(--text-muted)',
             fontSize: 14,
           }}>
-            ●●● (sedang memproses)
+            ●●● ({t('processing', 'sedang memproses')})
           </div>
         )}
 
@@ -144,7 +146,7 @@ export function AIPage() {
             transition: 'all 0.15s ease',
           }}
         >
-          {narrativeLoading ? 'Jana Naratif...' : 'Jana Naratif'}
+          {narrativeLoading ? t('Generating Narrative...', 'Jana Naratif...') : t('Generate Narrative', 'Jana Naratif')}
         </button>
 
         {narrativeOpen && narrative && (
@@ -162,7 +164,7 @@ export function AIPage() {
 
             {narrative.insights.length > 0 && (
               <>
-                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>Insights</p>
+                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Insights', 'Penemuan')}</p>
                 <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
                   {narrative.insights.map((ins, i) => (
                     <li key={i}>{ins}</li>
@@ -173,7 +175,7 @@ export function AIPage() {
 
             {narrative.recommendations.length > 0 && (
               <>
-                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>Cadangan</p>
+                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Recommendations', 'Cadangan')}</p>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {narrative.recommendations.map((rec, i) => (
                     <li key={i}>{rec}</li>
@@ -196,7 +198,7 @@ export function AIPage() {
                 transition: 'all 0.15s ease',
               }}
             >
-              Tutup
+              {t('Close', 'Tutup')}
             </button>
           </div>
         )}
@@ -214,7 +216,7 @@ export function AIPage() {
       }}>
         <textarea
           rows={1}
-          placeholder="Taip soalan anda..."
+          placeholder={t('Type your question...', 'Taip soalan anda...')}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -255,7 +257,7 @@ export function AIPage() {
             transition: 'all 0.15s ease',
           }}
         >
-          Hantar
+          {t('Send', 'Hantar')}
         </button>
       </div>
     </div>

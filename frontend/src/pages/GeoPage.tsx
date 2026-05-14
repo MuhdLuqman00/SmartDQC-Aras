@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { ChoroplethMap, computeAggregates } from '../components/ChoroplethMap';
 import type { District } from '../components/ChoroplethMap';
+import { useLang } from '../context/LanguageContext';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -39,13 +40,18 @@ const RAG_LABEL_MY: Record<'green' | 'amber' | 'red', string> = {
 };
 
 function RagBadge({ rag }: { rag: 'green' | 'amber' | 'red' }) {
+  const { t } = useLang();
+  const label = t(
+    { green: 'Good', amber: 'Moderate', red: 'Critical' }[rag],
+    RAG_LABEL_MY[rag]
+  );
   return (
     <span style={{
       display: 'inline-block', padding: '2px 10px', borderRadius: 6,
       fontSize: 11, fontWeight: 700, background: RAG_BG_TOKEN[rag],
       color: RAG_COLOR[rag], border: `0.5px solid ${RAG_COLOR[rag]}`, letterSpacing: '0.04em',
     }}>
-      {RAG_LABEL_MY[rag]}
+      {label}
     </span>
   );
 }
@@ -71,6 +77,7 @@ function KpiCard({ label, value, rag }: { label: string; value: number; rag: 'gr
 
 export function GeoPage() {
   const [searchParams] = useSearchParams();
+  const { t } = useLang();
   const cacheId = searchParams.get('cache_id') ?? '';
 
   const [districts, setDistricts] = useState<District[]>([]);
@@ -90,7 +97,7 @@ export function GeoPage() {
         setDistricts(kpiRes.data.districts);
         setRiskData(riskRes.data);
       })
-      .catch(() => setError('Gagal memuatkan data. Sila semak semula Cache ID anda.'))
+      .catch(() => setError(t('Failed to load data. Please check your Cache ID.', 'Gagal memuatkan data. Sila semak semula Cache ID anda.')))
       .finally(() => setLoading(false));
   }, [cacheId]);
 
@@ -99,7 +106,7 @@ export function GeoPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 320, color: 'var(--text-secondary)', fontSize: 15 }}>
-        Memuatkan...
+        {t('Loading...', 'Memuatkan...')}
       </div>
     );
   }
@@ -107,7 +114,7 @@ export function GeoPage() {
   return (
     <div style={{ padding: '4px 0' }}>
       <h1 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
-        Peta Geografi &amp; Risiko
+        {t('Geography & Risk Map', 'Peta Geografi & Risiko')}
       </h1>
 
       {error && (
@@ -134,13 +141,13 @@ export function GeoPage() {
         {/* Right 60% — national aggregate KPI cards */}
         <div style={{ flex: '0 0 60%', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
-            Purata Nasional{districts.length > 0 ? ` (${districts.length} daerah)` : ''}
+            {t('National Average', 'Purata Nasional')}{districts.length > 0 ? ` (${districts.length} ${t('districts', 'daerah')})` : ''}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <KpiCard label="Kelaparan"        value={agg.stunting}    rag={agg.stuntingRag} />
-            <KpiCard label="Kurus"            value={agg.wasting}     rag={agg.wastingRag} />
-            <KpiCard label="Kekurangan Berat" value={agg.underweight} rag={agg.underweightRag} />
-            <KpiCard label="Berlebihan Berat" value={agg.overweight}  rag={agg.overweightRag} />
+            <KpiCard label={t('Stunting', 'Kelaparan')}        value={agg.stunting}    rag={agg.stuntingRag} />
+            <KpiCard label={t('Wasting', 'Kurus')}             value={agg.wasting}     rag={agg.wastingRag} />
+            <KpiCard label={t('Underweight', 'Kekurangan Berat')} value={agg.underweight} rag={agg.underweightRag} />
+            <KpiCard label={t('Overweight', 'Berlebihan Berat')}  value={agg.overweight}  rag={agg.overweightRag} />
           </div>
         </div>
       </div>
@@ -152,15 +159,15 @@ export function GeoPage() {
           fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)',
           textTransform: 'uppercase', letterSpacing: '0.07em',
         }}>
-          Agregasi Risiko Daerah
+          {t('District Risk Aggregation', 'Agregasi Risiko Daerah')}
         </div>
         {!riskData ? (
-          <div style={{ padding: '24px 16px', color: 'var(--text-muted)', fontSize: 13 }}>Tiada data risiko.</div>
+          <div style={{ padding: '24px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('No risk data.', 'Tiada data risiko.')}</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
-                {['Daerah', 'Skor Purata', 'Kiraan Berisiko Tinggi', 'RAG'].map(col => (
+                {[t('District', 'Daerah'), t('Avg Score', 'Skor Purata'), t('High Risk Count', 'Kiraan Berisiko Tinggi'), 'RAG'].map(col => (
                   <th key={col} style={{
                     padding: '10px 16px', background: 'var(--surface-2)',
                     borderBottom: '0.5px solid var(--border)', fontWeight: 600,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, BASE } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface Session {
   cache_id: string;
@@ -38,6 +39,7 @@ function qBadgeStyle(score: number): React.CSSProperties {
 
 export function HistoryPage() {
   const navigate = useNavigate();
+  const { t } = useLang();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [minQ, setMinQ] = useState<number>(0);
@@ -53,7 +55,7 @@ export function HistoryPage() {
     api
       .get<Session[]>('/sessions')
       .then((res) => setSessions(res.data))
-      .catch(() => setError('Gagal memuatkan sejarah sesi'))
+      .catch(() => setError(t('Failed to load session history', 'Gagal memuatkan sejarah sesi')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -78,7 +80,7 @@ export function HistoryPage() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.h1}>Sejarah Sesi</h1>
+      <h1 style={styles.h1}>{t('Session History', 'Sejarah Sesi')}</h1>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
 
@@ -88,7 +90,7 @@ export function HistoryPage() {
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
         >
-          <option value="">Semua Jenis</option>
+          <option value="">{t('All Types', 'Semua Jenis')}</option>
           {uniqueSources.map((source) => (
             <option key={source} value={source}>
               {source}
@@ -97,7 +99,7 @@ export function HistoryPage() {
         </select>
 
         <div style={styles.inputGroup}>
-          <label style={styles.inputLabel}>Min Kualiti</label>
+          <label style={styles.inputLabel}>{t('Min Quality', 'Min Kualiti')}</label>
           <input
             type="number"
             min={0}
@@ -109,7 +111,7 @@ export function HistoryPage() {
         </div>
 
         <div style={styles.inputGroup}>
-          <label style={styles.inputLabel}>Maks Kualiti</label>
+          <label style={styles.inputLabel}>{t('Max Quality', 'Maks Kualiti')}</label>
           <input
             type="number"
             min={0}
@@ -122,9 +124,9 @@ export function HistoryPage() {
       </div>
 
       {loading ? (
-        <div style={styles.empty}>Memuatkan sejarah...</div>
+        <div style={styles.empty}>{t('Loading history...', 'Memuatkan sejarah...')}</div>
       ) : filtered.length === 0 ? (
-        <div style={styles.empty}>Tiada sesi ditemui.</div>
+        <div style={styles.empty}>{t('No sessions found.', 'Tiada sesi ditemui.')}</div>
       ) : (
         <div style={styles.tableWrap}>
           <table style={styles.table}>
@@ -138,7 +140,7 @@ export function HistoryPage() {
                   }}
                   onClick={() => handleHeaderClick('filename')}
                 >
-                  Fail {sortField === 'filename' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                  {t('File', 'Fail')} {sortField === 'filename' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
                 </th>
                 <th
                   style={{
@@ -148,7 +150,7 @@ export function HistoryPage() {
                   }}
                   onClick={() => handleHeaderClick('source_type')}
                 >
-                  Jenis{' '}
+                  {t('Type', 'Jenis')}{' '}
                   {sortField === 'source_type' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
                 </th>
                 <th
@@ -159,7 +161,7 @@ export function HistoryPage() {
                   }}
                   onClick={() => handleHeaderClick('row_count')}
                 >
-                  Baris {sortField === 'row_count' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                  {t('Rows', 'Baris')} {sortField === 'row_count' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
                 </th>
                 <th
                   style={{
@@ -169,7 +171,7 @@ export function HistoryPage() {
                   }}
                   onClick={() => handleHeaderClick('quality_score')}
                 >
-                  Skor Kualiti{' '}
+                  {t('Quality Score', 'Skor Kualiti')}{' '}
                   {sortField === 'quality_score'
                     ? sortDir === 'asc'
                       ? '↑'
@@ -185,7 +187,7 @@ export function HistoryPage() {
                   <td style={styles.td}>
                     <span style={styles.sourceBadge}>{session.source_type}</span>
                   </td>
-                  <td style={styles.td}>{session.row_count.toLocaleString()}</td>
+                  <td style={styles.td}>{(session.row_count ?? 0).toLocaleString()}</td>
                   <td style={styles.td}>
                     <span style={qBadgeStyle(session.quality_score)}>
                       {session.quality_score}%
@@ -198,7 +200,7 @@ export function HistoryPage() {
                         navigate(`/cleaning?cache_id=${session.cache_id}`)
                       }
                     >
-                      Buka Semula
+                      {t('Reopen', 'Buka Semula')}
                     </button>
                     <button
                       style={styles.actionBtnSecondary}
@@ -208,7 +210,7 @@ export function HistoryPage() {
                         )
                       }
                     >
-                      Muat Turun
+                      {t('Download', 'Muat Turun')}
                     </button>
                   </td>
                 </tr>

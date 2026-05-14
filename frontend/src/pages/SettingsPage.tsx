@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface Thresholds {
   missing_rate_warn: number;
@@ -15,15 +16,16 @@ interface RuleEntry {
 
 type Rules = Record<string, RuleEntry>;
 
-const THRESHOLD_LABELS: Record<keyof Thresholds, string> = {
-  missing_rate_warn: 'Kadar Hilang — Amaran',
-  missing_rate_fail: 'Kadar Hilang — Gagal',
-  duplicate_rate_warn: 'Kadar Berganda — Amaran',
-  duplicate_rate_fail: 'Kadar Berganda — Gagal',
-  outlier_zscore_threshold: 'Ambang Z-score Outlier',
-};
-
 export function SettingsPage() {
+  const { t } = useLang();
+
+  const THRESHOLD_LABELS: Record<keyof Thresholds, string> = {
+    missing_rate_warn:        t('Missing Rate — Warning',       'Kadar Hilang — Amaran'),
+    missing_rate_fail:        t('Missing Rate — Fail',          'Kadar Hilang — Gagal'),
+    duplicate_rate_warn:      t('Duplicate Rate — Warning',     'Kadar Berganda — Amaran'),
+    duplicate_rate_fail:      t('Duplicate Rate — Fail',        'Kadar Berganda — Gagal'),
+    outlier_zscore_threshold: t('Outlier Z-score Threshold',    'Ambang Z-score Outlier'),
+  };
   const [thresholds, setThresholds] = useState<Thresholds>({
     missing_rate_warn: 0.05,
     missing_rate_fail: 0.15,
@@ -107,7 +109,7 @@ export function SettingsPage() {
       <div style={styles.cardsGrid}>
         {/* Card 1: Ambang Kualiti */}
         <div style={styles.card}>
-          <div style={styles.cardTitle}>Ambang Kualiti</div>
+          <div style={styles.cardTitle}>{t('Quality Thresholds', 'Ambang Kualiti')}</div>
 
           {(Object.keys(THRESHOLD_LABELS) as (keyof Thresholds)[]).map(key => {
             const isZScore = key === 'outlier_zscore_threshold';
@@ -137,24 +139,24 @@ export function SettingsPage() {
                 opacity: loading ? 0.6 : 1,
               }}
             >
-              Simpan
+              {t('Save', 'Simpan')}
             </button>
           </div>
 
           {saveStatus === 'success' && (
-            <div style={styles.feedbackSuccess}>Tetapan disimpan.</div>
+            <div style={styles.feedbackSuccess}>{t('Settings saved.', 'Tetapan disimpan.')}</div>
           )}
           {saveStatus === 'error' && (
-            <div style={styles.feedbackError}>Gagal menyimpan.</div>
+            <div style={styles.feedbackError}>{t('Failed to save.', 'Gagal menyimpan.')}</div>
           )}
         </div>
 
         {/* Card 2: Peraturan Pembersihan */}
         <div style={styles.card}>
-          <div style={styles.cardTitle}>Peraturan Pembersihan</div>
+          <div style={styles.cardTitle}>{t('Cleaning Rules', 'Peraturan Pembersihan')}</div>
 
           {Object.keys(rules).length === 0 && (
-            <div style={styles.emptyState}>Memuatkan peraturan...</div>
+            <div style={styles.emptyState}>{t('Loading rules...', 'Memuatkan peraturan...')}</div>
           )}
 
           {Object.entries(rules).map(([ruleName, entry]) => (

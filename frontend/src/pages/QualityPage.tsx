@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 /* ── Interfaces ─────────────────────────────────────────────────────────── */
 
@@ -36,7 +37,7 @@ interface AnomalyResponse {
 
 /* ── ArcGauge ────────────────────────────────────────────────────────────── */
 
-function ArcGauge({ value }: { value: number }): JSX.Element {
+function ArcGauge({ value, label }: { value: number; label: string }): JSX.Element {
   const r = 80;
   const cx = 100;
   const cy = 100;
@@ -92,7 +93,7 @@ function ArcGauge({ value }: { value: number }): JSX.Element {
         fontSize={12}
         fill="var(--text-muted)"
       >
-        Kelengkapan
+        {label}
       </text>
     </svg>
   );
@@ -103,6 +104,7 @@ function ArcGauge({ value }: { value: number }): JSX.Element {
 export function QualityPage(): JSX.Element {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useLang();
 
   const [quality, setQuality] = useState<QualityResponse | null>(null);
   const [anomaly, setAnomaly] = useState<AnomalyResponse | null>(null);
@@ -176,7 +178,7 @@ export function QualityPage(): JSX.Element {
 
   return (
     <div style={s.page}>
-      <h1 style={s.h1}>Semakan Kualiti</h1>
+      <h1 style={s.h1}>{t('Quality Check', 'Semakan Kualiti')}</h1>
 
       {/* ── Dropzone ── */}
       <div
@@ -190,8 +192,8 @@ export function QualityPage(): JSX.Element {
         <input {...getInputProps()} />
         <span style={s.dropText}>
           {isDragActive
-            ? 'Lepaskan fail di sini...'
-            : 'Seret fail CSV atau klik untuk muat naik'}
+            ? t('Drop file here...', 'Lepaskan fail di sini...')
+            : t('Drag CSV file or click to upload', 'Seret fail CSV atau klik untuk muat naik')}
         </span>
       </div>
 
@@ -201,21 +203,21 @@ export function QualityPage(): JSX.Element {
       <div style={s.gaugeRow}>
         {quality ? (
           <>
-            <ArcGauge value={completeness} />
+            <ArcGauge value={completeness} label={t('Completeness', 'Kelengkapan')} />
             <div style={s.statsRow}>
               <div style={s.stat}>
-                <span style={s.statLabel}>Jumlah Baris</span>
+                <span style={s.statLabel}>{t('Total Rows', 'Jumlah Baris')}</span>
                 <span style={s.statValue}>{quality.total_rows.toLocaleString()}</span>
               </div>
               <div style={s.stat}>
-                <span style={s.statLabel}>Jumlah Lajur</span>
+                <span style={s.statLabel}>{t('Total Columns', 'Jumlah Lajur')}</span>
                 <span style={s.statValue}>{quality.total_columns}</span>
               </div>
             </div>
           </>
         ) : (
           <div style={s.emptyGauge}>
-            {loading ? 'Menganalisis kualiti...' : 'Tiada data — muat naik fail'}
+            {loading ? t('Analysing quality...', 'Menganalisis kualiti...') : t('No data — upload a file', 'Tiada data — muat naik fail')}
           </div>
         )}
       </div>
@@ -226,13 +228,13 @@ export function QualityPage(): JSX.Element {
           {/* Left 55%: column table */}
           <div style={s.leftCol}>
             <div style={s.card}>
-              <div style={s.cardTitle}>Pecahan Lajur</div>
+              <div style={s.cardTitle}>{t('Column Breakdown', 'Pecahan Lajur')}</div>
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th style={s.th}>Nama</th>
+                    <th style={s.th}>{t('Name', 'Nama')}</th>
                     <th style={s.th}>Null%</th>
-                    <th style={s.th}>Jenis</th>
+                    <th style={s.th}>{t('Type', 'Jenis')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,7 +290,7 @@ export function QualityPage(): JSX.Element {
                               : 'var(--text-secondary)',
                           }}
                         >
-                          {col.is_numeric ? 'Angka' : 'Teks'}
+                          {col.is_numeric ? t('Numeric', 'Angka') : t('Text', 'Teks')}
                         </span>
                       </td>
                     </tr>
@@ -301,7 +303,7 @@ export function QualityPage(): JSX.Element {
           {/* Right 45%: anomaly panel */}
           <div style={s.rightCol}>
             <div style={s.card}>
-              <div style={s.cardTitle}>Pengesanan Anomali</div>
+              <div style={s.cardTitle}>{t('Anomaly Detection', 'Pengesanan Anomali')}</div>
 
               <button
                 style={{
@@ -312,13 +314,13 @@ export function QualityPage(): JSX.Element {
                 onClick={() => void runAnomalyCheck()}
                 disabled={anomalyLoading}
               >
-                {anomalyLoading ? 'Menganalisis...' : 'Jalankan Anomali'}
+                {anomalyLoading ? t('Analysing...', 'Menganalisis...') : t('Run Anomaly', 'Jalankan Anomali')}
               </button>
 
               {anomaly && (
                 <>
                   <div style={s.anomalyRateRow}>
-                    <span style={s.anomalyRateLabel}>Kadar Anomali</span>
+                    <span style={s.anomalyRateLabel}>{t('Anomaly Rate', 'Kadar Anomali')}</span>
                     <span
                       style={{
                         ...s.anomalyRateBadge,
@@ -340,8 +342,8 @@ export function QualityPage(): JSX.Element {
                     <table style={s.table}>
                       <thead>
                         <tr>
-                          <th style={s.th}>Baris</th>
-                          <th style={s.th}>Sebab</th>
+                          <th style={s.th}>{t('Row', 'Baris')}</th>
+                          <th style={s.th}>{t('Reason', 'Sebab')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -364,7 +366,7 @@ export function QualityPage(): JSX.Element {
                       </tbody>
                     </table>
                   ) : (
-                    <div style={s.noAnomaly}>Tiada anomali dikesan.</div>
+                    <div style={s.noAnomaly}>{t('No anomalies detected.', 'Tiada anomali dikesan.')}</div>
                   )}
                 </>
               )}
@@ -380,7 +382,7 @@ export function QualityPage(): JSX.Element {
             style={{ ...s.cleanBtn, transition: 'all 0.15s ease' }}
             onClick={() => navigate(`/cleaning?cache_id=${cacheId}`)}
           >
-            Jalankan Pembersihan →
+            {t('Run Cleaning →', 'Jalankan Pembersihan →')}
           </button>
         </div>
       )}

@@ -1,0 +1,65 @@
+# Stage 1: build the React/Vite frontend
+FROM node:20-alpine AS frontend-build
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN npm run build
+
+# Stage 2: all-in-one runtime
+FROM ollama/ollama:latest
+
+# Switch apt to HTTPS mirrors (HTTP port 80 may be blocked on corporate networks)
+RUN sed -i 's|URIs: http://|URIs: https://|g' /etc/apt/sources.list.d/ubuntu.sources
+
+# System deps: postgres, python, nginx, supervisor, curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql \
+    python3 \
+    python3-pip \
+    nginx \
+    supervisor \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python backend deps
+WORKDIR /app
+COPY backend/requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Backend code + alembic
+COPY backend/ ./backend/
+COPY data/zscore/ ./data/zscore/
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
+
+# Frontend static files
+COPY --from=frontend-build /frontend/dist /usr/share/nginx/html
+
+# nginx config
+COPY frontend/nginx.conf /etc/nginx/sites-available/default
+
+# supervisord config
+COPY docker/supervisord.conf /etc/supervisor/conf.d/smartdqc.conf
+
+# entrypoint
+COPY docker/entrypoint-all.sh /entrypoint-all.sh
+RUN chmod +x /entrypoint-all.sh
+
+ENV WHO_ZSCORE_DIR=/app/data/zscore
+# Make postgres binaries available at runtime (version-agnostic)
+RUN PG_BIN=$(find /usr/lib/postgresql/*/bin -maxdepth 0 | sort -V | tail -1) && \
+    echo "export PATH=$PG_BIN:\$PATH" >> /etc/profile.d/postgres.sh && \
+    ln -s $PG_BIN/initdb /usr/local/bin/initdb && \
+    ln -s $PG_BIN/pg_ctl /usr/local/bin/pg_ctl && \
+    ln -s $PG_BIN/postgres /usr/local/bin/postgres && \
+    ln -s $PG_BIN/psql /usr/local/bin/psql
+ENV OLLAMA_BASE_URL=http://localhost:11434
+ENV DATABASE_URL=postgresql://smartdqc:smartdqc@localhost/smartdqc
+
+VOLUME ["/var/lib/postgresql/data"]
+EXPOSE 3000 8000
+
+ENTRYPOINT ["/entrypoint-all.sh"]

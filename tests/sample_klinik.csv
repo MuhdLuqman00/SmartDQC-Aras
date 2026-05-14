@@ -1,0 +1,21 @@
+id,nama,jantina,tarikh_lahir,negeri,daerah,taska,pendapatan,tarikh_ukur,berat_kg,tinggi_cm,bmi,berat_lahir_kg,panjang_lahir_cm,status_berat,status_tinggi,status_bmi,tahun_ukur,sumber
+011234567890,Ahmad Izzat bin Razali,M,2021-03-15,Selangor,Petaling,Klinik Kesihatan Taman Medan,B40,2024-06-10,14.2,95.3,15.6,3.1,50.0,Normal,Normal,Normal,2024,klinik
+021234567891,Nurul Aina binti Hassan,F,2020-07-22,Selangor,Petaling,Klinik Kesihatan Taman Medan,M40,2024-06-10,11.8,88.0,15.2,2.9,49.5,Kurus,Pendek,Normal,2024,klinik
+031234567892,Muhammad Hafiz bin Nordin,M,2019-11-05,Selangor,Klang,Klinik Kesihatan Meru,B40,2024-06-11,18.5,105.2,16.7,3.3,51.0,Normal,Normal,Normal,2024,klinik
+041234567893,Siti Rahmah binti Yusof,F,2021-01-30,Selangor,Klang,Klinik Kesihatan Meru,B40,2024-06-11,10.5,85.0,14.5,2.5,48.0,Kurus Teruk,Pendek,Kurus,2024,klinik
+051234567894,Adam Farhan bin Ismail,M,2020-04-18,Selangor,Gombak,Klinik Kesihatan Batu Caves,M40,2024-06-12,16.0,98.5,16.5,3.0,50.5,Normal,Normal,Normal,2024,klinik
+061234567895,Nur Fatimah binti Zakaria,F,2019-08-09,Selangor,Gombak,Klinik Kesihatan Batu Caves,T20,2024-06-12,22.0,108.0,18.9,3.5,52.0,Gemuk,Normal,Gemuk,2024,klinik
+071234567896,Iqbal Hakim bin Saari,M,2021-06-25,Selangor,Sepang,Klinik Kesihatan Salak Tinggi,B40,2024-06-13,13.8,93.0,15.9,2.8,49.0,Normal,Normal,Normal,2024,klinik
+081234567897,Aishah binti Mohd Noor,F,2020-09-14,Selangor,Hulu Langat,Klinik Kesihatan Kajang,B40,2024-06-13,12.5,90.5,15.3,3.2,51.5,Normal,Normal,Normal,2024,klinik
+091234567898,Zarif bin Abdullah,M,2019-12-01,Kuala Lumpur,Kuala Lumpur,Klinik Kesihatan Chow Kit,B40,2024-06-14,19.0,106.0,16.9,3.1,50.0,Normal,Normal,Normal,2024,klinik
+101234567899,Maryam binti Razak,F,2021-02-11,Kuala Lumpur,Kuala Lumpur,Klinik Kesihatan Chow Kit,M40,2024-06-14,14.5,96.0,15.7,3.0,49.5,Normal,Normal,Normal,2024,klinik
+111234567800,Danish Amir bin Kamal,M,2020-05-30,Kuala Lumpur,Kuala Lumpur,Klinik Kesihatan Bangsar,T20,2024-06-15,17.2,101.0,16.9,3.4,52.0,Normal,Normal,Normal,2024,klinik
+121234567801,Nur Insyirah binti Azmi,F,2019-10-17,Selangor,Petaling,Klinik Kesihatan SS2,B40,2024-06-15,9.8,83.0,14.2,2.4,47.5,Kurus Teruk,Sangat Pendek,Kurus Teruk,2024,klinik
+131234567802,Haziq bin Othman,M,2021-04-08,Selangor,Petaling,Klinik Kesihatan SS2,B40,2024-06-16,15.1,97.0,16.0,3.2,51.0,Normal,Normal,Normal,2024,klinik
+141234567803,Safiyyah binti Ibrahim,F,2020-08-23,Selangor,Klang,Klinik Kesihatan Port Klang,M40,2024-06-16,13.2,91.5,15.8,2.9,49.0,Normal,Normal,Normal,2024,klinik
+151234567804,Irfan Danial bin Hamid,M,2019-09-12,Selangor,Klang,Klinik Kesihatan Port Klang,B40,2024-06-17,20.5,107.5,17.7,3.0,50.0,Gemuk,Normal,Gemuk,2024,klinik
+161234567805,Qistina binti Roslan,F,2021-07-04,Selangor,Gombak,Klinik Kesihatan Rawang,B40,2024-06-17,12.9,92.0,15.2,3.1,50.5,Normal,Normal,Normal,2024,klinik
+171234567806,Luqman bin Zainal,M,2020-03-19,Selangor,Sepang,Klinik Kesihatan Cyberjaya,M40,2024-06-18,16.8,100.0,16.8,3.3,51.5,Normal,Normal,Normal,2024,klinik
+181234567807,Irdina binti Supian,F,2019-11-28,Selangor,Hulu Langat,Klinik Kesihatan Cheras,B40,2024-06-18,11.2,87.0,14.8,2.7,48.5,Kurus,Pendek,Kurus,2024,klinik
+191234567808,Raiyan bin Fauzi,M,2021-05-16,Kuala Lumpur,Kuala Lumpur,Klinik Kesihatan Pudu,B40,2024-06-19,,94.0,,3.0,50.0,Normal,Normal,Normal,2024,klinik
+201234567809,Sofea binti Zulkifli,F,2020-10-07,Kuala Lumpur,Kuala Lumpur,Klinik Kesihatan Pudu,M40,2024-06-19,15.5,98.0,16.1,3.2,51.0,Normal,Normal,Normal,2024,klinik

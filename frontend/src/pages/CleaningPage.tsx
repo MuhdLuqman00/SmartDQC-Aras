@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface CleanAction {
   action_type: string;
@@ -15,14 +16,6 @@ interface CleanResponse {
   actions_taken: CleanAction[];
   quality_score: number;
 }
-
-const ACTION_LABELS: Record<string, string> = {
-  missing_imputed:     'Nilai hilang diimputasi (median)',
-  duplicate_removed:   'Baris berganda dibuang',
-  outlier_flagged:     'Outlier dibenderakan (Z-score > 3)',
-  ic_corrected:        'Nombor IC dinormalkan',
-  decimal_shift_fixed: 'Anjakan perpuluhan diperbetulkan (×10)',
-};
 
 function qColor(score: number): string {
   if (score >= 80) return 'var(--success)';
@@ -39,7 +32,16 @@ function qBg(score: number): string {
 export function CleaningPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useLang();
   const cacheId = searchParams.get('cache_id') ?? '';
+
+  const ACTION_LABELS: Record<string, string> = {
+    missing_imputed:     t('Missing values imputed (median)', 'Nilai hilang diimputasi (median)'),
+    duplicate_removed:   t('Duplicate rows removed', 'Baris berganda dibuang'),
+    outlier_flagged:     t('Outliers flagged (Z-score > 3)', 'Outlier dibenderakan (Z-score > 3)'),
+    ic_corrected:        t('IC numbers normalised', 'Nombor IC dinormalkan'),
+    decimal_shift_fixed: t('Decimal shift corrected (×10)', 'Anjakan perpuluhan diperbetulkan (×10)'),
+  };
 
   const [result, setResult] = useState<CleanResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -53,7 +55,7 @@ export function CleaningPage() {
       const res = await api.post<CleanResponse>('/clean/run', { cache_id: cid });
       setResult(res.data);
     } catch {
-      setError('Gagal menjalankan pembersihan.');
+      setError(t('Failed to run cleaning.', 'Gagal menjalankan pembersihan.'));
     } finally {
       setLoading(false);
     }
@@ -90,7 +92,7 @@ export function CleaningPage() {
   if (!cacheId) {
     return (
       <div style={s.centerMsg}>
-        Muat naik fail untuk memulakan pembersihan.
+        {t('Upload a file to start cleaning.', 'Muat naik fail untuk memulakan pembersihan.')}
       </div>
     );
   }
@@ -99,14 +101,14 @@ export function CleaningPage() {
   if (loading) {
     return (
       <div style={s.centerMsg}>
-        Memproses pembersihan...
+        {t('Processing cleaning...', 'Memproses pembersihan...')}
       </div>
     );
   }
 
   return (
     <div style={s.page}>
-      <h1 style={s.h1}>Hasil Pembersihan</h1>
+      <h1 style={s.h1}>{t('Cleaning Results', 'Hasil Pembersihan')}</h1>
 
       {/* Error banner */}
       {error && (
@@ -119,20 +121,20 @@ export function CleaningPage() {
           <div style={s.summaryCard}>
             <div style={s.statsRow}>
               <div style={s.statBlock}>
-                <div style={s.statLabel}>Baris Sebelum</div>
+                <div style={s.statLabel}>{t('Rows Before', 'Baris Sebelum')}</div>
                 <div style={s.statValue}>{result.rows_before.toLocaleString()}</div>
               </div>
 
               <div style={s.statDivider}>→</div>
 
               <div style={s.statBlock}>
-                <div style={s.statLabel}>Baris Selepas</div>
+                <div style={s.statLabel}>{t('Rows After', 'Baris Selepas')}</div>
                 <div style={s.statValue}>{result.rows_after.toLocaleString()}</div>
               </div>
 
               {result.rows_before - result.rows_after > 0 && (
                 <div style={s.deltaBadge}>
-                  −{(result.rows_before - result.rows_after).toLocaleString()} dibuang
+                  −{(result.rows_before - result.rows_after).toLocaleString()} {t('removed', 'dibuang')}
                 </div>
               )}
 
@@ -140,7 +142,7 @@ export function CleaningPage() {
 
               {/* Quality score */}
               <div style={{ ...s.statBlock, ...s.qualityBlock, background: qBg(result.quality_score) }}>
-                <div style={s.statLabel}>Skor Kualiti</div>
+                <div style={s.statLabel}>{t('Quality Score', 'Skor Kualiti')}</div>
                 <div style={{ ...s.statValue, color: qColor(result.quality_score) }}>
                   {result.quality_score.toFixed(1)}%
                 </div>

@@ -16,6 +16,7 @@ class Dataset(Base):
     filename: Mapped[str] = mapped_column(String, nullable=False)
     source_type: Mapped[str | None] = mapped_column(String, nullable=True)
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     sessions: Mapped[list["Session"]] = relationship(back_populates="dataset")

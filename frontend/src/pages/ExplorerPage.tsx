@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 interface ColumnProfile {
   name: string;
@@ -21,6 +22,7 @@ interface EDAResponse {
 }
 
 export function ExplorerPage() {
+  const { t } = useLang();
   const [eda, setEda] = useState<EDAResponse | null>(null);
   const [selectedCol, setSelectedCol] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
@@ -88,7 +90,7 @@ export function ExplorerPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={s.page}>
-      <h1 style={s.h1}>Penjelajah Data</h1>
+      <h1 style={s.h1}>{t('Data Explorer', 'Penjelajah Data')}</h1>
 
       {/* Dropzone */}
       <div
@@ -98,7 +100,7 @@ export function ExplorerPage() {
         onDragLeave={() => setDragOver(false)}
       >
         <span style={s.dropText}>
-          Seret fail CSV / Excel ke sini atau{' '}
+          {t('Drag CSV / Excel here or', 'Seret fail CSV / Excel ke sini atau')}{' '}
           <label style={s.browseLink}>
             <input
               type="file"
@@ -106,11 +108,11 @@ export function ExplorerPage() {
               style={{ display: 'none' }}
               onChange={onInputChange}
             />
-            semak imbas
+            {t('browse', 'semak imbas')}
           </label>
         </span>
         <div style={s.dropSub}>
-          Jenis data:{' '}
+          {t('Data type:', 'Jenis data:')}{' '}
           <select
             value={dataType}
             onChange={e => setDataType(e.target.value)}
@@ -118,9 +120,9 @@ export function ExplorerPage() {
             onClick={e => e.stopPropagation()}
           >
             <option value="auto">Auto</option>
-            <option value="clinical">Klinikal</option>
-            <option value="financial">Kewangan</option>
-            <option value="generic">Generik</option>
+            <option value="clinical">{t('Clinical', 'Klinikal')}</option>
+            <option value="financial">{t('Financial', 'Kewangan')}</option>
+            <option value="generic">{t('Generic', 'Generik')}</option>
           </select>
         </div>
       </div>
@@ -128,7 +130,7 @@ export function ExplorerPage() {
       {/* Loading */}
       {loading && (
         <div style={s.centred}>
-          <span style={s.loadingText}>Memuatkan...</span>
+          <span style={s.loadingText}>{t('Loading...', 'Memuatkan...')}</span>
         </div>
       )}
 
@@ -142,7 +144,7 @@ export function ExplorerPage() {
         <div style={s.layout}>
           {/* Left panel — column selector */}
           <div style={s.sidebar}>
-            <div style={s.sideTitle}>Lajur ({eda.columns.length})</div>
+            <div style={s.sideTitle}>{t('Columns', 'Lajur')} ({eda.columns.length})</div>
             <div style={s.colList}>
               {eda.columns.map(col => (
                 <button
@@ -165,7 +167,7 @@ export function ExplorerPage() {
           <div style={s.main}>
             {/* Tabs */}
             <div style={s.tabs}>
-              {(['Data Mentah', 'Data Bersih', 'Profil Statistik'] as const).map(
+              {([t('Raw Data','Data Mentah'), t('Clean Data','Data Bersih'), t('Statistical Profile','Profil Statistik')] as const).map(
                 (label, idx) => (
                   <button
                     key={label}
@@ -188,7 +190,7 @@ export function ExplorerPage() {
                 <>
                   {pagedRows.length === 0 ? (
                     <div style={s.emptyMsg}>
-                      Data mentah tidak tersedia untuk paparan.
+                      {t('Raw data not available for display.', 'Data mentah tidak tersedia untuk paparan.')}
                     </div>
                   ) : (
                     <>
@@ -226,17 +228,17 @@ export function ExplorerPage() {
                             disabled={page === 1}
                             onClick={() => setPage(p => Math.max(1, p - 1))}
                           >
-                            ← Sebelum
+                            ← {t('Prev', 'Sebelum')}
                           </button>
                           <span style={s.pgInfo}>
-                            Halaman {page} / {totalPages}
+                            {t('Page', 'Halaman')} {page} / {totalPages}
                           </span>
                           <button
                             style={{ ...s.pgBtn, transition: 'all 0.15s ease' }}
                             disabled={page === totalPages}
                             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                           >
-                            Seterus →
+                            {t('Next', 'Seterus')} →
                           </button>
                         </div>
                       )}
@@ -245,11 +247,10 @@ export function ExplorerPage() {
                 </>
               )}
 
-              {/* Tab 1 — Data Bersih */}
+              {/* Tab 1 — Clean Data */}
               {activeTab === 1 && (
                 <div style={s.infoMsg}>
-                  Data bersih memerlukan cache_id berasingan. Sila jalankan
-                  pembersihan terlebih dahulu.
+                  {t('Clean data requires a separate cache_id. Please run cleaning first.', 'Data bersih memerlukan cache_id berasingan. Sila jalankan pembersihan terlebih dahulu.')}
                 </div>
               )}
 
@@ -261,9 +262,9 @@ export function ExplorerPage() {
                   ) : (
                     <>
                       {selectedCol && !colProfile ? (
-                        <div style={s.emptyMsg}>Pilih lajur dari panel kiri.</div>
+                        <div style={s.emptyMsg}>{t('Select a column from the left panel.', 'Pilih lajur dari panel kiri.')}</div>
                       ) : !selectedCol ? (
-                        <div style={s.emptyMsg}>Pilih lajur dari panel kiri.</div>
+                        <div style={s.emptyMsg}>{t('Select a column from the left panel.', 'Pilih lajur dari panel kiri.')}</div>
                       ) : null}
                       <div style={s.profileGrid}>
                         {eda.columns.map(c => (
@@ -290,22 +291,23 @@ function ProfileCard({ col }: { col: ColumnProfile }) {
     .map(v => String(v))
     .join(', ');
 
+  const { t } = useLang();
   return (
     <div style={pc.card}>
       <div style={pc.title}>{col.name}</div>
       <div style={pc.grid}>
-        <StatBox label="Nilai Null" value={String(col.null_count)} />
+        <StatBox label={t('Null Count', 'Nilai Null')} value={String(col.null_count)} />
         <StatBox label="% Null" value={`${col.null_percent.toFixed(1)}%`} />
-        <StatBox label="Unik" value={String(col.unique_count)} />
-        {col.min != null && <StatBox label="Min" value={String(col.min)} />}
-        {col.max != null && <StatBox label="Maks" value={String(col.max)} />}
+        <StatBox label={t('Unique', 'Unik')} value={String(col.unique_count)} />
+        {col.min != null && <StatBox label={t('Min', 'Min')} value={String(col.min)} />}
+        {col.max != null && <StatBox label={t('Max', 'Maks')} value={String(col.max)} />}
         {col.mean != null && (
-          <StatBox label="Purata" value={col.mean.toFixed(2)} />
+          <StatBox label={t('Mean', 'Purata')} value={col.mean.toFixed(2)} />
         )}
       </div>
       {samples && (
         <div style={pc.samplesRow}>
-          <span style={pc.samplesLabel}>Sampel: </span>
+          <span style={pc.samplesLabel}>{t('Sample: ', 'Sampel: ')}</span>
           <span style={pc.samplesVal}>{samples}</span>
         </div>
       )}

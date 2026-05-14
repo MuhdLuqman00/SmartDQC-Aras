@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useLang } from '../context/LanguageContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type SourceType = 'myvass' | 'klinik' | 'auto';
@@ -42,6 +43,7 @@ interface DropZoneProps {
   fileName?: string;
 }
 function DropZone({ onFile, label, fileName }: DropZoneProps) {
+  const { t } = useLang();
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: ACCEPT,
     maxFiles: 1,
@@ -65,7 +67,7 @@ function DropZone({ onFile, label, fileName }: DropZoneProps) {
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{label}</div>
       {fileName
         ? <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 500 }}>{fileName}</div>
-        : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>CSV atau Excel · Seret &amp; lepas atau klik</div>
+        : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>CSV / Excel · {t('Drag & drop or click', 'Seret & lepas atau klik')}</div>
       }
     </div>
   );
@@ -87,6 +89,7 @@ function ConfBadge({ value }: { value: number }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 export function UploadPage() {
   const navigate = useNavigate();
+  const { t } = useLang();
 
   // Tab
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
@@ -138,7 +141,7 @@ export function UploadPage() {
     setLoading(true);
     try {
       await api.post('/clean/run', { cache_id: preview.cache_id, column_map: columnMap });
-      navigate('/cleaning');
+      navigate(`/cleaning?cache_id=${preview.cache_id}`);
     } catch {
       setError('Gagal memulakan pembersihan.');
     } finally { setLoading(false); }
@@ -212,12 +215,16 @@ export function UploadPage() {
   };
 
   // ── Tab labels ────────────────────────────────────────────────────────────
-  const TABS = ['Fail Tunggal', 'Gabungkan (2 Fail)', 'Cantumkan (Join)'] as const;
+  const TABS = [
+    t('Single File', 'Fail Tunggal'),
+    t('Merge (2 Files)', 'Gabungkan (2 Fail)'),
+    t('Join', 'Cantumkan (Join)'),
+  ] as const;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
-      <h1 style={s.h1}>Muat Naik Dataset</h1>
+      <h1 style={s.h1}>{t('Upload Dataset', 'Muat Naik Dataset')}</h1>
 
       {/* Tab header */}
       <div style={s.tabBar}>
@@ -241,7 +248,7 @@ export function UploadPage() {
         {/* Error banner */}
         {error && (
           <div style={s.errorBanner}>
-            <span style={{ fontWeight: 600 }}>Ralat:</span> {error}
+            <span style={{ fontWeight: 600 }}>{t('Error:', 'Ralat:')}</span> {error}
             <button onClick={() => setError(null)} style={s.errorClose}>×</button>
           </div>
         )}
@@ -251,7 +258,7 @@ export function UploadPage() {
           <>
             {/* Source type selector */}
             <div style={s.srcRow}>
-              <span style={s.srcLbl}>Jenis Sumber:</span>
+              <span style={s.srcLbl}>{t('Source Type:', 'Jenis Sumber:')}</span>
               {(['myvass', 'klinik', 'auto'] as SourceType[]).map(st => (
                 <label key={st} style={s.radioLabel}>
                   <input
@@ -261,31 +268,31 @@ export function UploadPage() {
                     onChange={() => setSourceType(st)}
                     style={{ marginRight: 5 }}
                   />
-                  {st === 'myvass' ? 'MyVASS' : st === 'klinik' ? 'Klinik Kesihatan' : 'Auto-detect'}
+                  {st === 'myvass' ? 'MyVASS' : st === 'klinik' ? t('Health Clinic', 'Klinik Kesihatan') : t('Auto-detect', 'Auto-detect')}
                 </label>
               ))}
             </div>
 
-            <DropZone label="Fail CSV / Excel" onFile={uploadSingle} />
+            <DropZone label={t('CSV / Excel File', 'Fail CSV / Excel')} onFile={uploadSingle} />
 
-            {loading && <div style={s.loading}>Memproses...</div>}
+            {loading && <div style={s.loading}>{t('Processing...', 'Memproses...')}</div>}
 
             {/* Schema mapping table */}
             {preview && (
               <div style={s.card}>
                 <div style={s.cardHeader}>
-                  <span style={s.cardTitle}>Peta Skema</span>
+                  <span style={s.cardTitle}>{t('Schema Map', 'Peta Skema')}</span>
                   <span style={s.cardMeta}>
-                    {preview.rows.toLocaleString()} baris · {preview.columns.length} lajur
+                    {preview.rows.toLocaleString()} {t('rows', 'baris')} · {preview.columns.length} {t('columns', 'lajur')}
                   </span>
                 </div>
                 <table style={s.table}>
                   <thead>
                     <tr>
-                      <th style={s.th}>Lajur Anda</th>
-                      <th style={s.th}>Medan Standard Dikesan</th>
-                      <th style={s.th}>Keyakinan</th>
-                      <th style={s.th}>Ganti</th>
+                      <th style={s.th}>{t('Your Column', 'Lajur Anda')}</th>
+                      <th style={s.th}>{t('Detected Standard Field', 'Medan Standard Dikesan')}</th>
+                      <th style={s.th}>{t('Confidence', 'Keyakinan')}</th>
+                      <th style={s.th}>{t('Override', 'Ganti')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -311,7 +318,7 @@ export function UploadPage() {
                     {(preview.unmapped_columns ?? []).map(col => (
                       <tr key={col} style={{ ...s.tr, background: 'var(--warning-bg)' }}>
                         <td style={s.td}><code style={s.code}>{col}</code></td>
-                        <td style={s.td}><span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Tidak dipetakan</span></td>
+                        <td style={s.td}><span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('Unmapped', 'Tidak dipetakan')}</span></td>
                         <td style={s.td}><ConfBadge value={0} /></td>
                         <td style={s.td}>
                           <select
@@ -334,7 +341,7 @@ export function UploadPage() {
                     onClick={continueClean}
                     disabled={loading}
                   >
-                    {loading ? 'Memproses...' : 'Lanjutkan ke Pembersihan →'}
+                    {loading ? t('Processing...', 'Memproses...') : t('Continue to Cleaning →', 'Lanjutkan ke Pembersihan →')}
                   </button>
                 </div>
               </div>
@@ -342,11 +349,11 @@ export function UploadPage() {
           </>
         )}
 
-        {/* ── Tab 1: Gabungkan (2 Fail) ───────────────────────────────────── */}
+        {/* ── Tab 1: Merge ───────────────────────────────────────────────── */}
         {activeTab === 1 && (
           <>
             <div style={s.srcRow}>
-              <span style={s.srcLbl}>Jenis Sumber:</span>
+              <span style={s.srcLbl}>{t('Source Type:', 'Jenis Sumber:')}</span>
               {(['myvass', 'klinik', 'auto'] as SourceType[]).map(st => (
                 <label key={st} style={s.radioLabel}>
                   <input
@@ -356,46 +363,46 @@ export function UploadPage() {
                     onChange={() => setSourceType(st)}
                     style={{ marginRight: 5 }}
                   />
-                  {st === 'myvass' ? 'MyVASS' : st === 'klinik' ? 'Klinik Kesihatan' : 'Auto-detect'}
+                  {st === 'myvass' ? 'MyVASS' : st === 'klinik' ? t('Health Clinic', 'Klinik Kesihatan') : t('Auto-detect', 'Auto-detect')}
                 </label>
               ))}
             </div>
 
             <div style={s.twoCol}>
               <DropZone
-                label="Fail Pertama"
+                label={t('First File', 'Fail Pertama')}
                 fileName={mergeFileA?.name}
                 onFile={f => handleMergeFile(f, 'a')}
               />
               <DropZone
-                label="Fail Kedua"
+                label={t('Second File', 'Fail Kedua')}
                 fileName={mergeFileB?.name}
                 onFile={f => handleMergeFile(f, 'b')}
               />
             </div>
 
-            {loading && <div style={s.loading}>Memproses...</div>}
+            {loading && <div style={s.loading}>{t('Processing...', 'Memproses...')}</div>}
 
             {mergeShape && (
               <div style={s.infoBox}>
-                <span style={{ fontWeight: 600 }}>Keputusan Cantuman:</span>{' '}
-                {mergeShape[0].toLocaleString()} baris · {mergeShape[1]} lajur
+                <span style={{ fontWeight: 600 }}>{t('Merge Result:', 'Keputusan Cantuman:')}</span>{' '}
+                {mergeShape[0].toLocaleString()} {t('rows', 'baris')} · {mergeShape[1]} {t('columns', 'lajur')}
               </div>
             )}
           </>
         )}
 
-        {/* ── Tab 2: Cantumkan (Join) ─────────────────────────────────────── */}
+        {/* ── Tab 2: Join ────────────────────────────────────────────────── */}
         {activeTab === 2 && (
           <>
             <div style={s.twoCol}>
               <DropZone
-                label="Fail Kiri"
+                label={t('Left File', 'Fail Kiri')}
                 fileName={leftFileName || undefined}
                 onFile={f => uploadJoinFile(f, 'left')}
               />
               <DropZone
-                label="Fail Kanan"
+                label={t('Right File', 'Fail Kanan')}
                 fileName={rightFileName || undefined}
                 onFile={f => uploadJoinFile(f, 'right')}
               />
@@ -403,7 +410,7 @@ export function UploadPage() {
 
             <div style={s.joinCfg}>
               <div>
-                <div style={s.fieldLabel}>Jenis Join</div>
+                <div style={s.fieldLabel}>{t('Join Type', 'Jenis Join')}</div>
                 <select
                   value={joinType}
                   onChange={e => setJoinType(e.target.value as JoinType)}
@@ -415,7 +422,7 @@ export function UploadPage() {
                 </select>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={s.fieldLabel}>Lajur Kunci (dipisah koma)</div>
+                <div style={s.fieldLabel}>{t('Key Columns (comma-separated)', 'Lajur Kunci (dipisah koma)')}</div>
                 <input
                   style={{ ...s.input, marginTop: 6, transition: 'all 0.15s ease' }}
                   value={keyCols}
@@ -431,25 +438,25 @@ export function UploadPage() {
                 onClick={previewJoin}
                 disabled={loading || !leftCacheId || !rightCacheId}
               >
-                Preview Join
+                {t('Preview Join', 'Pratonton Join')}
               </button>
               <button
                 style={{ ...s.primaryBtn, transition: 'all 0.15s ease', opacity: (!leftCacheId || !rightCacheId || loading) ? 0.6 : 1 }}
                 onClick={runJoin}
                 disabled={loading || !leftCacheId || !rightCacheId}
               >
-                {loading ? 'Memproses...' : 'Jalankan Join →'}
+                {loading ? t('Processing...', 'Memproses...') : t('Run Join →', 'Jalankan Join →')}
               </button>
             </div>
 
-            {loading && <div style={s.loading}>Memproses...</div>}
+            {loading && <div style={s.loading}>{t('Processing...', 'Memproses...')}</div>}
 
             {joinPreview && (
               <div style={s.card}>
                 <div style={s.cardHeader}>
-                  <span style={s.cardTitle}>Pratonton Join</span>
+                  <span style={s.cardTitle}>{t('Join Preview', 'Pratonton Join')}</span>
                   <span style={s.cardMeta}>
-                    {joinPreview.shape[0].toLocaleString()} baris · {joinPreview.shape[1]} lajur
+                    {joinPreview.shape[0].toLocaleString()} {t('rows', 'baris')} · {joinPreview.shape[1]} {t('columns', 'lajur')}
                   </span>
                 </div>
                 {/* Join stats */}
