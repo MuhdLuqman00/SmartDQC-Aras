@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 import pandas as pd
 import numpy as np
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel
@@ -25,8 +26,9 @@ from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, json_safe
 from .export.tableau import build_aggregated_table, to_excel as tbl_excel, to_csv as tbl_csv
 from .export.cleaned import to_excel as cln_excel, to_csv as cln_csv
+from .auth import hash_password, verify_password, create_access_token, decode_access_token, TokenExpiredError, InvalidTokenError
 from .db.init_db import init_db, get_db
-from .db.models import Dataset, Session as DBSession, AnalysisResult
+from .db.models import Dataset, Session as DBSession, AnalysisResult, User
 from .ai.narrative import generate_narrative
 from .ai.nlq import answer_query
 from .ml.corrections import flag_anomalies
@@ -42,7 +44,23 @@ from sqlalchemy.orm import Session as SASession
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _seed_admin()
     yield
+
+
+def _seed_admin():
+    from .db.init_db import SessionLocal
+    db = SessionLocal()
+    try:
+        if not db.query(User).filter_by(username="admin").first():
+            db.add(User(
+                username="admin",
+                password_hash=hash_password("ADMIN_SEED_PASSWORD_PLACEHOLDER"),
+                role="admin",
+            ))
+            db.commit()
+    finally:
+        db.close()
 
 
 app = FastAPI(title="SmartDQC API", version="1.0", lifespan=lifespan)
@@ -89,6 +107,40 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ─── AUTH ENDPOINTS ───────────────────────────────────────────────────────────
+
+@app.post("/auth/login")
+def login(form: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
+    user = db.query(User).filter_by(username=form.username, is_active=True).first()
+    if not user or not verify_password(form.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({"sub": user.username, "role": user.role})
+    return {"access_token": token, "token_type": "bearer", "role": user.role}
+
+
+def _current_user(authorization: str = Header(...), db=Depends(get_db)):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    try:
+        payload = decode_access_token(authorization[7:])
+    except (TokenExpiredError, InvalidTokenError) as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    user = db.query(User).filter_by(username=payload["sub"], is_active=True).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@app.get("/auth/me")
+def me(user=Depends(_current_user)):
+    return {"username": user.username, "role": user.role}
+
+
+@app.post("/auth/logout")
+def logout():
+    return {"detail": "logged out"}
 
 
 @app.get("/schema")

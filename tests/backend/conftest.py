@@ -4,9 +4,14 @@ Provides an in-memory SQLite session that overrides get_db for all
 TestClient-based tests, so they run without a live PostgreSQL instance.
 """
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, JSON
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# Patch JSONB → JSON so SQLite can create the schema during tests.
+# PostgreSQL-dialect JSONB is not supported by SQLite's DDL compiler.
+import sqlalchemy.dialects.postgresql as _pg
+_pg.JSONB = JSON
 
 from backend.db.models import Base
 
