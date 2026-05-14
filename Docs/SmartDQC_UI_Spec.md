@@ -90,3 +90,34 @@ Response:
 ### Components
 - `LoginCard` — centered form wrapper
 - `useAuth` hook — wraps login/logout/me calls; exports `{ user, login, logout, isAuthenticated }`
+
+---
+
+## §3 — Dashboard Page (`/`)
+
+### Purpose
+System overview: recent sessions, quality trend, quick-action buttons.
+
+### Layout
+- Top row: 4 KPI cards (Active Sessions, Avg Quality Score, Total Rows Processed, Alerts)
+- Middle row: Quality Score Trend sparkline (last 10 sessions) | Recent Sessions table
+- Bottom row: Quick Actions — Upload New Dataset / View Reports / Open Chatbot
+
+### APIs
+- `GET /sessions` → `[{ cache_id, filename, source_type, row_count, quality_score }]`
+- `GET /health` → `{ status: "ok" }` (green/red dot in header)
+
+### Recent Sessions Table
+| Column  | Source field  | Notes                                   |
+|---------|---------------|-----------------------------------------|
+| File    | filename      |                                         |
+| Source  | source_type   |                                         |
+| Rows    | row_count     |                                         |
+| Quality | quality_score | Badge: ≥80 green, 60–79 amber, <60 red |
+| Actions |               | View → /quality?cache_id=X              |
+
+### Components
+- `KpiCard` — icon, label, value, delta vs previous session
+- `QualitySparkline` — recharts LineChart, navy stroke
+- `SessionsTable` — sortable, row click navigates to /quality
+- `QuickActions` — 3 navy CTA buttons
