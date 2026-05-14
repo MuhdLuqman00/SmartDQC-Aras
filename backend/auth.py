@@ -1,15 +1,23 @@
 from __future__ import annotations
 import os
+import warnings as _warnings
 from datetime import datetime, timedelta, timezone
 
+import bcrypt as _bcrypt
 from jose import ExpiredSignatureError, JWTError, jwt
-from passlib.context import CryptContext
 
 _SECRET = os.environ.get("JWT_SECRET", "JWT_SECRET_PLACEHOLDER")
+if not os.environ.get("JWT_SECRET"):
+    _warnings.warn("JWT_SECRET not set — using insecure dev default", stacklevel=1)
+
 _ALGORITHM = "HS256"
 _DEFAULT_EXPIRY = timedelta(hours=8)
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+__all__ = [
+    "hash_password", "verify_password",
+    "create_access_token", "decode_access_token",
+    "TokenExpiredError", "InvalidTokenError",
+]
 
 
 class TokenExpiredError(Exception):
@@ -21,16 +29,16 @@ class InvalidTokenError(Exception):
 
 
 def hash_password(password: str) -> str:
-    return _pwd_ctx.hash(password)
+    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(plain, hashed)
+    return _bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def create_access_token(data: dict, expires_delta: timedelta = _DEFAULT_EXPIRY) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     payload = dict(data)
-    payload["exp"] = datetime.now(timezone.utc) + expires_delta
+    payload["exp"] = datetime.now(timezone.utc) + (expires_delta or _DEFAULT_EXPIRY)
     return jwt.encode(payload, _SECRET, algorithm=_ALGORITHM)
 
 

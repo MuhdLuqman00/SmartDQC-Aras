@@ -33,3 +33,9 @@ def test_expired_token_raises():
     token = create_access_token({"sub": "bob"}, expires_delta=timedelta(seconds=-1))
     with pytest.raises(TokenExpiredError):
         decode_access_token(token)
+
+
+def test_create_token_does_not_mutate_input():
+    data = {"sub": "alice"}
+    create_access_token(data)
+    assert "exp" not in data
