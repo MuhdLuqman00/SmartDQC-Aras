@@ -1,268 +1,182 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Send, Sparkles, Cpu } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
+import { SessionGuard } from '../components/SessionGuard';
+import { RagBadge, scoreToRag } from '../components/RagBadge';
 
-interface Message { role: 'user' | 'assistant'; text: string; chart_b64?: string | null; }
-interface NLQResponse { answer: string; result: unknown; code?: string; chart_b64?: string | null; }
-interface NarrativeResponse { insights: string[]; recommendations: string[]; summary: string; }
+interface Message {
+  id: string;
+  role: 'ai' | 'user' | 'narrative';
+  content: string;
+  data?: unknown;
+}
 
 export function AIPage() {
-  const [searchParams] = useSearchParams();
-  const { t } = useLang();
-  const { currentCacheId } = useSession();
+  const { t, lang } = useLang();
+  const { cacheId, filename, sourceType, rowCount, qualityScore } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState<string>('');
-  const [cacheId, setCacheId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
-  const [narrativeLoading, setNarrativeLoading] = useState<boolean>(false);
-  const [narrativeOpen, setNarrativeOpen] = useState<boolean>(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Priority: URL param > SessionContext > empty
-    const urlCacheId = searchParams.get('cache_id') ?? searchParams.get('session_id') ?? '';
-    setCacheId(urlCacheId || currentCacheId || '');
-  }, [searchParams, currentCacheId]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const addMessage = (msg: Omit<Message, 'id'>) =>
+    setMessages(prev => [...prev, { ...msg, id: `${Date.now()}-${Math.random()}` }]);
 
-  const sendQuery = async (): Promise<void> => {
-    const query = input.trim();
-    if (!query || !cacheId) return;
-    setMessages(m => [...m, { role: 'user', text: query }]);
-    setInput('');
-    setLoading(true);
-    try {
-      const res = await api.post<NLQResponse>('/ai/nlq', { query, session_id: cacheId });
-      setMessages(m => [...m, { role: 'assistant', text: res.data.answer, chart_b64: res.data.chart_b64 }]);
-    } catch {
-      setMessages(m => [...m, { role: 'assistant', text: t('Error: Unable to process query.', 'Ralat: Tidak dapat memproses pertanyaan.') }]);
-    } finally { setLoading(false); }
-  };
-
-  const generateNarrative = async (): Promise<void> => {
+  const handleNarrative = async () => {
+    if (!cacheId) return;
     setNarrativeLoading(true);
     try {
-      const res = await api.post<NarrativeResponse>('/ai/narrative', { eda_result: {}, session_id: cacheId });
-      setNarrative(res.data);
-      setNarrativeOpen(true);
-    } catch { /* silently fail */ }
+      const r = await api.post<{ narrative: string }>(`/ai/narrative?cache_id=${cacheId}`);
+      addMessage({ role: 'narrative', content: r.data.narrative || String(r.data) });
+    } catch { addMessage({ role: 'ai', content: t('Failed to generate narrative.', 'Gagal menjana naratif.') }); }
     finally { setNarrativeLoading(false); }
   };
 
+  const handleSend = async () => {
+    if (!input.trim() || !cacheId) return;
+    const question = input.trim();
+    setInput('');
+    addMessage({ role: 'user', content: question });
+    setLoading(true);
+    try {
+      const r = await api.post<{ answer: string; data?: unknown }>(`/ai/nlq?cache_id=${cacheId}`, { question });
+      addMessage({ role: 'ai', content: r.data.answer || String(r.data), data: r.data.data });
+    } catch { addMessage({ role: 'ai', content: t('No response. Is Ollama running?', 'Tiada respons. Adakah Ollama berjalan?') }); }
+    finally { setLoading(false); }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <SessionGuard>
+      <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - 160px)', minHeight: 500 }}>
 
-      {/* No cache_id banner */}
-      {!cacheId && (
+        {/* Left panel */}
         <div style={{
-          margin: '12px 20px',
-          padding: '10px 14px',
-          background: 'var(--surface-2)',
-          border: '0.5px solid var(--border)',
-          borderRadius: 8,
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-          flexShrink: 0,
+          flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 16,
         }}>
-          {t('Enter cache_id from a cleaning session to start. Append', 'Masukkan cache_id dari sesi pembersihan untuk bermula. Tambah')} <code>?cache_id=X</code> {t('to the URL.', 'ke URL.')}
-        </div>
-      )}
+          {/* Session card */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 12 }}>
+              {t('Active Session', 'Sesi Aktif')}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6, wordBreak: 'break-all' }}>{filename}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {sourceType && (
+                <span style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  {sourceType}
+                </span>
+              )}
+              {rowCount && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {rowCount.toLocaleString()} {t('rows', 'baris')}
+                </span>
+              )}
+              {qualityScore != null && <RagBadge rag={scoreToRag(qualityScore)} lang={lang} />}
+            </div>
+          </div>
 
-      {/* Chat area */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}>
-        {messages.map((msg, i) => (
-          <div
-            key={i}
+          {/* Narrative button */}
+          <button
+            onClick={handleNarrative}
+            disabled={narrativeLoading}
             style={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '70%',
-              padding: '10px 14px',
-              borderRadius: msg.role === 'user' ? '12px 0 12px 12px' : '0 12px 12px 12px',
-              background: msg.role === 'user' ? 'var(--navy)' : 'var(--surface-2)',
-              color: msg.role === 'user' ? '#ffffff' : 'var(--text-primary)',
-              fontSize: 14,
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
+              background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+              borderRadius: 'var(--radius-btn)', padding: '12px 16px',
+              fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              opacity: narrativeLoading ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', gap: 8,
             }}
           >
-            {msg.text}
-            {msg.chart_b64 && (
-              <img
-                src={`data:image/png;base64,${msg.chart_b64}`}
-                style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8, display: 'block' }}
-                alt="Chart"
-              />
-            )}
+            <Sparkles size={16} />
+            {narrativeLoading ? t('Generating…', 'Sedang menjana…') : t('Generate AI Narrative', 'Jana Naratif AI')}
+          </button>
+
+          {/* Model info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
+            <Cpu size={13} />
+            Ollama · Local inference
           </div>
-        ))}
+        </div>
 
-        {/* Loading indicator */}
-        {loading && (
-          <div style={{
-            alignSelf: 'flex-start',
-            maxWidth: '70%',
-            padding: '10px 14px',
-            borderRadius: '0 12px 12px 12px',
-            background: 'var(--surface-2)',
-            color: 'var(--text-muted)',
-            fontSize: 14,
-          }}>
-            ●●● ({t('processing', 'sedang memproses')})
+        {/* Chat panel */}
+        <div style={{
+          flex: 1, background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}>
+          {/* Thread */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {messages.length === 0 && (
+              <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', margin: 'auto' }}>
+                {t('Ask a question about your data or generate a narrative.', 'Tanya soalan tentang data anda atau jana naratif.')}
+              </div>
+            )}
+            {messages.map(msg => (
+              <div key={msg.id} style={{
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '85%',
+              }}>
+                {msg.role === 'user' ? (
+                  <div style={{ background: 'var(--kkm-blue)', color: '#fff', borderRadius: '12px 12px 2px 12px', padding: '10px 14px', fontSize: 13 }}>
+                    {msg.content}
+                  </div>
+                ) : msg.role === 'narrative' ? (
+                  <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '14px 16px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
+                      <Sparkles size={13} /> {t('AI Narrative', 'Naratif AI')}
+                    </div>
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '10px 14px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                    {msg.content}
+                  </div>
+                )}
+              </div>
+            ))}
+            {loading && (
+              <div style={{ alignSelf: 'flex-start', display: 'flex', gap: 4, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: '2px 12px 12px 12px', border: '1px solid var(--border)' }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text-muted)', animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                ))}
+              </div>
+            )}
+            <div ref={bottomRef} />
           </div>
-        )}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Narrative accordion */}
-      <div style={{
-        flexShrink: 0,
-        padding: '0 20px 8px',
-        borderTop: '0.5px solid var(--border)',
-      }}>
-        <button
-          onClick={generateNarrative}
-          disabled={narrativeLoading}
-          style={{
-            marginTop: 10,
-            padding: '8px 16px',
-            background: 'var(--surface)',
-            border: '0.5px solid var(--border)',
-            borderRadius: 8,
-            fontSize: 13,
-            color: 'var(--text-primary)',
-            cursor: narrativeLoading ? 'not-allowed' : 'pointer',
-            opacity: narrativeLoading ? 0.6 : 1,
-            transition: 'all 0.15s ease',
-          }}
-        >
-          {narrativeLoading ? t('Generating Narrative...', 'Jana Naratif...') : t('Generate Narrative', 'Jana Naratif')}
-        </button>
-
-        {narrativeOpen && narrative && (
-          <div style={{
-            marginTop: 10,
-            padding: '14px 16px',
-            background: 'var(--surface)',
-            border: '0.5px solid var(--border)',
-            borderRadius: 8,
-            fontSize: 13,
-            color: 'var(--text-primary)',
-            lineHeight: 1.6,
-          }}>
-            <p style={{ margin: '0 0 10px', fontWeight: 600 }}>{narrative.summary}</p>
-
-            {narrative.insights.length > 0 && (
-              <>
-                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Insights', 'Penemuan')}</p>
-                <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
-                  {narrative.insights.map((ins, i) => (
-                    <li key={i}>{ins}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {narrative.recommendations.length > 0 && (
-              <>
-                <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Recommendations', 'Cadangan')}</p>
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {narrative.recommendations.map((rec, i) => (
-                    <li key={i}>{rec}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            <button
-              onClick={() => setNarrativeOpen(false)}
+          {/* Input */}
+          <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder={t('Ask about your data…', 'Tanya tentang data anda…')}
               style={{
-                marginTop: 10,
-                padding: '4px 10px',
-                background: 'transparent',
-                border: '0.5px solid var(--border)',
-                borderRadius: 6,
-                fontSize: 12,
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
+                flex: 1, padding: '10px 14px',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none',
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              style={{
+                background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+                borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
+                opacity: !input.trim() || loading ? 0.5 : 1,
+                display: 'flex', alignItems: 'center',
               }}
             >
-              {t('Close', 'Tutup')}
+              <Send size={16} />
             </button>
           </div>
-        )}
+        </div>
       </div>
-
-      {/* Input bar */}
-      <div style={{
-        flexShrink: 0,
-        borderTop: '0.5px solid var(--border)',
-        padding: '12px 20px',
-        display: 'flex',
-        flexDirection: 'row',
-        gap: 10,
-        alignItems: 'flex-end',
-      }}>
-        <textarea
-          rows={1}
-          placeholder={t('Type your question...', 'Taip soalan anda...')}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              sendQuery();
-            }
-          }}
-          style={{
-            flex: 1,
-            resize: 'none',
-            border: '0.5px solid var(--border)',
-            borderRadius: 8,
-            padding: '10px 12px',
-            background: 'var(--surface-2)',
-            color: 'var(--text-primary)',
-            fontSize: 14,
-            outline: 'none',
-            fontFamily: 'inherit',
-            lineHeight: 1.5,
-            transition: 'all 0.15s ease',
-          }}
-        />
-        <button
-          onClick={sendQuery}
-          disabled={loading || !input.trim()}
-          style={{
-            padding: '10px 18px',
-            background: 'var(--navy)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-            opacity: loading || !input.trim() ? 0.5 : 1,
-            flexShrink: 0,
-            transition: 'all 0.15s ease',
-          }}
-        >
-          {t('Send', 'Hantar')}
-        </button>
-      </div>
-    </div>
+      <style>{`@keyframes pulse { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1)} }`}</style>
+    </SessionGuard>
   );
 }

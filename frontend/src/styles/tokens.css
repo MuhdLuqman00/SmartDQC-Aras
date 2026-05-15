@@ -1,14 +1,57 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'DM Sans', -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+/* ── KKM Design Tokens ─────────────────────────────────────────────────── */
+
+:root {
+  /* Brand */
+  --kkm-deep:  #002D62;
+  --kkm-blue:  #0072BC;
+  --kkm-sky:   #00A3E0;
+  --kkm-teal:  #009B8D;
+
+  /* Surfaces */
+  --bg:        #F2F6FB;
+  --surface:   #FFFFFF;
+  --surface-2: #F7FAFD;
+  --border:    #D0DCF0;
+
+  /* Text */
+  --text-primary:   #0D1B2A;
+  --text-secondary: #4A6080;
+  --text-muted:     #8AAABF;
+
+  /* Status */
+  --success:    #009B8D;
+  --warning:    #D97706;
+  --danger:     #C0392B;
+  --success-bg: #E6F7F5;
+  --warning-bg: #FEF3C7;
+  --danger-bg:  #FDECEA;
+
+  /* Geometry */
+  --radius-card: 10px;
+  --radius-btn:  6px;
+  --shadow-card: 0 1px 4px rgba(0,0,0,0.06);
+  --transition:  150ms ease;
 }
-a { text-decoration: none; color: inherit; }
-button { cursor: pointer; font-family: inherit; }
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+[data-theme="dark"] {
+  --kkm-deep:  #001A3A;
+  --kkm-blue:  #1A8CD8;
+  --kkm-sky:   #33B8E8;
+  --kkm-teal:  #00B5A5;
+
+  --bg:        #0D1B2A;
+  --surface:   #162232;
+  --surface-2: #1E2F42;
+  --border:    #243548;
+
+  --text-primary:   #E8EDF4;
+  --text-secondary: #7A96B0;
+  --text-muted:     #4A6278;
+
+  --success:    #00B5A5;
+  --warning:    #F59E0B;
+  --danger:     #E05A4E;
+  --success-bg: #052E2A;
+  --warning-bg: #1C1400;
+  --danger-bg:  #2A0A08;
+}

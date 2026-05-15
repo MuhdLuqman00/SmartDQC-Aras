@@ -1,497 +1,135 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
+import { RagBadge, scoreToRag } from '../components/RagBadge';
+import { EmptyState } from '../components/EmptyState';
 
 interface Dataset {
-  id: number;
-  cache_id: string;
+  id: string;
   filename: string;
-  source_type: string;
-  row_count: number;
-  quality_score: number;
+  source_type: string | null;
+  row_count: number | null;
+  quality_score: number | null;
   created_at: string;
 }
 
-interface CompareResponse {
-  datasets: Dataset[];
-  deltas: Record<string, number>;
-  trend: Record<string, 'improving' | 'worsening' | 'stable'>;
-}
-
-interface EntityProfile {
-  ic: string;
-  sources: string[];
-}
-
-interface EntityLinkResponse {
-  total_groups: number;
-  linked_groups: number;
-  unlinked: number;
-  rows_written: number;
-  profiles: EntityProfile[];
-}
-
-const INDICATORS = ['stunting_rate', 'wasting_rate', 'underweight_rate', 'overweight_rate', 'completeness'];
-const TREND_ICON = { improving: '↓', worsening: '↑', stable: '→' };
-const TREND_COLOR = { improving: 'var(--success)', worsening: 'var(--danger)', stable: 'var(--text-muted)' };
-
-function qBadge(score: number): React.CSSProperties {
-  const color = score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--danger)';
-  return { color, fontWeight: 700, fontSize: 12 };
-}
-
 export function DatasetLibraryPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { setSession } = useSession();
+  const nav = useNavigate();
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [selected, setSelected] = useState<number[]>([]);
-  const [comparison, setComparison] = useState<CompareResponse | null>(null);
-  const [entityResult, setEntityResult] = useState<EntityLinkResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [comparing, setComparing] = useState<boolean>(false);
-  const [linking, setLinking] = useState<boolean>(false);
-  const [entityOpen, setEntityOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [comparing, setComparing] = useState(false);
+  const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
-    api
-      .get<Dataset[]>('/datasets')
+    api.get<Dataset[]>('/datasets')
       .then(r => setDatasets(r.data))
-      .catch(() => {})
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const compare = async (): Promise<void> => {
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleCompare = async () => {
+    if (selected.size < 2) return;
     setComparing(true);
     try {
-      const res = await api.post<CompareResponse>('/datasets/compare', { dataset_ids: selected });
-      setComparison(res.data);
-    } catch {
-      // error handling
-    } finally {
-      setComparing(false);
-    }
+      const r = await api.post('/datasets/compare', { dataset_ids: Array.from(selected) });
+      setComparison(r.data);
+    } finally { setComparing(false); }
   };
 
-  const linkEntities = async (): Promise<void> => {
-    setLinking(true);
-    try {
-      const res = await api.post<EntityLinkResponse>('/entity/link', { dataset_ids: selected });
-      setEntityResult(res.data);
-      setEntityOpen(true);
-    } catch {
-      // error handling
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  const toggleSelect = (id: number): void => {
-    setSelected(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  const closeEntity = (): void => {
-    setEntityOpen(false);
-  };
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: 40 }}>{t('Loading…', 'Memuatkan…')}</div>;
+  if (!datasets.length) return (
+    <EmptyState icon={<BookOpen size={48} />} title={t('No datasets yet', 'Tiada dataset lagi')}
+      description={t('Upload and clean a dataset to save it here.', 'Muat naik dan bersihkan dataset untuk menyimpannya di sini.')}
+      action={{ label: t('Upload Dataset', 'Muat Naik Dataset'), to: '/upload' }} />
+  );
 
   return (
-    <div style={pg.container}>
-      <h1 style={pg.h1}>{t('Dataset Library', 'Perpustakaan Dataset')}</h1>
+    <div>
+      {selected.size >= 2 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{selected.size} {t('selected', 'dipilih')}</span>
+          <button onClick={handleCompare} disabled={comparing}
+            style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: comparing ? 0.6 : 1 }}>
+            {comparing ? t('Comparing…', 'Sedang membandingkan…') : t('Compare', 'Bandingkan')}
+          </button>
+          <button onClick={() => setSelected(new Set())} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13 }}>
+            {t('Clear', 'Batal')}
+          </button>
+        </div>
+      )}
 
-      <div style={pg.layout}>
-        {/* Left Panel */}
-        <div style={pg.sidePanel}>
-          <div style={pg.sidePanelTitle}>{t('Dataset List', 'Senarai Dataset')}</div>
-
-          {loading ? (
-            <div style={pg.loadingText}>{t('Loading…', 'Memuatkan…')}</div>
-          ) : datasets.length === 0 ? (
-            <div style={pg.emptyText}>{t('No datasets found.', 'Tiada dataset ditemui.')}</div>
-          ) : (
-            <div style={pg.datasetList}>
-              {datasets.map(d => (
-                <div
-                  key={d.id}
-                  style={{
-                    ...pg.datasetItem,
-                    ...(selected.includes(d.id) ? pg.datasetItemSelected : {}),
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18 }}>
+        {datasets.map(ds => {
+          const isSelected = selected.has(ds.id);
+          return (
+            <div key={ds.id} style={{
+              background: 'var(--surface)', border: `1px solid ${isSelected ? 'var(--kkm-sky)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-card)', padding: '18px 20px',
+              boxShadow: 'var(--shadow-card)', cursor: 'pointer',
+              transition: 'border-color var(--transition)',
+            }}
+              onClick={() => toggleSelect(ds.id)}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                <input type="checkbox" checked={isSelected} readOnly style={{ marginTop: 2 }} />
+                {ds.source_type && (
+                  <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                    {ds.source_type}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, wordBreak: 'break-all' }}>{ds.filename}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                {ds.row_count?.toLocaleString() ?? '—'} {t('rows', 'baris')} · {new Date(ds.created_at).toLocaleDateString()}
+              </div>
+              {ds.quality_score != null && <RagBadge rag={scoreToRag(ds.quality_score)} lang={lang} />}
+              <div style={{ marginTop: 14 }}>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setSession({ cacheId: ds.id, filename: ds.filename, sourceType: ds.source_type });
+                    nav('/');
                   }}
-                  onClick={() => toggleSelect(d.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleSelect(d.id);
-                    }
-                  }}
+                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 >
-                  <div style={pg.datasetCheckRow}>
-                    <span style={pg.checkbox}>{selected.includes(d.id) ? '☑' : '☐'}</span>
-                    <span style={pg.datasetFilename}>{d.filename}</span>
-                  </div>
-                  <div style={pg.datasetMeta}>
-                    <span style={pg.sourceTypeBadge}>{d.source_type}</span>
-                    <span style={qBadge(d.quality_score)}>{d.quality_score}%</span>
-                  </div>
-                </div>
-              ))}
+                  {t('Load Session', 'Muat Sesi')}
+                </button>
+              </div>
             </div>
-          )}
+          );
+        })}
+      </div>
 
-          <div style={pg.sidePanelActions}>
-            <button
-              style={{
-                ...pg.compareBtn,
-                opacity: selected.length < 2 ? 0.5 : 1,
-              }}
-              disabled={selected.length < 2 || comparing}
-              onClick={compare}
-            >
-              {comparing ? t('Comparing…', 'Membandingkan…') : t('Compare', 'Bandingkan')}
-            </button>
-            <button
-              style={{
-                ...pg.linkBtn,
-                opacity: selected.length < 2 ? 0.5 : 1,
-              }}
-              disabled={selected.length < 2 || linking}
-              onClick={linkEntities}
-            >
-              {linking ? t('Linking…', 'Memautkan…') : t('Entity Record Link', 'Pautan Rekod Entiti')}
+      {/* Comparison modal */}
+      {comparison && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setComparison(null)}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, maxWidth: 700, width: '90%', maxHeight: '80vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 16, fontWeight: 700, marginBottom: 16 }}>
+              {t('Comparison Results', 'Hasil Perbandingan')}
+            </h3>
+            <pre style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(comparison, null, 2)}
+            </pre>
+            <button onClick={() => setComparison(null)} style={{ marginTop: 16, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+              {t('Close', 'Tutup')}
             </button>
           </div>
         </div>
-
-        {/* Right Main Area */}
-        <div style={pg.main}>
-          {!comparison && !entityOpen && (
-            <div style={pg.empty}>{t('No data to display.', 'Tiada data untuk dipaparkan.')}</div>
-          )}
-
-          {comparison && (
-            <div style={pg.comparisonCard}>
-              <div style={pg.cardHeader}>{t('Indicator Comparison', 'Perbandingan Indikator')}</div>
-              <div style={pg.tableWrapper}>
-                <table style={pg.table}>
-                  <thead>
-                    <tr>
-                      <th style={pg.th}>{t('Indicator', 'Penunjuk')}</th>
-                      {comparison.datasets.map(d => (
-                        <th key={d.id} style={pg.th}>
-                          {d.filename}
-                        </th>
-                      ))}
-                      <th style={pg.th}>{t('Delta', 'Delta')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {INDICATORS.map(indicator => {
-                      const delta = comparison.deltas[indicator];
-                      const trend = comparison.trend[indicator];
-                      const deltaColor =
-                        delta > 0
-                          ? 'var(--danger)'
-                          : delta < 0
-                            ? 'var(--success)'
-                            : 'var(--text-muted)';
-
-                      return (
-                        <tr key={indicator} style={pg.tr}>
-                          <td style={pg.td}>{indicator.replace(/_/g, ' ')}</td>
-                          {comparison.datasets.map(d => (
-                            <td key={d.id} style={pg.td}>
-                              {(d as any)[indicator] != null
-                                ? `${(((d as any)[indicator] as number) * 100).toFixed(1)}%`
-                                : '—'}
-                            </td>
-                          ))}
-                          <td style={{ ...pg.td, fontWeight: 700, color: deltaColor }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span>
-                                {delta != null
-                                  ? `${delta > 0 ? '+' : ''}${delta.toFixed(1)}pp`
-                                  : '—'}
-                              </span>
-                              {trend && (
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    padding: '2px 6px',
-                                    borderRadius: 4,
-                                    backgroundColor:
-                                      trend === 'improving'
-                                        ? 'var(--success-bg)'
-                                        : trend === 'worsening'
-                                          ? 'var(--danger-bg)'
-                                          : 'var(--surface)',
-                                    color:
-                                      trend === 'improving'
-                                        ? 'var(--success)'
-                                        : trend === 'worsening'
-                                          ? 'var(--danger)'
-                                          : 'var(--text-muted)',
-                                  }}
-                                >
-                                  {TREND_ICON[trend]}{' '}
-                                  {trend === 'improving'
-                                    ? t('Better', 'Lebih baik')
-                                    : trend === 'worsening'
-                                      ? t('Worsening', 'Memburuk')
-                                      : t('Stable', 'Stabil')}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {entityOpen && entityResult && (
-            <div style={pg.entityCard}>
-              <div style={pg.entityCardHeader}>
-                <div style={pg.cardHeader}>{t('Entity Record Link', 'Pautan Rekod Entiti')}</div>
-                <button style={pg.closeBtn} onClick={closeEntity}>
-                  {t('Close', 'Tutup')}
-                </button>
-              </div>
-
-              <div style={pg.entityStats}>
-                <StatPill label={t('Total Groups', 'Jumlah Kumpulan')} value={entityResult.total_groups} />
-                <StatPill label={t('Successfully Linked', 'Berjaya Dipautkan')} value={entityResult.linked_groups} />
-                <StatPill label={t('Unlinked', 'Tidak Dipautkan')} value={entityResult.unlinked} />
-                <StatPill label={t('Rows Written', 'Baris Ditulis')} value={entityResult.rows_written} />
-              </div>
-
-              <div style={pg.profilesContainer}>
-                {entityResult.profiles.slice(0, 20).map(profile => (
-                  <div key={profile.ic} style={pg.profileRow}>
-                    <span style={pg.profileIc}>{profile.ic}</span>
-                    <span style={pg.profileSources}>{profile.sources.join(', ')}</span>
-                  </div>
-                ))}
-                {entityResult.profiles.length > 20 && (
-                  <div style={pg.moreProfiles}>
-                    {t(`… and ${entityResult.profiles.length - 20} more profiles`, `… dan ${entityResult.profiles.length - 20} profil lagi`)}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
-
-function StatPill({ label, value }: { label: string; value: number }) {
-  return (
-    <div style={pg.statPill}>
-      <div style={pg.statLabel}>{label}</div>
-      <div style={pg.statValue}>{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-const pg: Record<string, React.CSSProperties> = {
-  container: { padding: '20px' },
-  h1: { margin: '0 0 20px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' },
-  layout: { display: 'grid', gridTemplateColumns: '250px 1fr', gap: 20 },
-
-  // Left Panel
-  sidePanel: {
-    background: 'var(--surface)',
-    borderRadius: 'var(--radius-lg)',
-    border: '0.5px solid var(--border)',
-    display: 'flex',
-    flexDirection: 'column',
-    height: 'fit-content',
-  },
-  sidePanelTitle: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-    padding: '14px 16px',
-    borderBottom: '0.5px solid var(--border)',
-  },
-  loadingText: { padding: '20px 16px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' },
-  emptyText: { padding: '20px 16px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' },
-  datasetList: { flex: 1, overflowY: 'auto' as const },
-  datasetItem: {
-    padding: '12px 16px',
-    borderBottom: '0.5px solid var(--border)',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-    userSelect: 'none',
-  },
-  datasetItemSelected: { background: 'var(--navy)' },
-  datasetCheckRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
-  checkbox: { fontSize: 16, color: 'var(--blue)', fontWeight: 700 },
-  datasetFilename: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    fontFamily: 'var(--font-mono)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  datasetMeta: { display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 24 },
-  sourceTypeBadge: {
-    background: 'var(--surface-2)',
-    color: 'var(--text-secondary)',
-    borderRadius: 4,
-    padding: '2px 6px',
-    fontSize: 10,
-    fontWeight: 600,
-  },
-  sidePanelActions: {
-    padding: '12px 16px',
-    borderTop: '0.5px solid var(--border)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  compareBtn: {
-    padding: '10px 12px',
-    background: 'var(--blue)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-  linkBtn: {
-    padding: '10px 12px',
-    background: 'transparent',
-    color: 'var(--blue)',
-    border: '0.5px solid var(--blue)',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-
-  // Main Area
-  main: { flex: 1 },
-  empty: { fontSize: 14, color: 'var(--text-muted)', padding: '60px 20px', textAlign: 'center' },
-
-  // Comparison Card
-  comparisonCard: {
-    background: 'var(--surface)',
-    borderRadius: 'var(--radius-lg)',
-    border: '0.5px solid var(--border)',
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-    padding: '14px 20px',
-    borderBottom: '0.5px solid var(--border)',
-    background: 'var(--surface-2)',
-  },
-  tableWrapper: { overflowX: 'auto' as const },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
-  th: {
-    padding: '10px 14px',
-    background: 'var(--surface-2)',
-    borderBottom: '0.5px solid var(--border)',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    textAlign: 'left' as const,
-    fontSize: 11,
-  },
-  tr: { borderBottom: '0.5px solid var(--border)' },
-  td: { padding: '12px 14px', color: 'var(--text-primary)' },
-
-  // Entity Card
-  entityCard: {
-    background: 'var(--surface)',
-    borderRadius: 'var(--radius-lg)',
-    border: '0.5px solid var(--border)',
-    overflow: 'hidden',
-    marginTop: 20,
-  },
-  entityCardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '14px 20px',
-    borderBottom: '0.5px solid var(--border)',
-    background: 'var(--surface-2)',
-  },
-  closeBtn: {
-    padding: '6px 12px',
-    background: 'transparent',
-    color: 'var(--text-secondary)',
-    border: '0.5px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-  entityStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: 12,
-    padding: '16px 20px',
-    borderBottom: '0.5px solid var(--border)',
-  },
-  statPill: {
-    background: 'var(--surface-2)',
-    borderRadius: 'var(--radius-md)',
-    border: '0.5px solid var(--border)',
-    padding: '12px 16px',
-    textAlign: 'center' as const,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: 'var(--text-secondary)',
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-    marginBottom: 6,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: 'var(--blue)',
-  },
-  profilesContainer: { padding: '0 20px' },
-  profileRow: {
-    display: 'flex',
-    gap: 12,
-    padding: '10px 0',
-    borderBottom: '0.5px solid var(--border)',
-    alignItems: 'flex-start',
-  },
-  profileIc: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 12,
-    color: 'var(--blue)',
-    fontWeight: 600,
-    whiteSpace: 'nowrap' as const,
-    minWidth: 80,
-  },
-  profileSources: {
-    fontSize: 12,
-    color: 'var(--text-secondary)',
-  },
-  moreProfiles: {
-    padding: '10px 0 16px',
-    fontSize: 12,
-    color: 'var(--text-muted)',
-    fontStyle: 'italic' as const,
-  },
-};

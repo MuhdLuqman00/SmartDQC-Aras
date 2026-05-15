@@ -1,400 +1,426 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Upload, AlertTriangle, Users, ShieldCheck, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { api } from '../api/client';
-import { theme } from '../theme';
 import { useLang } from '../context/LanguageContext';
-import { ChoroplethMap, District, Aggregates, computeAggregates } from '../components/ChoroplethMap';
+import { useSession } from '../context/SessionContext';
+import { ChoroplethMap, District, computeAggregates } from '../components/ChoroplethMap';
+import { StatCard } from '../components/StatCard';
+import { RagBadge, rateToRag } from '../components/RagBadge';
+import { EmptyState } from '../components/EmptyState';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+/* ── Types ─────────────────────────────────────────────────────────────── */
+
+interface Summary {
+  total_children: number;
+  avg_quality_score: number;
+  session_count: number;
+  alerts: number;
+  latest_session: { cache_id: string; filename: string; source_type: string; created_at: string } | null;
+  source_breakdown: Record<string, number>;
+}
 
 interface Session {
   cache_id: string;
   filename: string;
   source_type: string;
-  row_count: number | null;
-  quality_score: number | null;
+  row_count: number;
+  quality_score: number;
+  created_at: string | null;
 }
 
-interface SparkPoint { i: number; q: number; }
-
-interface DistrictRisk {
-  district: string;
-  avg_score: number;
-  high_risk_count: number;
+interface KpiResult {
+  districts?: District[];
+  age_group_breakdown?: { under_2: number; under_5: number; under_2_pct: number; under_5_pct: number };
+  top_issues?: { description: string; count: number }[];
 }
 
-interface KpiDashboardResponse { districts: District[]; }
-interface RiskResponse {
-  district_aggregation: Record<string, { avg_score: number; high_risk_count: number }>;
+/* ── Helpers ────────────────────────────────────────────────────────────── */
+
+function fmt(n: number | null) { return n == null ? '—' : n.toLocaleString(); }
+function pct(r: number) { return `${(r * 100).toFixed(1)}%`; }
+
+function TrendArrow({ delta }: { delta: number }) {
+  if (delta > 0) return <TrendingUp size={14} style={{ color: 'var(--danger)' }} />;
+  if (delta < 0) return <TrendingDown size={14} style={{ color: 'var(--success)' }} />;
+  return <Minus size={14} style={{ color: 'var(--text-muted)' }} />;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function StatCard({ title, value, icon, color, colorBg }: {
-  title: string; value: string | number; icon: string; color: string; colorBg: string;
-}) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)', border: '0.5px solid var(--border)',
-        borderTop: `3px solid ${color}`, borderRadius: 12,
-        padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 8,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-        transition: 'box-shadow 0.15s ease, transform 0.15s ease',
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'none';
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{
-          fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const,
-          letterSpacing: '0.07em', color: 'var(--text-secondary)',
-        }}>
-          {title}
-        </div>
-        <div style={{
-          width: 32, height: 32, borderRadius: '50%',
-          background: colorBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-        }}>
-          {icon}
-        </div>
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function QBadge({ score }: { score: number | null }) {
-  const s = score ?? 0;
-  const bg   = s >= 80 ? 'var(--success-bg)'  : s >= 60 ? 'var(--warning-bg)'  : 'var(--danger-bg)';
-  const text = s >= 80 ? 'var(--success)'     : s >= 60 ? 'var(--warning)'     : 'var(--danger)';
-  return (
-    <span style={{ background: bg, color: text, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
-      {s.toFixed(1)}%
-    </span>
-  );
-}
-
-type Rag = 'green' | 'amber' | 'red';
-
-function RagBadge({ rag }: { rag: Rag }) {
-  const { t } = useLang();
-  const map: Record<Rag, { bg: string; color: string; en: string; my: string }> = {
-    green: { bg: 'var(--success-bg)', color: 'var(--success)', en: 'Good',     my: 'Baik' },
-    amber: { bg: 'var(--warning-bg)', color: 'var(--warning)', en: 'Moderate', my: 'Sederhana' },
-    red:   { bg: 'var(--danger-bg)',  color: 'var(--danger)',  en: 'Critical', my: 'Kritikal' },
-  };
-  const { bg, color, en, my } = map[rag];
-  return (
-    <span style={{ background: bg, color, borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
-      {t(en, my)}
-    </span>
-  );
-}
-
-function NutritionCard({ label, rate, rag }: { label: string; rate: number; rag: Rag }) {
-  return (
-    <div style={{
-      background: 'var(--bg)', border: '0.5px solid var(--border)',
-      borderRadius: 10, padding: '14px 16px',
-    }}>
-      <div style={{
-        fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const,
-        letterSpacing: '0.07em', color: 'var(--text-secondary)', marginBottom: 8,
-      }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', marginBottom: 8 }}>
-        {(rate * 100).toFixed(1)}%
-      </div>
-      <RagBadge rag={rag} />
-    </div>
-  );
-}
-
-function ActionCard({ label, icon, path }: { label: string; icon: string; path: string }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      style={{
-        background: 'var(--surface)', border: '0.5px solid var(--border)',
-        borderRadius: 10, padding: '14px 16px', fontSize: 13, fontWeight: 500,
-        cursor: 'pointer', color: 'var(--text-primary)', transition: 'all 0.15s ease',
-        display: 'flex', alignItems: 'center', gap: 10,
-        width: '100%', textAlign: 'left' as const,
-      }}
-      onClick={() => navigate(path)}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)';
-        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface)';
-        (e.currentTarget as HTMLButtonElement).style.transform = 'none';
-      }}
-    >
-      <span style={{ fontSize: 16, opacity: 0.7 }}>{icon}</span>
-      {label}
-    </button>
-  );
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
+/* ── Component ──────────────────────────────────────────────────────────── */
 
 export function DashboardPage() {
-  const navigate = useNavigate();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { cacheId, setSession } = useSession();
+  const nav = useNavigate();
 
-  const [sessions, setSessions]           = useState<Session[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState(false);
-  const [districts, setDistricts]         = useState<District[]>([]);
-  const [districtRisks, setDistrictRisks] = useState<DistrictRisk[]>([]);
-  const [mapLoading, setMapLoading]       = useState(false);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [kpi, setKpi] = useState<KpiResult | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  /* fetch summary + sessions (always-on) */
   useEffect(() => {
-    setLoading(true);
-    api.get<Session[]>('/sessions')
-      .then(r => { setSessions(r.data); setLoading(false); })
-      .catch(() => { setError(true); setLoading(false); });
+    Promise.all([
+      api.get<Summary>('/dashboard/summary'),
+      api.get<Session[]>('/sessions'),
+    ]).then(([s, sess]) => {
+      setSummary(s.data);
+      setSessions(sess.data.slice(0, 5));
+    }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!sessions.length) return;
-    const cacheId = sessions[0].cache_id;
-    setMapLoading(true);
-    Promise.all([
-      api.post<KpiDashboardResponse>(`/kpi/dashboard?cache_id=${cacheId}`),
-      api.post<RiskResponse>(`/risk/score?cache_id=${cacheId}`),
-    ]).then(([kpiRes, riskRes]) => {
-      setDistricts(kpiRes.data.districts ?? []);
-      const agg = riskRes.data.district_aggregation ?? {};
-      setDistrictRisks(
-        Object.entries(agg)
-          .map(([district, v]) => ({ district, avg_score: v.avg_score, high_risk_count: v.high_risk_count }))
-          .sort((a, b) => b.avg_score - a.avg_score),
-      );
-      setMapLoading(false);
-    }).catch(() => setMapLoading(false));
-  }, [sessions]);
+  /* fetch kpi for current/latest session */
+  const activeCacheId = cacheId || summary?.latest_session?.cache_id;
 
-  const avgQ       = sessions.length ? sessions.reduce((a, s) => a + (s.quality_score ?? 0), 0) / sessions.length : 0;
-  const totalRows  = sessions.reduce((a, s) => a + (s.row_count ?? 0), 0);
-  const alertCount = sessions.filter(s => (s.quality_score ?? 0) < 60).length;
-  const sparkData: SparkPoint[] = sessions.slice(-10).map((s, i) => ({ i, q: s.quality_score ?? 0 }));
-  const aggregates: Aggregates  = useMemo(() => computeAggregates(districts), [districts]);
+  const fetchKpi = useCallback(async (district?: string | null) => {
+    if (!activeCacheId) return;
+    try {
+      const params: Record<string, string> = { cache_id: activeCacheId };
+      if (district) params.district = district;
+      const r = await api.post<KpiResult>(`/kpi/dashboard?${new URLSearchParams(params)}`);
+      setKpi(r.data);
+    } catch { /* cache miss — no active data */ }
+  }, [activeCacheId]);
 
-  if (loading) return <div style={st.center}>{t('Loading...', 'Memuatkan...')}</div>;
-  if (error)   return <div style={st.center}>{t('Failed to load sessions.', 'Gagal memuatkan sesi.')}</div>;
+  useEffect(() => { fetchKpi(); }, [fetchKpi]);
+
+  const handleDistrictClick = (d: string | null) => {
+    setSelectedDistrict(d);
+    fetchKpi(d);
+  };
+
+  const districts = kpi?.districts ?? [];
+  const agg = computeAggregates(districts);
+
+  /* ── Empty state ─────────────────────────────────────────────────────── */
+  if (!loading && summary?.session_count === 0) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', minHeight: '70vh', gap: 24, textAlign: 'center',
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 14,
+          background: 'var(--kkm-sky)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 22,
+        }}>S</div>
+        <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {t('Welcome to SmartDQC', 'Selamat datang ke SmartDQC')}
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: 440, lineHeight: 1.7 }}>
+          {t(
+            'Start by uploading a paediatric nutrition dataset. SmartDQC will clean, analyse, and visualise your data.',
+            'Mulakan dengan memuat naik dataset pemakanan pediatrik. SmartDQC akan membersih, menganalisis, dan menggambarkan data anda.',
+          )}
+        </p>
+        <div style={{ display: 'flex', gap: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+          {[
+            { n: '①', label: t('Upload', 'Muat Naik') },
+            { n: '②', label: t('Clean', 'Bersih') },
+            { n: '③', label: t('Analyse', 'Analisis') },
+          ].map(step => (
+            <div key={step.n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 24 }}>{step.n}</span>
+              <span>{step.label}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => nav('/upload')}
+          style={{
+            background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+            borderRadius: 'var(--radius-btn)', padding: '12px 28px',
+            fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15,
+            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+          }}
+        >
+          <Upload size={17} />
+          {t('Upload New Dataset', 'Muat Naik Dataset Baru')}
+        </button>
+      </div>
+    );
+  }
+
+  /* ── Loaded state ────────────────────────────────────────────────────── */
+  const indicators = [
+    { key: 'stunting',    enLabel: 'Stunting',    bmLabel: 'Bantut',        rate: agg.stunting,    rag: agg.stuntingRag    },
+    { key: 'wasting',     enLabel: 'Wasting',     bmLabel: 'Susut',         rate: agg.wasting,     rag: agg.wastingRag     },
+    { key: 'underweight', enLabel: 'Underweight', bmLabel: 'Kurang Berat',  rate: agg.underweight, rag: agg.underweightRag },
+    { key: 'overweight',  enLabel: 'Overweight',  bmLabel: 'Berlebihan',    rate: agg.overweight,  rag: agg.overweightRag  },
+  ];
+
+  const accentMap: Record<string, string> = {
+    stunting: 'var(--danger)', wasting: 'var(--warning)',
+    underweight: 'var(--warning)', overweight: 'var(--kkm-teal)',
+  };
 
   return (
-    <div>
-      {/* Header */}
-      <div style={st.header}>
-        <h1 style={st.h1}>{t('Dashboard', 'Papan Pemuka')}</h1>
-        {sessions.length > 0 && (
-          <span style={st.subtitle}>{t('Latest', 'Terkini')}: {sessions[0].filename}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* ── Header row ──────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1 }} />
+
+        {/* District chip */}
+        {selectedDistrict ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(0,163,224,0.12)', border: '1px solid var(--kkm-sky)',
+            borderRadius: 999, padding: '4px 12px', fontSize: 12,
+            fontWeight: 600, color: 'var(--kkm-sky)',
+          }}>
+            Malaysia — {selectedDistrict}
+            <button
+              onClick={() => handleDistrictClick(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--kkm-sky)', display: 'flex', alignItems: 'center', padding: 0 }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            fontSize: 12, color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 999, padding: '4px 12px',
+          }}>
+            {t('Malaysia — All Districts', 'Malaysia — Semua Daerah')}
+          </div>
+        )}
+
+        {summary?.latest_session && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {t('Last updated', 'Dikemaskini')}: {new Date(summary.latest_session.created_at).toLocaleDateString()}
+          </span>
         )}
       </div>
 
-      {/* KPI cards + quick actions */}
-      <div style={st.topRow}>
-        <div style={st.kpiGrid}>
-          <StatCard title={t('Active Sessions', 'Sesi Aktif')}  value={sessions.length}            icon="📁" color={theme.blue}    colorBg={theme.infoBg} />
-          <StatCard title={t('Avg Quality', 'Purata Kualiti')}  value={`${avgQ.toFixed(1)}%`}      icon="📊" color={theme.success} colorBg={theme.successBg} />
-          <StatCard title={t('Total Rows', 'Jumlah Baris')}     value={totalRows.toLocaleString()} icon="🗄️" color={theme.purple}  colorBg={theme.purpleBg} />
-          <StatCard title={t('Alerts (<60)', 'Amaran (<60)')}   value={alertCount}                 icon="⚠️" color={theme.danger}  colorBg={theme.dangerBg} />
-        </div>
-        <div style={st.actionCol}>
-          <ActionCard label={t('Upload New', 'Muat Naik Baru')}    icon="↑" path="/upload" />
-          <ActionCard label={t('Generate Report', 'Jana Laporan')} icon="▤" path="/reports" />
-          <ActionCard label={t('Ask AI', 'Tanya AI')}              icon="✧" path="/ai" />
-        </div>
-      </div>
+      {/* ── Hero row: Map + Indicators ──────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'stretch' }}>
 
-      {/* Quality trend */}
-      <div style={st.card}>
-        <div style={st.cardTitle}>{t('Quality Trend (Last 10 Sessions)', 'Trend Kualiti (10 Sesi Terkini)')}</div>
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={sparkData}>
-            <defs>
-              <linearGradient id="qGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor={theme.blue} stopOpacity={0.15} />
-                <stop offset="95%" stopColor={theme.blue} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="i" hide />
-            <YAxis domain={[0, 100]} hide />
-            <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, t('Quality', 'Kualiti')]} />
-            <Area type="monotone" dataKey="q" stroke={theme.blue} strokeWidth={2} dot={false} fill="url(#qGrad)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Recent sessions */}
-      <div style={st.card}>
-        <div style={st.cardTitle}>{t('Recent Sessions', 'Sesi Terkini')}</div>
-        {sessions.length === 0 ? (
-          <div style={st.empty}>{t('No sessions yet.', 'Tiada sesi lagi.')}</div>
-        ) : (
-          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            <table style={st.table}>
-              <thead>
-                <tr>
-                  {[t('File', 'Fail'), t('Type', 'Jenis'), t('Rows', 'Baris'), t('Score', 'Skor'), t('Action', 'Tindakan')].map(h => (
-                    <th key={h} style={st.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.slice(0, 8).map(sess => (
-                  <tr
-                    key={sess.cache_id} style={st.tr}
-                    onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--bg)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
-                  >
-                    <td style={st.td}>{sess.filename}</td>
-                    <td style={st.td}><span style={st.srcBadge}>{sess.source_type}</span></td>
-                    <td style={st.td}>{(sess.row_count ?? 0).toLocaleString()}</td>
-                    <td style={st.td}><QBadge score={sess.quality_score} /></td>
-                    <td style={st.td}>
-                      <button
-                        style={st.openBtn}
-                        onClick={() => navigate(`/quality?cache_id=${sess.cache_id}`)}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                      >
-                        {t('Open', 'Buka')}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Map */}
+        <div style={{
+          flex: '0 0 62%', background: 'var(--surface)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
+          padding: 20, boxShadow: 'var(--shadow-card)',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 12 }}>
+            {t('District Risk Map', 'Peta Risiko Daerah')}
           </div>
-        )}
-      </div>
+          <ChoroplethMap
+            districts={districts}
+            selectedDistrict={selectedDistrict}
+            onDistrictClick={handleDistrictClick}
+          />
+        </div>
 
-      {/* Geographic section */}
-      <div style={st.card}>
-        <div style={st.cardTitle}>{t('Geographic Risk Overview', 'Gambaran Risiko Geografi')}</div>
-        {sessions.length === 0 ? (
-          <div style={st.empty}>
-            {t('Upload a dataset to view geographic insights.', 'Muat naik dataset untuk melihat gambaran geografi.')}
-          </div>
-        ) : mapLoading ? (
-          <div style={st.center}>{t('Loading map...', 'Memuatkan peta...')}</div>
-        ) : (
-          <>
-            <div style={st.geoRow}>
-              <div style={{ flex: '0 0 55%' }}>
-                <ChoroplethMap districts={districts} />
+        {/* Indicator tiles */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {indicators.map(ind => (
+            <div key={ind.key} style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderLeft: `3px solid ${accentMap[ind.key]}`,
+              borderRadius: 'var(--radius-card)',
+              padding: '14px 16px',
+              boxShadow: 'var(--shadow-card)',
+              flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                  {lang === 'en' ? ind.enLabel : ind.bmLabel}
+                </span>
+                <RagBadge rag={ind.rag === 'green' ? 'good' : ind.rag === 'amber' ? 'warning' : 'critical'} lang={lang} />
               </div>
-              <div style={{ flex: '0 0 45%', paddingLeft: 24 }}>
-                <div style={{
-                  fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const,
-                  letterSpacing: '0.07em', color: 'var(--text-secondary)', marginBottom: 12,
-                }}>
-                  {t('National Average', 'Purata Nasional')}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <NutritionCard label={t('Stunting', 'Kelaparan')}            rate={aggregates.stunting}    rag={aggregates.stuntingRag} />
-                  <NutritionCard label={t('Wasting', 'Kurus')}                 rate={aggregates.wasting}     rag={aggregates.wastingRag} />
-                  <NutritionCard label={t('Underweight', 'Kekurangan Berat')}  rate={aggregates.underweight} rag={aggregates.underweightRag} />
-                  <NutritionCard label={t('Overweight', 'Berlebihan Berat')}   rate={aggregates.overweight}  rag={aggregates.overweightRag} />
-                </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {pct(ind.rate)}
               </div>
             </div>
-
-            {districtRisks.length > 0 && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ ...st.cardTitle, marginBottom: 12 }}>
-                  {t('District Risk Summary', 'Ringkasan Risiko Daerah')}
-                </div>
-                <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                  <table style={st.table}>
-                    <thead>
-                      <tr>
-                        {[t('District', 'Daerah'), t('Avg Score', 'Skor Purata'), t('High Risk', 'Risiko Tinggi')].map(h => (
-                          <th key={h} style={st.th}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {districtRisks.map(r => (
-                        <tr
-                          key={r.district} style={st.tr}
-                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--bg)'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
-                        >
-                          <td style={st.td}>{r.district}</td>
-                          <td style={{ ...st.td, textAlign: 'right' as const }}>{r.avg_score.toFixed(2)}</td>
-                          <td style={{ ...st.td, textAlign: 'right' as const }}>{r.high_risk_count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+          ))}
+        </div>
       </div>
+
+      {/* ── KPI strip ────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+        <StatCard
+          label={t('Children Processed', 'Kanak-kanak Diproses')}
+          value={fmt(summary?.total_children ?? null)}
+          accent="var(--kkm-blue)"
+          icon={<Users size={14} />}
+        />
+        <StatCard
+          label={t('Avg Quality Score', 'Purata Skor Kualiti')}
+          value={summary ? `${summary.avg_quality_score}%` : '—'}
+          accent="var(--kkm-teal)"
+          icon={<ShieldCheck size={14} />}
+        />
+        <StatCard
+          label={t('Sessions', 'Sesi')}
+          value={fmt(summary?.session_count ?? null)}
+          accent="var(--kkm-sky)"
+        />
+        <StatCard
+          label={t('Alerts', 'Amaran')}
+          value={fmt(summary?.alerts ?? null)}
+          accent={summary && summary.alerts > 0 ? 'var(--danger)' : 'var(--success)'}
+          icon={<AlertTriangle size={14} />}
+        />
+      </div>
+
+      {/* ── Secondary row ─────────────────────────────────────────────── */}
+      {kpi && (
+        <div style={{ display: 'flex', gap: 20 }}>
+
+          {/* Age group split */}
+          {kpi.age_group_breakdown && (
+            <div style={{
+              flex: '0 0 58%', background: 'var(--surface)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
+              padding: '18px 20px', boxShadow: 'var(--shadow-card)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 14 }}>
+                {t('Age Group Distribution', 'Taburan Kumpulan Umur')}
+              </div>
+              {[
+                { label: t('Under 2 Years', 'Bawah 2 Tahun'), pct: kpi.age_group_breakdown.under_2_pct, n: kpi.age_group_breakdown.under_2, color: 'var(--kkm-blue)' },
+                { label: t('Under 5 Years', 'Bawah 5 Tahun'), pct: kpi.age_group_breakdown.under_5_pct, n: kpi.age_group_breakdown.under_5, color: 'var(--kkm-sky)' },
+              ].map(row => (
+                <div key={row.label} style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <span>{row.label}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {(row.pct * 100).toFixed(1)}% &nbsp; ({row.n.toLocaleString()})
+                    </span>
+                  </div>
+                  <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${row.pct * 100}%`,
+                      background: row.color, borderRadius: 4,
+                      transition: 'width 0.6s ease',
+                    }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Top quality issues */}
+          {kpi.top_issues && kpi.top_issues.length > 0 && (
+            <div style={{
+              flex: 1, background: 'var(--surface)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
+              padding: '18px 20px', boxShadow: 'var(--shadow-card)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 14 }}>
+                {t('Top Quality Issues', 'Isu Kualiti Utama')}
+              </div>
+              {kpi.top_issues.slice(0, 3).map((issue, i) => (
+                <div
+                  key={i}
+                  onClick={() => nav('/quality')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 0', cursor: 'pointer',
+                    borderBottom: i < 2 ? '1px solid var(--border)' : 'none',
+                  }}
+                >
+                  <AlertTriangle size={14} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{issue.description}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {issue.count.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Recent sessions table ─────────────────────────────────────── */}
+      {sessions.length > 0 && (
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '16px 20px', borderBottom: '1px solid var(--border)',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {t('Recent Sessions', 'Sesi Terkini')}
+            </span>
+            <button
+              onClick={() => nav('/history')}
+              style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              {t('View all →', 'Lihat semua →')}
+            </button>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {[
+                  t('File', 'Fail'), t('Type', 'Jenis'), t('Rows', 'Baris'),
+                  t('Score', 'Skor'), t('Date', 'Tarikh'), t('Action', 'Tindakan'),
+                ].map(h => (
+                  <th key={h} style={{
+                    padding: '10px 20px', textAlign: 'left',
+                    fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+                    textTransform: 'uppercase', color: 'var(--text-secondary)',
+                  }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s, i) => (
+                <tr
+                  key={s.cache_id}
+                  style={{ borderBottom: i < sessions.length - 1 ? '1px solid var(--border)' : 'none' }}
+                >
+                  <td style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>
+                    {s.filename}
+                  </td>
+                  <td style={{ padding: '12px 20px' }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                      background: 'var(--surface-2)', color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                    }}>
+                      {s.source_type || '—'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {s.row_count.toLocaleString()}
+                  </td>
+                  <td style={{ padding: '12px 20px' }}>
+                    <RagBadge rag={s.quality_score >= 80 ? 'good' : s.quality_score >= 60 ? 'warning' : 'critical'} lang={lang} />
+                  </td>
+                  <td style={{ padding: '12px 20px', fontSize: 12, color: 'var(--text-muted)' }}>
+                    {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
+                  </td>
+                  <td style={{ padding: '12px 20px' }}>
+                    <button
+                      onClick={() => {
+                        setSession({ cacheId: s.cache_id, filename: s.filename, sourceType: s.source_type });
+                        nav('/quality');
+                      }}
+                      style={{
+                        background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+                        borderRadius: 'var(--radius-btn)', padding: '5px 12px',
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {t('Open', 'Buka')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const st: Record<string, React.CSSProperties> = {
-  center: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    height: 200, color: 'var(--text-secondary)', fontSize: 14,
-  },
-  header:    { marginBottom: 20, display: 'flex', alignItems: 'baseline', gap: 16 },
-  h1:        { margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' },
-  subtitle:  { fontSize: 13, color: 'var(--text-secondary)' },
-  topRow:    { display: 'flex', gap: 16, marginBottom: 20, alignItems: 'stretch' },
-  kpiGrid:   { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 },
-  actionCol: { display: 'flex', flexDirection: 'column', gap: 8, width: 180, flexShrink: 0 },
-  card: {
-    background: 'var(--surface)', border: '0.5px solid var(--border)',
-    borderRadius: 12, padding: 20, marginBottom: 20,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-  },
-  cardTitle: {
-    fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const,
-    letterSpacing: '0.07em', color: 'var(--text-secondary)', marginBottom: 16,
-  },
-  table:  { width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 },
-  th: {
-    textAlign: 'left' as const, padding: '8px 8px',
-    fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
-    textTransform: 'uppercase' as const, letterSpacing: '0.05em',
-    borderBottom: '0.5px solid var(--border)',
-    position: 'sticky' as const, top: 0, background: 'var(--surface)', zIndex: 1,
-  },
-  tr:  { borderBottom: '0.5px solid var(--border)', transition: 'background 0.1s ease' },
-  td:  { padding: '10px 8px', color: 'var(--text-primary)', verticalAlign: 'middle' as const },
-  srcBadge: {
-    background: 'var(--bg)', border: '0.5px solid var(--border)',
-    borderRadius: 4, padding: '2px 6px', fontSize: 11, color: 'var(--text-secondary)',
-  },
-  openBtn: {
-    background: 'transparent', border: '0.5px solid var(--border)',
-    borderRadius: 6, padding: '4px 14px', fontSize: 12,
-    cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 500,
-    transition: 'background 0.1s ease',
-  },
-  empty:  { color: 'var(--text-secondary)', fontSize: 13, padding: '20px 0', textAlign: 'center' as const },
-  geoRow: { display: 'flex', alignItems: 'flex-start', gap: 0 },
-};

@@ -1,29 +1,27 @@
 import React, { createContext, useContext, useState } from 'react';
 
-type Lang = 'EN' | 'MY';
+type Lang = 'en' | 'bm';
 
-interface LangCtx {
+interface LangContextValue {
   lang: Lang;
-  setLang: (l: Lang) => void;
-  t: (en: string, my: string) => string;
+  toggleLang: () => void;
+  t: (en: string, bm: string) => string;
 }
 
-const LanguageContext = createContext<LangCtx>({
-  lang: 'EN',
-  setLang: () => {},
-  t: (en) => en,
-});
+const LangContext = createContext<LangContextValue>({ lang: 'bm', toggleLang: () => {}, t: (_, bm) => bm });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>('EN');
-  const t = (en: string, my: string) => (lang === 'MY' ? my : en);
-  return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
-      {children}
-    </LanguageContext.Provider>
-  );
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('lang') as Lang) || 'bm');
+
+  const toggleLang = () => setLang(l => {
+    const next = l === 'en' ? 'bm' : 'en';
+    localStorage.setItem('lang', next);
+    return next;
+  });
+
+  const t = (en: string, bm: string) => lang === 'en' ? en : bm;
+
+  return <LangContext.Provider value={{ lang, toggleLang, t }}>{children}</LangContext.Provider>;
 }
 
-export function useLang() {
-  return useContext(LanguageContext);
-}
+export const useLang = () => useContext(LangContext);

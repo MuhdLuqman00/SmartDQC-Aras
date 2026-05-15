@@ -1,609 +1,193 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { AlertCircle, AlertTriangle, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
+import { SessionGuard } from '../components/SessionGuard';
+import { RagBadge, scoreToRag } from '../components/RagBadge';
 
-/* ── Interfaces ─────────────────────────────────────────────────────────── */
+interface Issue { description: string; severity: 'critical' | 'warning' | 'info'; count: number; samples?: string[]; }
+interface AnomalyRow { row_index: number; columns: string[]; suggestion: string; }
 
-interface QualityColumn {
-  name: string;
-  null_count: number;
-  null_percent: number;
-  unique_count: number;
-  is_numeric: boolean;
-  min?: number;
-  max?: number;
-  mean?: number;
-  sample_values: unknown[];
-}
-
-interface QualityResponse {
-  total_rows: number;
-  total_columns: number;
-  overall_completeness: number;
-  columns: QualityColumn[];
-}
-
-interface AnomalyRow {
-  row_index: number;
-  reason: string;
-}
-
-interface AnomalyResponse {
-  anomaly_rows: AnomalyRow[];
-  anomaly_rate: number;
-}
-
-/* ── ArcGauge ────────────────────────────────────────────────────────────── */
-
-function ArcGauge({ value, label }: { value: number; label: string }): JSX.Element {
-  const r = 80;
-  const cx = 100;
-  const cy = 100;
-  const startAngle = -210;
-  const endAngle = 30;
-  const range = endAngle - startAngle; // 240 degrees
-  const arc = (value / 100) * range;
-
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const x1 = cx + r * Math.cos(toRad(startAngle));
-  const y1 = cy + r * Math.sin(toRad(startAngle));
-  const x2 = cx + r * Math.cos(toRad(endAngle));
-  const y2 = cy + r * Math.sin(toRad(endAngle));
-  const xA = cx + r * Math.cos(toRad(startAngle + arc));
-  const yA = cy + r * Math.sin(toRad(startAngle + arc));
-
-  const bgPath = `M ${x1} ${y1} A ${r} ${r} 0 1 1 ${x2} ${y2}`;
-  const fgPath = `M ${x1} ${y1} A ${r} ${r} 0 ${arc > 180 ? 1 : 0} 1 ${xA} ${yA}`;
-
-  const colour =
-    value >= 80 ? 'var(--success)' : value >= 60 ? 'var(--warning)' : 'var(--danger)';
-
+function ScoreGauge({ score }: { score: number }) {
+  const rag = scoreToRag(score);
+  const color = rag === 'good' ? 'var(--success)' : rag === 'warning' ? 'var(--warning)' : 'var(--danger)';
+  const r = 54, circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
   return (
-    <svg viewBox="0 0 200 160" width={200} height={160}>
-      <path
-        d={bgPath}
-        fill="none"
-        stroke="var(--border)"
-        strokeWidth={12}
-        strokeLinecap="round"
-      />
-      <path
-        d={fgPath}
-        fill="none"
-        stroke={colour}
-        strokeWidth={12}
-        strokeLinecap="round"
-      />
-      <text
-        x={cx}
-        y={cy + 10}
-        textAnchor="middle"
-        fontSize={28}
-        fontWeight={700}
-        fill={colour}
-      >
-        {value.toFixed(1)}%
+    <svg width={140} height={140} viewBox="0 0 140 140">
+      <circle cx={70} cy={70} r={r} fill="none" stroke="var(--border)" strokeWidth={12} />
+      <circle cx={70} cy={70} r={r} fill="none" stroke={color} strokeWidth={12}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform="rotate(-90 70 70)" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+      <text x={70} y={68} textAnchor="middle" fontSize={24} fontWeight={700} fill="var(--text-primary)" fontFamily="Inter, sans-serif">
+        {score.toFixed(0)}
       </text>
-      <text
-        x={cx}
-        y={cy + 32}
-        textAnchor="middle"
-        fontSize={12}
-        fill="var(--text-muted)"
-      >
-        {label}
+      <text x={70} y={85} textAnchor="middle" fontSize={11} fill="var(--text-muted)" fontFamily="Inter, sans-serif">
+        / 100
       </text>
     </svg>
   );
 }
 
-/* ── Page ────────────────────────────────────────────────────────────────── */
+export function QualityPage() {
+  const { t, lang } = useLang();
+  const { cacheId, qualityScore, cleanStats } = useSession();
+  const [anomalies, setAnomalies] = useState<AnomalyRow[] | null>(null);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [expanded, setExpanded] = useState<number | null>(null);
 
-export function QualityPage(): JSX.Element {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { t } = useLang();
+  const score = qualityScore ?? 0;
+  const stats = cleanStats as Record<string, unknown> | null;
+  const issues: Issue[] = (stats?.top_issues as Issue[]) ?? [];
+  const rulesApplied: string[] = (stats?.rules_applied as string[]) ?? [];
 
-  const [quality, setQuality] = useState<QualityResponse | null>(null);
-  const [anomaly, setAnomaly] = useState<AnomalyResponse | null>(null);
-  const [cacheId, setCacheId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [anomalyLoading, setAnomalyLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedRow, setSelectedRow] = useState<string | null>(null);
-
-  /* On mount: read cache_id from URL and run quality check */
-  useEffect(() => {
-    const id = searchParams.get('cache_id') ?? '';
-    setCacheId(id);
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    api
-      .post<QualityResponse>('/clean/quality-check', { cache_id: id })
-      .then((res) => setQuality(res.data))
-      .catch(() => setError('Gagal menjalankan semakan kualiti.'))
-      .finally(() => setLoading(false));
-  }, [searchParams]);
-
-  /* File upload quality check */
-  const runQualityCheck = async (file: File): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-      const res = await api.post<QualityResponse>('/clean/quality-check', fd);
-      setQuality(res.data);
-    } catch {
-      setError('Gagal menjalankan semakan kualiti.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* Anomaly detection */
-  const runAnomalyCheck = async (): Promise<void> => {
+  const runAnomalyDetection = async () => {
     if (!cacheId) return;
     setAnomalyLoading(true);
     try {
-      const res = await api.post<AnomalyResponse>(`/ml/suggest?cache_id=${cacheId}`);
-      setAnomaly(res.data);
-    } catch {
-      /* silently fail anomaly */
-    } finally {
-      setAnomalyLoading(false);
-    }
+      const r = await api.post<{ anomalies: AnomalyRow[] }>(`/ml/suggest?cache_id=${cacheId}`);
+      setAnomalies(r.data.anomalies ?? []);
+    } catch { setAnomalies([]); }
+    finally { setAnomalyLoading(false); }
   };
 
-  /* Dropzone */
-  const onDrop = useCallback(
-    (accepted: File[]) => {
-      if (accepted.length > 0) void runQualityCheck(accepted[0]);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'text/csv': ['.csv'] },
-    multiple: false,
-  });
-
-  /* Derived */
-  const completeness = quality ? quality.overall_completeness : 0;
+  const sevIcon = (sev: string) => {
+    if (sev === 'critical') return <AlertCircle size={15} style={{ color: 'var(--danger)', flexShrink: 0 }} />;
+    if (sev === 'warning')  return <AlertTriangle size={15} style={{ color: 'var(--warning)', flexShrink: 0 }} />;
+    return <Info size={15} style={{ color: 'var(--kkm-sky)', flexShrink: 0 }} />;
+  };
 
   return (
-    <div style={s.page}>
-      <h1 style={s.h1}>{t('Quality Check', 'Semakan Kualiti')}</h1>
+    <SessionGuard>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
-      {/* ── Dropzone ── */}
-      <div
-        {...getRootProps()}
-        style={{
-          ...s.dropzone,
-          borderColor: isDragActive ? 'var(--blue)' : 'var(--border)',
-          background: isDragActive ? 'var(--surface-2)' : 'var(--surface)',
-        }}
-      >
-        <input {...getInputProps()} />
-        <span style={s.dropText}>
-          {isDragActive
-            ? t('Drop file here...', 'Lepaskan fail di sini...')
-            : t('Drag CSV file or click to upload', 'Seret fail CSV atau klik untuk muat naik')}
-        </span>
-      </div>
-
-      {error && <div style={s.errorBanner}>{error}</div>}
-
-      {/* ── Gauge row ── */}
-      <div style={s.gaugeRow}>
-        {quality ? (
-          <>
-            <ArcGauge value={completeness} label={t('Completeness', 'Kelengkapan')} />
-            <div style={s.statsRow}>
-              <div style={s.stat}>
-                <span style={s.statLabel}>{t('Total Rows', 'Jumlah Baris')}</span>
-                <span style={s.statValue}>{quality.total_rows.toLocaleString()}</span>
-              </div>
-              <div style={s.stat}>
-                <span style={s.statLabel}>{t('Total Columns', 'Jumlah Lajur')}</span>
-                <span style={s.statValue}>{quality.total_columns}</span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={s.emptyGauge}>
-            {loading ? t('Analysing quality...', 'Menganalisis kualiti...') : t('No data — upload a file', 'Tiada data — muat naik fail')}
+        {/* Left: score gauge */}
+        <div style={{
+          flex: '0 0 260px', background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', padding: '28px 20px',
+          boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+            {t('Quality Score', 'Skor Kualiti')}
           </div>
-        )}
-      </div>
+          <ScoreGauge score={score} />
+          <RagBadge rag={scoreToRag(score)} lang={lang} />
 
-      {/* ── Two-column content ── */}
-      {quality && (
-        <div style={s.twoCol}>
-          {/* Left 55%: column table */}
-          <div style={s.leftCol}>
-            <div style={s.card}>
-              <div style={s.cardTitle}>{t('Column Breakdown', 'Pecahan Lajur')}</div>
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    <th style={s.th}>{t('Name', 'Nama')}</th>
-                    <th style={s.th}>Null%</th>
-                    <th style={s.th}>{t('Type', 'Jenis')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quality.columns.map((col) => (
-                    <tr
-                      key={col.name}
-                      style={{
-                        ...s.tr,
-                        background:
-                          selectedRow === col.name
-                            ? 'var(--surface-2)'
-                            : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                      onClick={() =>
-                        setSelectedRow(selectedRow === col.name ? null : col.name)
-                      }
-                    >
-                      <td style={s.td}>
-                        <code style={s.code}>{col.name}</code>
-                      </td>
-                      <td style={s.td}>
-                        <div style={s.nullBarWrap}>
-                          <div style={s.nullBarTrack}>
-                            <div
-                              style={{
-                                ...s.nullBarFill,
-                                width: `${Math.min(col.null_percent * 100, 100)}%`,
-                                background:
-                                  col.null_percent > 0.15
-                                    ? 'var(--danger)'
-                                    : col.null_percent > 0.05
-                                    ? 'var(--warning)'
-                                    : 'var(--success)',
-                              }}
-                            />
-                          </div>
-                          <span style={s.nullPct}>
-                            {(col.null_percent * 100).toFixed(1)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td style={s.td}>
-                        <span
-                          style={{
-                            ...s.badge,
-                            background: col.is_numeric
-                              ? 'rgba(37,99,235,0.1)'
-                              : 'var(--surface-2)',
-                            color: col.is_numeric
-                              ? 'var(--blue)'
-                              : 'var(--text-secondary)',
-                          }}
-                        >
-                          {col.is_numeric ? t('Numeric', 'Angka') : t('Text', 'Teks')}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {stats && (
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              {[
+                { label: t('Rows before', 'Baris sebelum'), value: String((stats.rows_before as number ?? 0).toLocaleString()) },
+                { label: t('Rows after', 'Baris selepas'),  value: String((stats.rows_after as number ?? 0).toLocaleString())  },
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>{row.value}</span>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Right 45%: anomaly panel */}
-          <div style={s.rightCol}>
-            <div style={s.card}>
-              <div style={s.cardTitle}>{t('Anomaly Detection', 'Pengesanan Anomali')}</div>
+        {/* Right: issues + rules */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-              <button
-                style={{
-                  ...s.anomalyBtn,
-                  opacity: anomalyLoading ? 0.6 : 1,
-                  transition: 'all 0.15s ease',
-                }}
-                onClick={() => void runAnomalyCheck()}
-                disabled={anomalyLoading}
-              >
-                {anomalyLoading ? t('Analysing...', 'Menganalisis...') : t('Run Anomaly', 'Jalankan Anomali')}
-              </button>
-
-              {anomaly && (
-                <>
-                  <div style={s.anomalyRateRow}>
-                    <span style={s.anomalyRateLabel}>{t('Anomaly Rate', 'Kadar Anomali')}</span>
-                    <span
-                      style={{
-                        ...s.anomalyRateBadge,
-                        background:
-                          anomaly.anomaly_rate > 0.1
-                            ? 'var(--danger-bg)'
-                            : 'var(--warning-bg)',
-                        color:
-                          anomaly.anomaly_rate > 0.1
-                            ? 'var(--danger)'
-                            : 'var(--warning)',
-                      }}
-                    >
-                      {(anomaly.anomaly_rate * 100).toFixed(1)}%
-                    </span>
+          {/* Issues */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>
+              {t('Issues Detected', 'Isu Dikesan')}
+            </div>
+            {issues.length === 0 ? (
+              <div style={{ padding: '24px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+                {t('No issues detected.', 'Tiada isu dikesan.')}
+              </div>
+            ) : issues.map((issue, i) => (
+              <div key={i} style={{ borderBottom: i < issues.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', cursor: issue.samples?.length ? 'pointer' : 'default' }}
+                  onClick={() => setExpanded(expanded === i ? null : i)}
+                >
+                  {sevIcon(issue.severity)}
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{issue.description}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)' }}>
+                    {issue.count.toLocaleString()}
+                  </span>
+                  {issue.samples?.length ? (expanded === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : null}
+                </div>
+                {expanded === i && issue.samples && (
+                  <div style={{ padding: '0 20px 12px 44px', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {issue.samples.join(', ')}
                   </div>
+                )}
+              </div>
+            ))}
+          </div>
 
-                  {anomaly.anomaly_rows.length > 0 ? (
-                    <table style={s.table}>
-                      <thead>
-                        <tr>
-                          <th style={s.th}>{t('Row', 'Baris')}</th>
-                          <th style={s.th}>{t('Reason', 'Sebab')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {anomaly.anomaly_rows.map((row) => (
-                          <tr key={row.row_index} style={s.tr}>
-                            <td style={{ ...s.td, width: 60 }}>
-                              <code style={s.code}>#{row.row_index}</code>
-                            </td>
-                            <td
-                              style={{
-                                ...s.td,
-                                color: 'var(--text-secondary)',
-                                fontSize: 12,
-                              }}
-                            >
-                              {row.reason}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div style={s.noAnomaly}>{t('No anomalies detected.', 'Tiada anomali dikesan.')}</div>
-                  )}
-                </>
+          {/* Rules applied */}
+          {rulesApplied.length > 0 && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                {t('Rules Applied', 'Peraturan Digunakan')}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {rulesApplied.map((r: string) => (
+                  <span key={r} style={{ fontSize: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 12px', color: 'var(--text-secondary)' }}>
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Anomaly detection */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: anomalies ? 16 : 0 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{t('Anomaly Detection', 'Pengesanan Anomali')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {t('IsolationForest — flags statistically unusual rows', 'IsolationForest — mengenal pasti baris yang tidak biasa secara statistik')}
+                </div>
+              </div>
+              {anomalies === null && (
+                <button
+                  onClick={runAnomalyDetection}
+                  disabled={anomalyLoading}
+                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: anomalyLoading ? 0.6 : 1 }}
+                >
+                  {anomalyLoading ? t('Running…', 'Sedang berjalan…') : t('Run Detection', 'Jalankan')}
+                </button>
               )}
             </div>
+
+            {anomalies !== null && (
+              anomalies.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--kkm-teal)' }}>
+                  {t('No anomalies detected.', 'Tiada anomali dikesan.')}
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      {[t('Row', 'Baris'), t('Columns', 'Lajur'), t('Suggestion', 'Cadangan')].map(h => (
+                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anomalies.map((a, i) => (
+                      <tr key={i} style={{ borderBottom: i < anomalies.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)' }}>{a.row_index}</td>
+                        <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-secondary)' }}>{a.columns.join(', ')}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{a.suggestion}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            )}
           </div>
         </div>
-      )}
-
-      {/* ── Bottom CTA ── */}
-      {quality && (
-        <div style={s.ctaRow}>
-          <button
-            style={{ ...s.cleanBtn, transition: 'all 0.15s ease' }}
-            onClick={() => navigate(`/cleaning?cache_id=${cacheId}`)}
-          >
-            {t('Run Cleaning →', 'Jalankan Pembersihan →')}
-          </button>
-        </div>
-      )}
-    </div>
+      </div>
+    </SessionGuard>
   );
 }
-
-/* ── Styles ──────────────────────────────────────────────────────────────── */
-
-const s: Record<string, React.CSSProperties> = {
-  page: {
-    padding: '24px 0',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 20,
-  },
-  h1: {
-    margin: 0,
-    fontSize: 22,
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-  },
-
-  /* Dropzone */
-  dropzone: {
-    height: 80,
-    border: '0.5px dashed var(--border)',
-    borderRadius: 8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-  dropText: {
-    fontSize: 13,
-    color: 'var(--text-muted)',
-    pointerEvents: 'none',
-  },
-
-  /* Error */
-  errorBanner: {
-    padding: '10px 14px',
-    background: 'var(--danger-bg)',
-    color: 'var(--danger)',
-    borderRadius: 6,
-    fontSize: 13,
-    border: '0.5px solid var(--danger)',
-  },
-
-  /* Gauge */
-  gaugeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 32,
-    padding: '8px 0',
-  },
-  emptyGauge: {
-    fontSize: 14,
-    color: 'var(--text-muted)',
-    padding: '24px 0',
-  },
-  statsRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  stat: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-  },
-
-  /* Two-column */
-  twoCol: {
-    display: 'grid',
-    gridTemplateColumns: '55fr 45fr',
-    gap: 16,
-    alignItems: 'start',
-  },
-  leftCol: {},
-  rightCol: {},
-
-  /* Card */
-  card: {
-    background: 'var(--surface)',
-    border: '0.5px solid var(--border)',
-    borderRadius: 8,
-    padding: 20,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  cardTitle: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-  },
-
-  /* Table */
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    fontSize: 13,
-  },
-  th: {
-    textAlign: 'left' as const,
-    padding: '6px 10px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-    borderBottom: '0.5px solid var(--border)',
-  },
-  tr: {
-    borderBottom: '0.5px solid var(--border)',
-  },
-  td: {
-    padding: '9px 10px',
-    verticalAlign: 'middle' as const,
-  },
-  code: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: 'var(--text-primary)',
-  },
-
-  /* Null bar */
-  nullBarWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  nullBarTrack: {
-    width: 56,
-    height: 4,
-    background: 'var(--border)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  nullBarFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  nullPct: {
-    fontSize: 12,
-    color: 'var(--text-secondary)',
-    minWidth: 36,
-  },
-
-  /* Badge */
-  badge: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: 4,
-    fontSize: 11,
-    fontWeight: 500,
-  },
-
-  /* Anomaly */
-  anomalyBtn: {
-    padding: '8px 16px',
-    background: 'var(--navy)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    alignSelf: 'flex-start',
-  },
-  anomalyRateRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-  },
-  anomalyRateLabel: {
-    fontSize: 13,
-    color: 'var(--text-secondary)',
-  },
-  anomalyRateBadge: {
-    padding: '3px 10px',
-    borderRadius: 12,
-    fontSize: 13,
-    fontWeight: 700,
-  },
-  noAnomaly: {
-    fontSize: 13,
-    color: 'var(--text-muted)',
-    padding: '8px 0',
-  },
-
-  /* Bottom CTA */
-  ctaRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    paddingTop: 4,
-  },
-  cleanBtn: {
-    padding: '12px 24px',
-    background: 'var(--blue)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-};

@@ -1786,6 +1786,7 @@ async def risk_forecast(req: ForecastRequest):
 @app.post("/kpi/dashboard")
 async def kpi_dashboard_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+    district: str | None = Query(None, description="Filter by district name"),
 ):
     """Return RAG traffic-light KPI status benchmarked against Malaysian national targets."""
     entry = _cleaned_cache.get(cache_id)
@@ -1793,7 +1794,15 @@ async def kpi_dashboard_endpoint(
         raise HTTPException(
             404, "cache_id not found — run /clean/run first or check the UUID"
         )
-    result = compute_kpi_dashboard(entry["df"])
+    df = entry["df"]
+    if district:
+        district_col = next(
+            (c for c in df.columns if any(k in c.lower() for k in ("district", "daerah", "kawasan"))),
+            None,
+        )
+        if district_col:
+            df = df[df[district_col].str.lower() == district.lower()]
+    result = compute_kpi_dashboard(df)
     return JSONResponse(content=json_safe(result))
 
 
@@ -2687,6 +2696,49 @@ async def entity_link(req: EntityLinkRequest):
     }
 
 
+@app.get("/dashboard/summary")
+def dashboard_summary(db=Depends(get_db)):
+    """Aggregate stats across all persisted datasets for the dashboard landing."""
+    from .db.models import Dataset
+
+    datasets = db.query(Dataset).all()
+    if not datasets:
+        return {
+            "total_children": 0,
+            "avg_quality_score": 0.0,
+            "session_count": 0,
+            "alerts": 0,
+            "latest_session": None,
+            "source_breakdown": {},
+        }
+
+    total_children = sum(d.row_count or 0 for d in datasets)
+    scores = [d.quality_score for d in datasets if d.quality_score is not None]
+    avg_quality = round(sum(scores) / len(scores), 1) if scores else 0.0
+    alerts = sum(1 for d in datasets if (d.quality_score or 100) < 60)
+
+    source_breakdown: dict[str, int] = {}
+    for d in datasets:
+        k = d.source_type or "unknown"
+        source_breakdown[k] = source_breakdown.get(k, 0) + 1
+
+    latest = sorted(datasets, key=lambda d: d.created_at, reverse=True)[0]
+
+    return {
+        "total_children": total_children,
+        "avg_quality_score": avg_quality,
+        "session_count": len(datasets),
+        "alerts": alerts,
+        "latest_session": {
+            "cache_id": latest.id,
+            "filename": latest.filename,
+            "source_type": latest.source_type,
+            "created_at": latest.created_at.isoformat(),
+        },
+        "source_breakdown": source_breakdown,
+    }
+
+
 @app.get("/sessions")
 def list_sessions(db=Depends(get_db)):
     """List the 100 most recent cleaned sessions persisted to the database."""
@@ -2700,6 +2752,7 @@ def list_sessions(db=Depends(get_db)):
             "source_type": r.source_type,
             "row_count": r.row_count or 0,
             "quality_score": r.quality_score or 0,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
     ]

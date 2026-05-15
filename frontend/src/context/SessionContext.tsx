@@ -1,43 +1,51 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
-interface SessionContextType {
-  currentCacheId: string | null;
-  setCurrentCacheId: (id: string | null) => void;
-  currentSession: SessionInfo | null;
-  setCurrentSession: (session: SessionInfo | null) => void;
+export interface SessionState {
+  cacheId:      string | null;
+  filename:     string | null;
+  sourceType:   string | null;
+  rowCount:     number | null;
+  qualityScore: number | null;
+  cleanStats:   Record<string, unknown> | null;
+  preview:      Record<string, unknown>[] | null;
 }
 
-interface SessionInfo {
-  cache_id: string;
-  filename: string;
-  source_type: string;
-  row_count?: number;
-  quality_score?: number;
+interface SessionContextValue extends SessionState {
+  setSession: (s: Partial<SessionState>) => void;
+  clearSession: () => void;
+  /** legacy aliases used by Sidebar */
+  currentCacheId:    string | null;
+  currentFilename:   string | null;
+  currentSourceType: string | null;
 }
 
-const SessionContext = createContext<SessionContextType>({
-  currentCacheId: null,
-  setCurrentCacheId: () => {},
-  currentSession: null,
-  setCurrentSession: () => {},
-});
+const empty: SessionState = {
+  cacheId: null, filename: null, sourceType: null,
+  rowCount: null, qualityScore: null, cleanStats: null, preview: null,
+};
+
+const SessionContext = createContext<SessionContextValue>({} as SessionContextValue);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [currentCacheId, setCurrentCacheId] = useState<string | null>(null);
-  const [currentSession, setCurrentSession] = useState<SessionInfo | null>(null);
+  const [session, setSessionState] = useState<SessionState>(empty);
+
+  const setSession = (s: Partial<SessionState>) =>
+    setSessionState(prev => ({ ...prev, ...s }));
+
+  const clearSession = () => setSessionState(empty);
 
   return (
     <SessionContext.Provider value={{
-      currentCacheId,
-      setCurrentCacheId,
-      currentSession,
-      setCurrentSession,
+      ...session,
+      setSession,
+      clearSession,
+      currentCacheId:    session.cacheId,
+      currentFilename:   session.filename,
+      currentSourceType: session.sourceType,
     }}>
       {children}
     </SessionContext.Provider>
   );
 }
 
-export function useSession() {
-  return useContext(SessionContext);
-}
+export const useSession = () => useContext(SessionContext);

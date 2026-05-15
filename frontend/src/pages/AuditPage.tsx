@@ -1,236 +1,121 @@
 import React, { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 
 interface AuditEntry {
-  id: number; action: string; dataset_id?: number;
-  detail: string; user_id?: number; created_at: string;
+  id: number;
+  action: string;
+  details: string | null;
+  username: string | null;
+  created_at: string;
 }
 
-type ActionCategory = 'upload' | 'clean' | 'report' | 'other';
-
-function actionCategory(action: string): ActionCategory {
-  if (action.startsWith('upload')) return 'upload';
-  if (action.startsWith('clean'))  return 'clean';
-  if (action.startsWith('report')) return 'report';
-  return 'other';
-}
-
-const catColor: Record<ActionCategory, string> = {
-  upload: 'var(--info-bg)',
-  clean:  'var(--success-bg)',
-  report: 'var(--purple-bg)',
-  other:  'var(--surface-2)',
-};
-
-const catTextColor: Record<ActionCategory, string> = {
-  upload: 'var(--info)',
-  clean:  'var(--success)',
-  report: 'var(--purple)',
-  other:  'var(--text-muted)',
-};
+const PAGE_SIZE = 50;
 
 export function AuditPage() {
   const { t } = useLang();
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [datasetFilter, setDatasetFilter] = useState<string>('');
-  const [actionFilter, setActionFilter] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [filtered, setFiltered] = useState<AuditEntry[]>([]);
+  const [actionFilter, setActionFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    api.get<AuditEntry[]>('/audit/log', { params: { limit: 100 } })
-      .then(r => setEntries(r.data || []))
-      .catch(() => {
-        setError(t('Failed to load audit log.', 'Gagal memuat log audit.'));
-        setEntries([]);
-      })
-      .finally(() => setLoading(false));
+    api.get<AuditEntry[]>('/audit/log?limit=500').then(r => {
+      setLogs(r.data); setFiltered(r.data);
+    }).finally(() => setLoading(false));
   }, []);
 
-  const filtered = entries.filter(e => {
-    const matchDs = !datasetFilter || String(e.dataset_id) === datasetFilter;
-    const matchAct = !actionFilter || actionCategory(e.action) === actionFilter;
-    return matchDs && matchAct;
-  });
+  const uniqueActions = Array.from(new Set(logs.map(l => l.action))).sort();
 
-  function truncateDetail(detail: string, maxLen: number = 80): string {
-    return detail.length > maxLen ? detail.slice(0, maxLen) + '…' : detail;
-  }
+  const applyFilter = (action: string) => {
+    setActionFilter(action);
+    setPage(0);
+    setFiltered(action ? logs.filter(l => l.action === action) : logs);
+  };
 
-  function formatMasa(iso: string): string {
-    try {
-      return new Date(iso).toLocaleString('ms-MY');
-    } catch { return iso; }
-  }
+  const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
+  const exportCsv = () => {
+    const header = ['Time', 'Action', 'Details', 'User'].join(',');
+    const rows = filtered.map(l => [l.created_at, l.action, `"${(l.details ?? '').replace(/"/g, '""')}"`, l.username ?? ''].join(','));
+    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'audit_log.csv'; a.click();
+  };
 
   return (
     <div>
-      <h1 style={pg.h1}>{t('Audit Log', 'Log Audit')}</h1>
-
-      <div style={pg.filterBar}>
-        <input
-          type="text"
-          style={pg.input}
-          placeholder={t('Dataset ID', 'ID Dataset')}
-          value={datasetFilter}
-          onChange={e => setDatasetFilter(e.target.value)}
-        />
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <select
-          style={pg.select}
           value={actionFilter}
-          onChange={e => setActionFilter(e.target.value)}
+          onChange={e => applyFilter(e.target.value)}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}
         >
-          <option value="">{t('All Actions', 'Semua Tindakan')}</option>
-          <option value="upload">upload</option>
-          <option value="clean">clean</option>
-          <option value="report">report</option>
-          <option value="other">other</option>
+          <option value="">{t('All actions', 'Semua tindakan')}</option>
+          {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {filtered.length.toLocaleString()} {t('entries', 'entri')}
+        </span>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={exportCsv}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '7px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}
+        >
+          <Download size={14} /> {t('Export CSV', 'Eksport CSV')}
+        </button>
       </div>
 
-      {error && (
-        <div style={pg.errorBanner}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={pg.empty}>{t('Loading audit log…', 'Memuatkan log audit…')}</div>
-      ) : filtered.length === 0 ? (
-        <div style={pg.empty}>{t('No audit records.', 'Tiada rekod audit.')}</div>
-      ) : (
-        <div style={pg.tableWrap}>
-          <table style={pg.table}>
+      {/* Table */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'auto', boxShadow: 'var(--shadow-card)' }}>
+        {loading ? (
+          <div style={{ padding: 40, color: 'var(--text-muted)', textAlign: 'center' }}>{t('Loading…', 'Memuatkan…')}</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr>
-                <th style={pg.th}>ID</th>
-                <th style={pg.th}>{t('Time', 'Masa')}</th>
-                <th style={pg.th}>{t('Action', 'Tindakan')}</th>
-                <th style={pg.th}>{t('Detail', 'Detail')}</th>
-                <th style={pg.th}>{t('User', 'Pengguna')}</th>
+              <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                {[t('Time', 'Masa'), t('Action', 'Tindakan'), t('Details', 'Butiran'), t('User', 'Pengguna')].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, fontSize: 11, letterSpacing: '0.06em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map(e => {
-                const cat = actionCategory(e.action);
-                return (
-                  <tr key={e.id} style={pg.tr}>
-                    <td style={pg.td}>{e.id}</td>
-                    <td style={pg.td}>{formatMasa(e.created_at)}</td>
-                    <td style={pg.td}>
-                      <span style={{
-                        ...pg.badge,
-                        backgroundColor: catColor[cat],
-                        color: catTextColor[cat],
-                      }}>
-                        {e.action}
-                      </span>
-                    </td>
-                    <td style={pg.tdDetail}>{truncateDetail(e.detail)}</td>
-                    <td style={pg.td}>{e.user_id ?? '—'}</td>
-                  </tr>
-                );
-              })}
+              {pageRows.map((entry, i) => (
+                <tr key={entry.id} style={{ borderBottom: i < pageRows.length - 1 ? '1px solid var(--border)' : 'none', background: i % 2 === 0 ? 'transparent' : 'var(--surface-2)' }}>
+                  <td style={{ padding: '10px 16px', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' }}>
+                    {new Date(entry.created_at).toLocaleString()}
+                  </td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                      {entry.action}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', maxWidth: 360 }}>
+                    {entry.details ?? '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    {entry.username ?? '—'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 14px', cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>←</button>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+            {page + 1} / {totalPages}
+          </span>
+          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 14px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalPages - 1 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>→</button>
         </div>
       )}
     </div>
   );
 }
-
-const pg: Record<string, React.CSSProperties> = {
-  h1: {
-    margin: '0 0 16px',
-    fontSize: 24,
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-  },
-  filterBar: {
-    display: 'flex',
-    gap: 12,
-    marginBottom: 16,
-  },
-  input: {
-    padding: '8px 12px',
-    borderRadius: 4,
-    border: '0.5px solid var(--border)',
-    fontSize: 13,
-    color: 'var(--text-primary)',
-    backgroundColor: 'var(--surface)',
-    transition: 'all 0.15s ease',
-  },
-  select: {
-    padding: '8px 12px',
-    borderRadius: 4,
-    border: '0.5px solid var(--border)',
-    fontSize: 13,
-    color: 'var(--text-primary)',
-    backgroundColor: 'var(--surface)',
-    transition: 'all 0.15s ease',
-  },
-  tableWrap: {
-    backgroundColor: 'var(--surface)',
-    borderRadius: 4,
-    border: '0.5px solid var(--border)',
-    overflow: 'hidden',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: 13,
-  },
-  th: {
-    padding: '12px 16px',
-    backgroundColor: 'var(--surface)',
-    borderBottom: '0.5px solid var(--border)',
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-    textAlign: 'left',
-    fontSize: 12,
-  },
-  tr: {
-    borderBottom: '0.5px solid var(--border)',
-    transition: 'all 0.15s ease',
-  },
-  td: {
-    padding: '12px 16px',
-    color: 'var(--text-primary)',
-    fontSize: 12,
-  },
-  tdDetail: {
-    padding: '12px 16px',
-    color: 'var(--text-primary)',
-    fontSize: 12,
-    maxWidth: 400,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  badge: {
-    borderRadius: 9999,
-    padding: '3px 10px',
-    fontSize: 12,
-    fontWeight: 600,
-    display: 'inline-block',
-    transition: 'all 0.15s ease',
-  },
-  empty: {
-    fontSize: 14,
-    color: 'var(--text-muted)',
-    padding: '40px 0',
-    textAlign: 'center',
-  },
-  errorBanner: {
-    marginBottom: 16,
-    padding: '12px 16px',
-    backgroundColor: 'var(--danger-bg)',
-    color: 'var(--danger)',
-    borderRadius: 4,
-    border: '0.5px solid var(--danger)',
-    fontSize: 13,
-  },
-};
