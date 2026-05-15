@@ -657,7 +657,6 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
   },
   pgInfo: { fontSize: 12, color: 'var(--text-muted)' },
-  pgInfo: { fontSize: 12, color: 'var(--text-muted)' },
 
   profileGrid: {
     display: 'grid',

@@ -140,7 +140,10 @@ export function UploadPage() {
     if (!preview) return;
     setLoading(true);
     try {
-      await api.post('/clean/run', { cache_id: preview.cache_id, column_map: columnMap });
+      const fd = new FormData();
+      fd.append('cache_id', preview.cache_id);
+      fd.append('data_type', sourceType);
+      await api.post('/clean/run', fd);
       navigate(`/cleaning?cache_id=${preview.cache_id}`);
     } catch {
       setError('Gagal memulakan pembersihan.');

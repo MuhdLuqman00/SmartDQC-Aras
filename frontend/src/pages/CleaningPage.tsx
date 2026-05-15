@@ -145,10 +145,10 @@ export function CleaningPage() {
               <div style={s.statDivider}>·</div>
 
               {/* Quality score */}
-              <div style={{ ...s.statBlock, ...s.qualityBlock, background: qBg(result.quality_score) }}>
+              <div style={{ ...s.statBlock, ...s.qualityBlock, background: qBg(result.quality_score ?? 0) }}>
                 <div style={s.statLabel}>{t('Quality Score', 'Skor Kualiti')}</div>
-                <div style={{ ...s.statValue, color: qColor(result.quality_score) }}>
-                  {result.quality_score.toFixed(1)}%
+                <div style={{ ...s.statValue, color: qColor(result.quality_score ?? 0) }}>
+                  {(result.quality_score ?? 0).toFixed(1)}%
                 </div>
               </div>
             </div>
@@ -157,14 +157,14 @@ export function CleaningPage() {
           {/* Actions accordion */}
           <div style={s.card}>
             <div style={s.cardHeader}>
-              Tindakan Pembersihan ({result.actions_taken.length})
+              Tindakan Pembersihan ({(result.actions_taken ?? []).length})
             </div>
 
-            {result.actions_taken.length === 0 && (
+            {(result.actions_taken ?? []).length === 0 && (
               <div style={s.noActions}>Tiada tindakan — data bersih!</div>
             )}
 
-            {result.actions_taken.map((action, idx) => {
+            {(result.actions_taken ?? []).map((action, idx) => {
               const key = `${action.action_type}-${idx}`;
               const isOpen = openActions.has(key);
               const label = ACTION_LABELS[action.action_type] ?? action.action_type;
