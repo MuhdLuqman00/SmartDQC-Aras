@@ -4,6 +4,7 @@ import './styles/tokens.css';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider } from './context/AuthContext';
+import { SessionProvider } from './context/SessionContext';
 import { App } from './App';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <LanguageProvider>
         <AuthProvider>
-          <App />
+          <SessionProvider>
+            <App />
+          </SessionProvider>
         </AuthProvider>
       </LanguageProvider>
     </ThemeProvider>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
 
 interface CleanAction {
   action_type: string;
