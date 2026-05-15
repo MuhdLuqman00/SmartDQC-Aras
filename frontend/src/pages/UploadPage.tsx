@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type SourceType = 'myvass' | 'klinik' | 'auto';

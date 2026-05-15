@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { ChoroplethMap, computeAggregates } from '../components/ChoroplethMap';
 import type { District } from '../components/ChoroplethMap';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 

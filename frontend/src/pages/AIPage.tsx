@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useSession } from '../context/SessionContext';
 
 interface Message { role: 'user' | 'assistant'; text: string; chart_b64?: string | null; }
 interface NLQResponse { answer: string; result: unknown; code?: string; chart_b64?: string | null; }
@@ -10,6 +11,7 @@ interface NarrativeResponse { insights: string[]; recommendations: string[]; sum
 export function AIPage() {
   const [searchParams] = useSearchParams();
   const { t } = useLang();
+  const { currentCacheId } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [cacheId, setCacheId] = useState<string>('');
@@ -20,10 +22,10 @@ export function AIPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Support both cache_id and session_id for backward compatibility
-    const cid = searchParams.get('cache_id') ?? searchParams.get('session_id') ?? '';
-    setCacheId(cid);
-  }, [searchParams]);
+    // Priority: URL param > SessionContext > empty
+    const urlCacheId = searchParams.get('cache_id') ?? searchParams.get('session_id') ?? '';
+    setCacheId(urlCacheId || currentCacheId || '');
+  }, [searchParams, currentCacheId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
