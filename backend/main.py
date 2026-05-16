@@ -1115,6 +1115,20 @@ def _cache_get(key: str) -> dict | None:
     return None
 
 
+def _cache_evict(key: str) -> bool:
+    """Remove a cache entry from the in-memory hot tier and the disk tier.
+    Returns True if anything was removed."""
+    removed = _cleaned_cache.pop(key, None) is not None
+    try:
+        path = _cache_path(key)
+        if path.exists():
+            path.unlink(missing_ok=True)
+            removed = True
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Cache evict failed for %s: %s", key, exc)
+    return removed
+
+
 def _persist_session(
     cache_id: str,
     filename: str,
@@ -1898,12 +1912,19 @@ async def ml_suggest_endpoint(
 # --- REPORT NAMESPACE -----------------------------------------------------------
 
 
-@app.post("/report/pptx")
-async def report_pptx_endpoint(req: ReportRequest):
-    """Generate a PPTX report from EDA results and AI narrative."""
-    if _cache_get(req.cache_id) is None:
+@app.get("/report/pptx")
+async def report_pptx_endpoint(
+    cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+    include_kpi: bool = Query(True, description="Embed KPI dashboard slides"),
+):
+    """Generate a PPTX report from the cached EDA result."""
+    entry = _cache_get(cache_id)
+    if entry is None:
         raise HTTPException(404, "cache_id not found — run /clean/run first")
-    data = build_pptx_bytes(req.eda_result, req.narrative, kpi_result=req.kpi_result)
+    eda_result = entry["stats"]
+    kpi_result = compute_kpi_dashboard(entry["df"]) if include_kpi else None
+    data = build_pptx_bytes(eda_result, {}, kpi_result=kpi_result)
+    _log_audit(action="report.pptx", detail=f"cache_id={cache_id}")
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -1911,13 +1932,19 @@ async def report_pptx_endpoint(req: ReportRequest):
     )
 
 
-@app.post("/report/pdf")
-async def report_pdf_endpoint(req: ReportRequest):
-    """Generate a PDF report from EDA results and AI narrative."""
-    if _cache_get(req.cache_id) is None:
+@app.get("/report/pdf")
+async def report_pdf_endpoint(
+    cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+    include_kpi: bool = Query(True, description="Embed KPI dashboard section"),
+):
+    """Generate a PDF report from the cached EDA result."""
+    entry = _cache_get(cache_id)
+    if entry is None:
         raise HTTPException(404, "cache_id not found — run /clean/run first")
-    data = build_pdf_bytes(req.eda_result, req.narrative, kpi_result=req.kpi_result)
-    _log_audit(action="report.pdf", detail=f"cache_id={req.cache_id}")
+    eda_result = entry["stats"]
+    kpi_result = compute_kpi_dashboard(entry["df"]) if include_kpi else None
+    data = build_pdf_bytes(eda_result, {}, kpi_result=kpi_result)
+    _log_audit(action="report.pdf", detail=f"cache_id={cache_id}")
     return Response(
         content=data,
         media_type="application/pdf",
