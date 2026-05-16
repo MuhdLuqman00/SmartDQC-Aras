@@ -2806,6 +2806,42 @@ class DatasetCompareRequest(BaseModel):
     dataset_ids: list[str]
 
 
+class DatasetDeleteRequest(BaseModel):
+    dataset_ids: list[str]
+
+
+def _delete_datasets(db, dataset_ids: list[str]) -> dict:
+    """Hard-delete datasets and their dependents in FK-safe order.
+    Order: AnalysisResult -> Session -> Dataset, then evict the disk/memory
+    cache. All-or-nothing: caller commits; any exception should roll back."""
+    from backend.db.models import Dataset, Session as _Session, AnalysisResult
+
+    deleted: list[str] = []
+    not_found: list[str] = []
+    for ds_id in dataset_ids:
+        ds = db.get(Dataset, ds_id)
+        if ds is None:
+            not_found.append(ds_id)
+            continue
+        session_ids = [
+            s.id for s in db.query(_Session).filter(_Session.dataset_id == ds_id).all()
+        ]
+        if session_ids:
+            db.query(AnalysisResult).filter(
+                AnalysisResult.session_id.in_(session_ids)
+            ).delete(synchronize_session=False)
+            db.query(_Session).filter(
+                _Session.dataset_id == ds_id
+            ).delete(synchronize_session=False)
+        db.delete(ds)
+        deleted.append(ds_id)
+
+    db.commit()
+    for ds_id in deleted:
+        _cache_evict(ds_id)
+    return {"deleted": deleted, "not_found": not_found}
+
+
 @app.post("/datasets/compare")
 async def datasets_compare(req: DatasetCompareRequest):
     """Compare 2+ datasets side-by-side. Returns quality and indicator deltas."""
@@ -2848,6 +2884,23 @@ async def datasets_compare(req: DatasetCompareRequest):
             )
 
     return compare_datasets(summaries)
+
+
+@app.post("/datasets/delete")
+async def datasets_delete(req: DatasetDeleteRequest):
+    """Permanently delete datasets: DB rows + sessions/analysis + cache."""
+    from backend.db.init_db import SessionLocal
+
+    if not req.dataset_ids:
+        raise HTTPException(400, "Provide at least 1 dataset_id.")
+    with SessionLocal() as db:
+        try:
+            result = _delete_datasets(db, req.dataset_ids)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(500, f"Delete failed: {e}")
+    _log_audit(action="dataset.delete", detail=f"ids={result['deleted']}")
+    return result
 
 
 # ── Entity Resolution ────────────────────────────────────────────────────────
