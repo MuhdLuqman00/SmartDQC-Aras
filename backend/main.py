@@ -2813,8 +2813,9 @@ class DatasetDeleteRequest(BaseModel):
 def _delete_datasets(db, dataset_ids: list[str]) -> dict:
     """Hard-delete datasets and their dependents in FK-safe order.
     Order: AnalysisResult -> Session -> Dataset, then evict the disk/memory
-    cache. All-or-nothing: caller commits; any exception should roll back."""
-    from backend.db.models import Dataset, Session as _Session, AnalysisResult
+    cache. Commits internally before evicting cache; the caller is responsible
+    for rolling back on exception."""
+    from backend.db.models import Dataset, Session as _Session, AnalysisResult, EntityLinkage
 
     deleted: list[str] = []
     not_found: list[str] = []
@@ -2833,6 +2834,9 @@ def _delete_datasets(db, dataset_ids: list[str]) -> dict:
             db.query(_Session).filter(
                 _Session.dataset_id == ds_id
             ).delete(synchronize_session=False)
+        db.query(EntityLinkage).filter(
+            EntityLinkage.dataset_id == ds_id
+        ).update({"dataset_id": None}, synchronize_session=False)
         db.delete(ds)
         deleted.append(ds_id)
 
