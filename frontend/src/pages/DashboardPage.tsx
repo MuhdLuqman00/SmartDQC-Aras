@@ -1,13 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, AlertTriangle, Users, ShieldCheck, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
-import { ChoroplethMap, District, computeAggregates } from '../components/ChoroplethMap';
-import { StatCard } from '../components/StatCard';
-import { RagBadge, rateToRag } from '../components/RagBadge';
-import { EmptyState } from '../components/EmptyState';
+import { ChoroplethMap, District } from '../components/ChoroplethMap';
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -20,31 +17,81 @@ interface Summary {
   source_breakdown: Record<string, number>;
 }
 
-interface Session {
-  cache_id: string;
-  filename: string;
-  source_type: string;
-  row_count: number;
-  quality_score: number;
-  created_at: string | null;
-}
+type IndicatorKey = 'stunting' | 'wasting' | 'underweight' | 'overweight';
+type Rag = 'Green' | 'Amber' | 'Red';
 
+interface IndicatorKpi {
+  key: IndicatorKey;
+  label_en: string; label_bm: string;
+  actual: number; actual_count: number; total: number;
+  npan_target: number; who_target: number | null;
+  gap: number; rag: Rag;
+}
+interface GroupRow {
+  state?: string; gender?: string; group?: string;
+  n: number;
+  rates: Partial<Record<IndicatorKey, number>>;
+  status: Partial<Record<IndicatorKey, Rag>>;
+}
 interface KpiResult {
-  districts?: District[];
-  age_group_breakdown?: { under_2: number; under_5: number; under_2_pct: number; under_5_pct: number };
-  top_issues?: { description: string; count: number }[];
+  overall_status: Rag;
+  total_children: number;
+  indicators: IndicatorKpi[];
+  by_state: GroupRow[];
+  by_gender: GroupRow[];
+  by_age: GroupRow[];
 }
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 
-function fmt(n: number | null) { return n == null ? '—' : n.toLocaleString(); }
-function pct(r: number) { return `${(r * 100).toFixed(1)}%`; }
+function fmt(n: number | string | null | undefined) { return n == null ? '—' : Number(n).toLocaleString(); }
 
-function TrendArrow({ delta }: { delta: number }) {
-  if (delta > 0) return <TrendingUp size={14} style={{ color: 'var(--danger)' }} />;
-  if (delta < 0) return <TrendingDown size={14} style={{ color: 'var(--success)' }} />;
-  return <Minus size={14} style={{ color: 'var(--text-muted)' }} />;
+function GroupBars({ title, rows, labelKey, indicator, notAvail }: {
+  title: string;
+  rows: GroupRow[];
+  labelKey: 'gender' | 'group';
+  indicator: IndicatorKey;
+  notAvail: string;
+}) {
+  const wrap: React.CSSProperties = {
+    flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
+  };
+  const head: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase',
+    color: 'var(--text-secondary)', marginBottom: 14,
+  };
+  if (!rows || rows.length === 0) {
+    return (
+      <div style={wrap}>
+        <div style={head}>{title}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{notAvail}</div>
+      </div>
+    );
+  }
+  return (
+    <div style={wrap}>
+      <div style={head}>{title}</div>
+      {rows.map((r, i) => {
+        const v = Number(r.rates[indicator] ?? 0);
+        const label = String(r[labelKey] ?? '—');
+        return (
+          <div key={i} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
+              <span>{label}</span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+            </div>
+            <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
+              <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: 'var(--kkm-teal)', borderRadius: 4 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
+
+const ragToLower = (r?: Rag): 'green' | 'amber' | 'red' =>
+  r === 'Amber' ? 'amber' : r === 'Red' ? 'red' : 'green';
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
@@ -54,20 +101,18 @@ export function DashboardPage() {
   const nav = useNavigate();
 
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
   const [kpi, setKpi] = useState<KpiResult | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const [selectedIndicator, setSelectedIndicator] = useState<IndicatorKey>('stunting');
+  const [kpiError, setKpiError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  /* fetch summary + sessions (always-on) */
+  /* fetch summary (always-on) */
   useEffect(() => {
-    Promise.all([
-      api.get<Summary>('/dashboard/summary'),
-      api.get<Session[]>('/sessions'),
-    ]).then(([s, sess]) => {
-      setSummary(s.data);
-      setSessions(sess.data.slice(0, 5));
-    }).catch(console.error).finally(() => setLoading(false));
+    api.get<Summary>('/dashboard/summary')
+      .then(s => setSummary(s.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   /* fetch kpi for current/latest session */
@@ -80,7 +125,10 @@ export function DashboardPage() {
       if (district) params.district = district;
       const r = await api.post<KpiResult>(`/kpi/dashboard?${new URLSearchParams(params)}`);
       setKpi(r.data);
-    } catch { /* cache miss — no active data */ }
+      setKpiError(false);
+    } catch {
+      setKpiError(true);
+    }
   }, [activeCacheId]);
 
   useEffect(() => { fetchKpi(); }, [fetchKpi]);
@@ -90,10 +138,7 @@ export function DashboardPage() {
     fetchKpi(d);
   };
 
-  const districts = kpi?.districts ?? [];
-  const agg = computeAggregates(districts);
-
-  /* ── Empty state ─────────────────────────────────────────────────────── */
+  /* ── Welcome / empty state ───────────────────────────────────────────── */
   if (!loading && summary?.session_count === 0) {
     return (
       <div style={{
@@ -115,18 +160,6 @@ export function DashboardPage() {
             'Mulakan dengan memuat naik dataset pemakanan pediatrik. SmartDQC akan membersih, menganalisis, dan menggambarkan data anda.',
           )}
         </p>
-        <div style={{ display: 'flex', gap: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-          {[
-            { n: '①', label: t('Upload', 'Muat Naik') },
-            { n: '②', label: t('Clean', 'Bersih') },
-            { n: '③', label: t('Analyse', 'Analisis') },
-          ].map(step => (
-            <div key={step.n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 24 }}>{step.n}</span>
-              <span>{step.label}</span>
-            </div>
-          ))}
-        </div>
         <button
           onClick={() => nav('/upload')}
           style={{
@@ -144,50 +177,55 @@ export function DashboardPage() {
   }
 
   /* ── Loaded state ────────────────────────────────────────────────────── */
-  const indicators = [
-    { key: 'stunting',    enLabel: 'Stunting',    bmLabel: 'Bantut',        rate: agg.stunting,    rag: agg.stuntingRag    },
-    { key: 'wasting',     enLabel: 'Wasting',     bmLabel: 'Susut',         rate: agg.wasting,     rag: agg.wastingRag     },
-    { key: 'underweight', enLabel: 'Underweight', bmLabel: 'Kurang Berat',  rate: agg.underweight, rag: agg.underweightRag },
-    { key: 'overweight',  enLabel: 'Overweight',  bmLabel: 'Berlebihan',    rate: agg.overweight,  rag: agg.overweightRag  },
-  ];
+  const indicators = kpi?.indicators ?? [];
+  const selInd = indicators.find(i => i.key === selectedIndicator);
 
-  const accentMap: Record<string, string> = {
-    stunting: 'var(--danger)', wasting: 'var(--warning)',
-    underweight: 'var(--warning)', overweight: 'var(--kkm-teal)',
-  };
+  const mapDistricts: District[] = (kpi?.by_state ?? []).map(s => ({
+    name: s.state ?? '',
+    stunting_rate: Number(s.rates.stunting ?? 0) / 100,
+    wasting_rate: Number(s.rates.wasting ?? 0) / 100,
+    underweight_rate: Number(s.rates.underweight ?? 0) / 100,
+    overweight_rate: Number(s.rates.overweight ?? 0) / 100,
+    risk_rag: ragToLower(s.status[selectedIndicator]),
+    vs_target: 0,
+  }));
+
+  const sortedStates = [...(kpi?.by_state ?? [])].sort(
+    (a, b) => Number(b.rates[selectedIndicator] ?? 0) - Number(a.rates[selectedIndicator] ?? 0),
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── Header row ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {kpiError && (
+        <div style={{
+          background: 'var(--warning-bg)', border: '1px solid var(--warning)',
+          borderRadius: 'var(--radius-card)', padding: '12px 16px', fontSize: 13,
+          color: 'var(--text-primary)',
+        }}>
+          {t('No analysed dataset — run cleaning first.', 'Tiada dataset dianalisis — jalankan pembersihan dahulu.')}
+        </div>
+      )}
+
+      {/* ── Header + indicator selector ─────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>
+          {t('Child Nutrition Status (Under 5)', 'Status Pemakanan Kanak-Kanak Bawah 5 Tahun')}
+        </h1>
         <div style={{ flex: 1 }} />
-
-        {/* District chip */}
-        {selectedDistrict ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(0,163,224,0.12)', border: '1px solid var(--kkm-sky)',
-            borderRadius: 999, padding: '4px 12px', fontSize: 12,
-            fontWeight: 600, color: 'var(--kkm-sky)',
-          }}>
-            Malaysia — {selectedDistrict}
-            <button
-              onClick={() => handleDistrictClick(null)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--kkm-sky)', display: 'flex', alignItems: 'center', padding: 0 }}
-            >
-              <X size={12} />
-            </button>
-          </div>
-        ) : (
-          <div style={{
-            fontSize: 12, color: 'var(--text-muted)',
-            border: '1px solid var(--border)', borderRadius: 999, padding: '4px 12px',
-          }}>
-            {t('Malaysia — All Districts', 'Malaysia — Semua Daerah')}
-          </div>
-        )}
-
+        <select
+          value={selectedIndicator}
+          onChange={e => setSelectedIndicator(e.target.value as IndicatorKey)}
+          style={{
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-btn)', padding: '6px 10px', fontSize: 13,
+            color: 'var(--text-primary)', cursor: 'pointer',
+          }}
+        >
+          {indicators.map(i => (
+            <option key={i.key} value={i.key}>{lang === 'en' ? i.label_en : i.label_bm}</option>
+          ))}
+        </select>
         {summary?.latest_session && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {t('Last updated', 'Dikemaskini')}: {new Date(summary.latest_session.created_at).toLocaleDateString()}
@@ -195,232 +233,161 @@ export function DashboardPage() {
         )}
       </div>
 
-      {/* ── Hero row: Map + Indicators ──────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 20, alignItems: 'stretch' }}>
+      {/* ── Compact DQ-ops strip ────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-card)', padding: '10px 16px',
+        fontSize: 13, color: 'var(--text-secondary)', boxShadow: 'var(--shadow-card)',
+      }}>
+        <span><strong style={{ color: 'var(--text-primary)' }}>{fmt(summary?.total_children ?? null)}</strong> {t('children', 'kanak-kanak')}</span>
+        <span><strong style={{ color: 'var(--text-primary)' }}>{summary ? `${summary.avg_quality_score}%` : '—'}</strong> {t('quality', 'kualiti')}</span>
+        <span><strong style={{ color: 'var(--text-primary)' }}>{fmt(summary?.session_count ?? null)}</strong> {t('sessions', 'sesi')}</span>
+        <span style={{ color: summary && summary.alerts > 0 ? 'var(--danger)' : 'var(--success)' }}>
+          <strong>{fmt(summary?.alerts ?? null)}</strong> {t('alerts', 'amaran')}
+        </span>
+        <div style={{ flex: 1 }} />
+        {summary?.latest_session && (
+          <button
+            onClick={() => {
+              setSession({
+                cacheId: summary.latest_session!.cache_id,
+                filename: summary.latest_session!.filename,
+                sourceType: summary.latest_session!.source_type,
+              });
+              nav('/quality');
+            }}
+            style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            {t('Resume', 'Sambung')} {summary.latest_session.filename} →
+          </button>
+        )}
+        <button
+          onClick={() => nav('/history')}
+          style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {t('History', 'Sejarah')} →
+        </button>
+      </div>
 
-        {/* Map */}
-        <div style={{
-          flex: '0 0 62%', background: 'var(--surface)',
-          border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
-          padding: 20, boxShadow: 'var(--shadow-card)',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 12 }}>
-            {t('District Risk Map', 'Peta Risiko Daerah')}
-          </div>
-          <ChoroplethMap
-            districts={districts}
-            selectedDistrict={selectedDistrict}
-            onDistrictClick={handleDistrictClick}
-          />
-        </div>
-
-        {/* Indicator tiles */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {indicators.map(ind => (
-            <div key={ind.key} style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderLeft: `3px solid ${accentMap[ind.key]}`,
-              borderRadius: 'var(--radius-card)',
-              padding: '14px 16px',
-              boxShadow: 'var(--shadow-card)',
-              flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                  {lang === 'en' ? ind.enLabel : ind.bmLabel}
+      {/* ── Indicator cards ─────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+        {indicators.map(ind => {
+          const sel = ind.key === selectedIndicator;
+          const ragColor = ind.rag === 'Green' ? 'var(--success)'
+            : ind.rag === 'Amber' ? 'var(--warning)' : 'var(--danger)';
+          return (
+            <div key={ind.key}
+              onClick={() => setSelectedIndicator(ind.key)}
+              style={{
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                outline: sel ? '2px solid var(--kkm-blue)' : 'none',
+                borderRadius: 'var(--radius-card)', padding: '16px 18px',
+                boxShadow: 'var(--shadow-card)', cursor: 'pointer',
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                  {lang === 'en' ? ind.label_en : ind.label_bm}
                 </span>
-                <RagBadge rag={ind.rag === 'green' ? 'good' : ind.rag === 'amber' ? 'warning' : 'critical'} lang={lang} />
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: ragColor, borderRadius: 999, padding: '2px 8px' }}>
+                  {ind.rag}
+                </span>
               </div>
               <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
-                {pct(ind.rate)}
+                {Number(ind.actual).toFixed(2)}%
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                {t('Target', 'Sasaran')} {Number(ind.npan_target).toFixed(0)}%
+                {ind.who_target != null ? ` · WHO ${Number(ind.who_target).toFixed(0)}%` : ''}
+                {' · '}
+                <span style={{ color: ind.gap > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                  {ind.gap > 0 ? '▲' : '▼'} {Math.abs(Number(ind.gap)).toFixed(2)}
+                </span>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── KPI strip ────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        <StatCard
-          label={t('Children Processed', 'Kanak-kanak Diproses')}
-          value={fmt(summary?.total_children ?? null)}
-          accent="var(--kkm-blue)"
-          icon={<Users size={14} />}
-        />
-        <StatCard
-          label={t('Avg Quality Score', 'Purata Skor Kualiti')}
-          value={summary ? `${summary.avg_quality_score}%` : '—'}
-          accent="var(--kkm-teal)"
-          icon={<ShieldCheck size={14} />}
-        />
-        <StatCard
-          label={t('Sessions', 'Sesi')}
-          value={fmt(summary?.session_count ?? null)}
-          accent="var(--kkm-sky)"
-        />
-        <StatCard
-          label={t('Alerts', 'Amaran')}
-          value={fmt(summary?.alerts ?? null)}
-          accent={summary && summary.alerts > 0 ? 'var(--danger)' : 'var(--success)'}
-          icon={<AlertTriangle size={14} />}
-        />
-      </div>
-
-      {/* ── Secondary row ─────────────────────────────────────────────── */}
-      {kpi && (
-        <div style={{ display: 'flex', gap: 20 }}>
-
-          {/* Age group split */}
-          {kpi.age_group_breakdown && (
-            <div style={{
-              flex: '0 0 58%', background: 'var(--surface)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
-              padding: '18px 20px', boxShadow: 'var(--shadow-card)',
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 14 }}>
-                {t('Age Group Distribution', 'Taburan Kumpulan Umur')}
-              </div>
-              {[
-                { label: t('Under 2 Years', 'Bawah 2 Tahun'), pct: kpi.age_group_breakdown.under_2_pct, n: kpi.age_group_breakdown.under_2, color: 'var(--kkm-blue)' },
-                { label: t('Under 5 Years', 'Bawah 5 Tahun'), pct: kpi.age_group_breakdown.under_5_pct, n: kpi.age_group_breakdown.under_5, color: 'var(--kkm-sky)' },
-              ].map(row => (
-                <div key={row.label} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-                    <span>{row.label}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {(row.pct * 100).toFixed(1)}% &nbsp; ({row.n.toLocaleString()})
-                    </span>
-                  </div>
-                  <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', width: `${row.pct * 100}%`,
-                      background: row.color, borderRadius: 4,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Top quality issues */}
-          {kpi.top_issues && kpi.top_issues.length > 0 && (
-            <div style={{
-              flex: 1, background: 'var(--surface)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-card)',
-              padding: '18px 20px', boxShadow: 'var(--shadow-card)',
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 14 }}>
-                {t('Top Quality Issues', 'Isu Kualiti Utama')}
-              </div>
-              {kpi.top_issues.slice(0, 3).map((issue, i) => (
-                <div
-                  key={i}
-                  onClick={() => nav('/quality')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 0', cursor: 'pointer',
-                    borderBottom: i < 2 ? '1px solid var(--border)' : 'none',
-                  }}
-                >
-                  <AlertTriangle size={14} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{issue.description}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>
-                    {issue.count.toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Recent sessions table ─────────────────────────────────────── */}
-      {sessions.length > 0 && (
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '16px 20px', borderBottom: '1px solid var(--border)',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {t('Recent Sessions', 'Sesi Terkini')}
-            </span>
-            <button
-              onClick={() => nav('/history')}
-              style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              {t('View all →', 'Lihat semua →')}
-            </button>
+          );
+        })}
+        {indicators.length === 0 && (
+          <div style={{ gridColumn: '1 / -1', color: 'var(--text-muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>
+            {t('No indicator data — run cleaning first.', 'Tiada data penunjuk — jalankan pembersihan dahulu.')}
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {[
-                  t('File', 'Fail'), t('Type', 'Jenis'), t('Rows', 'Baris'),
-                  t('Score', 'Skor'), t('Date', 'Tarikh'), t('Action', 'Tindakan'),
-                ].map(h => (
-                  <th key={h} style={{
-                    padding: '10px 20px', textAlign: 'left',
-                    fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-                    textTransform: 'uppercase', color: 'var(--text-secondary)',
-                  }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s, i) => (
-                <tr
-                  key={s.cache_id}
-                  style={{ borderBottom: i < sessions.length - 1 ? '1px solid var(--border)' : 'none' }}
-                >
-                  <td style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>
-                    {s.filename}
-                  </td>
-                  <td style={{ padding: '12px 20px' }}>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-                      background: 'var(--surface-2)', color: 'var(--text-secondary)',
-                      textTransform: 'uppercase',
-                    }}>
-                      {s.source_type || '—'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>
-                    {s.row_count.toLocaleString()}
-                  </td>
-                  <td style={{ padding: '12px 20px' }}>
-                    <RagBadge rag={s.quality_score >= 80 ? 'good' : s.quality_score >= 60 ? 'warning' : 'critical'} lang={lang} />
-                  </td>
-                  <td style={{ padding: '12px 20px', fontSize: 12, color: 'var(--text-muted)' }}>
-                    {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
-                  </td>
-                  <td style={{ padding: '12px 20px' }}>
-                    <button
-                      onClick={() => {
-                        setSession({ cacheId: s.cache_id, filename: s.filename, sourceType: s.source_type });
-                        nav('/quality');
-                      }}
-                      style={{
-                        background: 'var(--kkm-blue)', color: '#fff', border: 'none',
-                        borderRadius: 'var(--radius-btn)', padding: '5px 12px',
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      }}
-                    >
-                      {t('Open', 'Buka')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        )}
+      </div>
+
+      {/* ── Map + By-State ──────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{
+          flex: '1 1 420px', background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+              {t('State Risk Map', 'Peta Risiko Negeri')}
+            </span>
+            {selectedDistrict && (
+              <button onClick={() => handleDistrictClick(null)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,163,224,0.12)',
+                  border: '1px solid var(--kkm-sky)', borderRadius: 999, padding: '4px 12px',
+                  fontSize: 12, fontWeight: 600, color: 'var(--kkm-sky)', cursor: 'pointer',
+                }}>
+                {selectedDistrict} <X size={12} />
+              </button>
+            )}
+          </div>
+          {mapDistricts.length === 0
+            ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                {t('No state data for this dataset.', 'Tiada data negeri untuk dataset ini.')}
+              </div>
+            : <ChoroplethMap districts={mapDistricts} selectedDistrict={selectedDistrict} onDistrictClick={handleDistrictClick} />}
         </div>
-      )}
+
+        <div style={{
+          flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
+            {t('By State', 'Mengikut Negeri')}
+            {selInd ? ` — ${lang === 'en' ? selInd.label_en : selInd.label_bm}` : ''}
+          </div>
+          {sortedStates.map(s => {
+            const v = Number(s.rates[selectedIndicator] ?? 0);
+            return (
+              <div key={s.state} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
+                  <span>{s.state}</span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                </div>
+                <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: 'var(--kkm-blue)', borderRadius: 4 }} />
+                </div>
+              </div>
+            );
+          })}
+          {sortedStates.length === 0 && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+              {t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── By-Gender + By-Age ──────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <GroupBars
+          title={t('By Gender', 'Mengikut Jantina')}
+          rows={kpi?.by_gender ?? []}
+          labelKey="gender"
+          indicator={selectedIndicator}
+          notAvail={t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+        />
+        <GroupBars
+          title={t('By Age Group', 'Mengikut Kumpulan Umur')}
+          rows={kpi?.by_age ?? []}
+          labelKey="group"
+          indicator={selectedIndicator}
+          notAvail={t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+        />
+      </div>
     </div>
   );
 }

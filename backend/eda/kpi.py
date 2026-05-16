@@ -43,57 +43,124 @@ def _rag(actual: float, target: float) -> str:
     return "Red"
 
 
+def _group_breakdown(df: pd.DataFrame, group_col: str, key_name: str) -> list[dict]:
+    """Per-group indicator rates + RAG status, keyed by flag name.
+
+    `key_name` is the label used for the grouping value in each row
+    (e.g. "state", "gender", "group").
+    """
+    rows: list[dict] = []
+    if group_col not in df.columns:
+        return rows
+    for value, grp in df.groupby(group_col):
+        n = len(grp)
+        if n == 0:
+            continue
+        rates: dict[str, float] = {}
+        status: dict[str, str] = {}
+        for flag_col, kpi_key in _FLAG_TO_KPI.items():
+            if flag_col not in grp.columns:
+                continue
+            rate = round(
+                grp[flag_col].fillna(0).astype(bool).sum() / n * 100, 2
+            )
+            rates[flag_col] = rate
+            status[flag_col] = _rag(rate, _NATIONAL_KPIS[kpi_key]["target"])
+        rows.append({key_name: str(value), "n": int(n),
+                     "rates": rates, "status": status})
+    return rows
+
+
 def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
-    if df.empty:
-        return {"kpis": [], "overall_status": "Green", "district_breakdown": None}
+    empty = {
+        "overall_status": "Green",
+        "total_children": 0,
+        "indicators": [],
+        "by_state": [],
+        "by_gender": [],
+        "by_age": [],
+    }
+    if df is None or df.empty:
+        return empty
 
     total = len(df)
-    kpis  = []
-
+    indicators: list[dict] = []
     for flag_col, kpi_key in _FLAG_TO_KPI.items():
         if flag_col not in df.columns:
             continue
-        count       = int(df[flag_col].fillna(0).astype(bool).sum())
-        actual      = round(count / total * 100, 2)
-        npan_target = _NATIONAL_KPIS[kpi_key]["target"]
-        who_target  = _WHO_TARGETS.get(kpi_key)
-
-        kpis.append({
-            "kpi":          kpi_key,
-            **_NATIONAL_KPIS[kpi_key],
+        count = int(df[flag_col].fillna(0).astype(bool).sum())
+        actual = round(count / total * 100, 2)
+        npan = _NATIONAL_KPIS[kpi_key]["target"]
+        who = _WHO_TARGETS.get(kpi_key)
+        indicators.append({
+            "key":          flag_col,
+            "label_en":     _NATIONAL_KPIS[kpi_key]["label_en"],
+            "label_bm":     _NATIONAL_KPIS[kpi_key]["label_bm"],
             "actual":       actual,
             "actual_count": count,
             "total":        total,
-            "status":       _rag(actual, npan_target),
-            "gap":          round(actual - npan_target, 2),
-            "who_target":   who_target,
-            "who_status":   _rag(actual, who_target) if who_target is not None else None,
-            "gap_to_who":   round(actual - who_target, 2) if who_target is not None else None,
+            "npan_target":  npan,
+            "who_target":   who,
+            "gap":          round(actual - npan, 2),
+            "rag":          _rag(actual, npan),
         })
 
-    district_col = next((c for c in _DISTRICT_COLS if c in df.columns), None)
-    district_breakdown = None
-    if district_col and kpis:
-        rows = []
-        for district, grp in df.groupby(district_col):
-            n     = len(grp)
-            entry = {"district": str(district), "n_records": n}
-            for flag_col, kpi_key in _FLAG_TO_KPI.items():
-                if flag_col not in grp.columns:
-                    continue
-                rate   = round(grp[flag_col].fillna(0).astype(bool).sum() / n * 100, 2)
-                npan_t = _NATIONAL_KPIS[kpi_key]["target"]
-                who_t  = _WHO_TARGETS.get(kpi_key)
-                entry[f"{kpi_key}_rate"]       = rate
-                entry[f"{kpi_key}_status"]     = _rag(rate, npan_t)
-                entry[f"{kpi_key}_who_status"] = _rag(rate, who_t) if who_t else None
-            rows.append(entry)
-        district_breakdown = rows
+    # by_state — group on the first available state column
+    state_col = next((c for c in _DISTRICT_COLS if c in df.columns), None)
+    by_state = _group_breakdown(df, state_col, "state") if state_col else []
 
-    statuses = [k["status"] for k in kpis]
-    overall  = "Red" if "Red" in statuses else ("Amber" if "Amber" in statuses else "Green")
+    # by_gender — tolerant column detection
+    gender_col = next(
+        (c for c in ["Jantina", "JANTINA", "jantina", "Gender", "GENDER", "gender"]
+         if c in df.columns),
+        None,
+    )
+    by_gender = _group_breakdown(df, gender_col, "gender") if gender_col else []
 
-    return {"kpis": kpis, "overall_status": overall, "district_breakdown": district_breakdown}
+    # by_age — bucket months (<24 => "Bawah 2 Tahun") else "2-5 Tahun";
+    # fall back to a year column if no months column exists.
+    age_col = next(
+        (c for c in ["Age_Months", "AGE_MONTHS", "age_months", "Umur_Bulan"]
+         if c in df.columns),
+        None,
+    )
+    if age_col is not None:
+        bucket = pd.to_numeric(df[age_col], errors="coerce").map(
+            lambda m: "Bawah 2 Tahun" if pd.notna(m) and m < 24 else "2-5 Tahun"
+        )
+        age_df = df.assign(_age_group=bucket)
+    else:
+        yr_col = next(
+            (c for c in ["Age", "AGE", "age", "Umur", "Age_Years"]
+             if c in df.columns),
+            None,
+        )
+        if yr_col is not None:
+            bucket = pd.to_numeric(df[yr_col], errors="coerce").map(
+                lambda y: "Bawah 2 Tahun" if pd.notna(y) and y < 2 else "2-5 Tahun"
+            )
+            age_df = df.assign(_age_group=bucket)
+        else:
+            age_df = None
+    by_age = (
+        _group_breakdown(age_df, "_age_group", "group")
+        if age_df is not None else []
+    )
+
+    statuses = [i["rag"] for i in indicators]
+    overall = (
+        "Red" if "Red" in statuses
+        else "Amber" if "Amber" in statuses
+        else "Green"
+    )
+    return {
+        "overall_status": overall,
+        "total_children": total,
+        "indicators": indicators,
+        "by_state": by_state,
+        "by_gender": by_gender,
+        "by_age": by_age,
+    }
 
 
 def compute_trajectory_narratives(
