@@ -29,6 +29,27 @@ _FLAG_TO_KPI: dict[str, str] = {
     "overweight":  "overweight_rate",
 }
 
+# Cleaners (clean_myvass/clean_kpm/clean_ncdc) emit Bahasa Ind_* boolean
+# columns; analytics, specs, and tests use the canonical English flags.
+# Accept either so the KPI dashboard populates regardless of which cleaner
+# produced the frame. Canonical name is tried first so existing callers and
+# their expected output keys are unaffected.
+_FLAG_ALIASES: dict[str, tuple[str, ...]] = {
+    "stunting":    ("stunting", "Ind_Bantut"),
+    "wasting":     ("wasting", "Ind_Susut"),
+    "underweight": ("underweight", "Ind_Kurang_Berat_Badan"),
+    "overweight":  ("overweight", "Ind_Berlebihan_BB"),
+}
+
+
+def _resolve_flag_col(df: pd.DataFrame, flag: str) -> str | None:
+    """Return the first column present in `df` that represents `flag`."""
+    for candidate in _FLAG_ALIASES.get(flag, (flag,)):
+        if candidate in df.columns:
+            return candidate
+    return None
+
+
 _DISTRICT_COLS = ["NEGERI", "STATE", "negeri", "state", "Negeri", "State"]
 
 # Periods ahead to forecast for "will meet 2027 target" check
@@ -58,14 +79,15 @@ def _group_breakdown(df: pd.DataFrame, group_col: str, key_name: str) -> list[di
             continue
         rates: dict[str, float] = {}
         status: dict[str, str] = {}
-        for flag_col, kpi_key in _FLAG_TO_KPI.items():
-            if flag_col not in grp.columns:
+        for flag, kpi_key in _FLAG_TO_KPI.items():
+            col = _resolve_flag_col(grp, flag)
+            if col is None:
                 continue
             rate = round(
-                grp[flag_col].fillna(0).astype(bool).sum() / n * 100, 2
+                grp[col].fillna(0).astype(bool).sum() / n * 100, 2
             )
-            rates[flag_col] = rate
-            status[flag_col] = _rag(rate, _NATIONAL_KPIS[kpi_key]["target"])
+            rates[flag] = rate
+            status[flag] = _rag(rate, _NATIONAL_KPIS[kpi_key]["target"])
         rows.append({key_name: str(value), "n": int(n),
                      "rates": rates, "status": status})
     return rows
@@ -85,15 +107,16 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
 
     total = len(df)
     indicators: list[dict] = []
-    for flag_col, kpi_key in _FLAG_TO_KPI.items():
-        if flag_col not in df.columns:
+    for flag, kpi_key in _FLAG_TO_KPI.items():
+        col = _resolve_flag_col(df, flag)
+        if col is None:
             continue
-        count = int(df[flag_col].fillna(0).astype(bool).sum())
+        count = int(df[col].fillna(0).astype(bool).sum())
         actual = round(count / total * 100, 2)
         npan = _NATIONAL_KPIS[kpi_key]["target"]
         who = _WHO_TARGETS.get(kpi_key)
         indicators.append({
-            "key":          flag_col,
+            "key":          flag,
             "label_en":     _NATIONAL_KPIS[kpi_key]["label_en"],
             "label_bm":     _NATIONAL_KPIS[kpi_key]["label_bm"],
             "actual":       actual,
