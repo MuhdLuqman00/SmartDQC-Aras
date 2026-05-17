@@ -1815,6 +1815,57 @@ async def preview_cached_endpoint(
     )
 
 
+def _cache_write(key: str, entry: dict) -> None:
+    """Persist a cache entry to the hot tier and disk so edits survive restart."""
+    _cleaned_cache[key] = entry
+    try:
+        with _cache_path(key).open("wb") as fh:
+            _pickle.dump(entry, fh, protocol=_pickle.HIGHEST_PROTOCOL)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Cache write failed for %s: %s", key, exc)
+
+
+class CellEditRequest(BaseModel):
+    cache_id: str
+    row_index: int
+    column: str
+    value: object
+
+
+@app.patch("/clean/cell")
+async def edit_cell(req: CellEditRequest):
+    """Edit a single cell of the cached cleaned dataset (in-memory + disk, audit-logged)."""
+    entry = _cache_get(req.cache_id)
+    if entry is None:
+        raise HTTPException(404, "cache_id not found — re-run cleaning first.")
+    df = entry["df"]
+    if req.column not in df.columns:
+        raise HTTPException(400, f"Column '{req.column}' not in dataset.")
+    if req.row_index < 0 or req.row_index >= len(df):
+        raise HTTPException(400, f"row_index {req.row_index} out of range (0..{len(df) - 1}).")
+
+    old = df.iloc[req.row_index][req.column]
+    # Coerce to the column's dtype where possible; fall back to raw value.
+    new_val = req.value
+    try:
+        if pd.api.types.is_numeric_dtype(df[req.column]):
+            new_val = pd.to_numeric(req.value)
+    except (ValueError, TypeError):
+        new_val = req.value
+    df.iloc[req.row_index, df.columns.get_loc(req.column)] = new_val
+
+    entry["df"] = df
+    _cache_write(req.cache_id, entry)
+    _log_audit(
+        action="clean.cell_edit",
+        detail=f"{req.cache_id} row={req.row_index} col={req.column} {old!r}->{new_val!r}",
+    )
+    updated_row = (
+        df.iloc[[req.row_index]].replace({np.nan: None}).to_dict(orient="records")[0]
+    )
+    return JSONResponse(content=json_safe({"row_index": req.row_index, "row": updated_row}))
+
+
 # ── Dataset Join (horizontal / vertical union) ───────────────────────────────
 
 _JOIN_TYPES = {"inner", "left", "right", "outer", "union"}
