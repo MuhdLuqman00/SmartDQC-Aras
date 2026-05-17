@@ -6,6 +6,7 @@ import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { EmptyState } from '../components/EmptyState';
+import { EntityLinkPanel } from '../components/EntityLinkPanel';
 
 interface Dataset {
   id: string;
@@ -154,6 +155,8 @@ export function DatasetLibraryPage() {
           </div>
         </div>
       )}
+
+      <EntityLinkPanel datasetIds={Array.from(selected)} />
     </div>
   );
 }
