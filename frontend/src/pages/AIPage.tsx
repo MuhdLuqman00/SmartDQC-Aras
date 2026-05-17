@@ -5,12 +5,14 @@ import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
+import { NarrativePanel, NarrativeRaw } from '../components/NarrativePanel';
 
 interface Message {
   id: string;
   role: 'ai' | 'user' | 'narrative';
   content: string;
   data?: unknown;
+  raw?: NarrativeRaw;
 }
 
 export function AIPage() {
@@ -31,8 +33,8 @@ export function AIPage() {
     if (!cacheId) return;
     setNarrativeLoading(true);
     try {
-      const r = await api.post<{ narrative: string }>(`/ai/narrative?cache_id=${cacheId}`);
-      addMessage({ role: 'narrative', content: r.data.narrative || String(r.data) });
+      const r = await api.post<{ narrative: string; raw?: NarrativeRaw }>(`/ai/narrative?cache_id=${cacheId}`);
+      addMessage({ role: 'narrative', content: r.data.narrative || String(r.data), raw: r.data.raw });
     } catch { addMessage({ role: 'ai', content: t('Failed to generate narrative.', 'Gagal menjana naratif.') }); }
     finally { setNarrativeLoading(false); }
   };
@@ -125,11 +127,13 @@ export function AIPage() {
                     {msg.content}
                   </div>
                 ) : msg.role === 'narrative' ? (
-                  <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '14px 16px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '14px 16px', fontSize: 13, lineHeight: 1.7 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
                       <Sparkles size={13} /> {t('AI Narrative', 'Naratif AI')}
                     </div>
-                    {msg.content}
+                    {msg.raw
+                      ? <NarrativePanel raw={msg.raw} />
+                      : <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>}
                   </div>
                 ) : (
                   <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '10px 14px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
