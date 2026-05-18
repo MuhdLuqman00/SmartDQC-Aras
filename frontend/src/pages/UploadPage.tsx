@@ -6,6 +6,7 @@ import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
+import { persistWarning } from '../lib/persistWarning';
 
 /* ── Step types ──────────────────────────────────────────────────────── */
 
@@ -109,6 +110,7 @@ export function UploadPage() {
 
   /* Step 4 state */
   const [cleanStats, setCleanStats] = useState<CleanStats | null>(null);
+  const [persistWarn, setPersistWarn] = useState<string | null>(null);
 
   /* ── Dropzone ──────────────────────────────────────────────────────── */
 
@@ -205,6 +207,7 @@ export function UploadPage() {
         rules_applied: Array.isArray(r.data.rules_applied) ? r.data.rules_applied : [],
         top_issues: Array.isArray(r.data.top_issues) ? r.data.top_issues : [],
       });
+      setPersistWarn(persistWarning(r.data, lang));
       setSession({
         cacheId: r.data.cache_id,
         filename: files[0]?.name || 'dataset',
@@ -499,6 +502,18 @@ export function UploadPage() {
               {t('Cleaning Complete', 'Pembersihan Selesai')}
             </h2>
           </div>
+
+          {persistWarn && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              background: 'var(--danger-bg, #fde8e8)', color: 'var(--danger, #b91c1c)',
+              border: '1px solid var(--danger, #b91c1c)', borderRadius: 8,
+              padding: '12px 16px', marginBottom: 24, fontSize: 14, fontWeight: 600,
+            }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{persistWarn}</span>
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
             {[

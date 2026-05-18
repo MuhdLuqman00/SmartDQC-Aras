@@ -571,6 +571,8 @@ async def run_eda_endpoint(
     cleaned_df = _pd.DataFrame(cleaned_df_data) if cleaned_df_data else df
     cache_id = _cache_cleaned(cleaned_df, report)
 
+    persisted = True
+    persist_error: Optional[str] = None
     try:
         _persist_session(
             cache_id=cache_id,
@@ -580,8 +582,15 @@ async def run_eda_endpoint(
             result=report,
             db=db,
         )
-    except Exception:
-        pass  # best-effort — never fail the EDA run for a DB write error
+    except Exception as exc:  # best-effort — never fail the EDA run on a DB error
+        persisted = False
+        persist_error = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "Session persistence failed on /eda/run for cache_id=%s (%s); "
+            "results will not be saved to the dashboard until the database "
+            "is reachable.",
+            cache_id, persist_error,
+        )
 
     _log_audit(action="eda.run", detail=f"cache_id={cache_id}")
 
@@ -590,6 +599,8 @@ async def run_eda_endpoint(
         report.pop(key, None)
 
     report["cache_id"] = cache_id
+    report["persisted"] = persisted
+    report["persist_error"] = persist_error
     return JSONResponse(content=json_safe(report))
 
 
@@ -1545,6 +1556,8 @@ async def clean_run_endpoint(
         },
     )
 
+    persisted = True
+    persist_error: Optional[str] = None
     try:
         _persist_session(
             cache_id=new_cache_id,
@@ -1558,8 +1571,14 @@ async def clean_run_endpoint(
             },
             db=db,
         )
-    except Exception:
-        pass  # best-effort — never fail the clean run for a DB write error
+    except Exception as exc:  # best-effort — never fail the clean run on a DB error
+        persisted = False
+        persist_error = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "Session persistence failed for cache_id=%s (%s); the dataset will "
+            "NOT appear on the dashboard until the database is reachable.",
+            new_cache_id, persist_error,
+        )
 
     _log_audit(action="clean.run", detail=f"cache_id={new_cache_id}")
     return JSONResponse(
@@ -1579,6 +1598,8 @@ async def clean_run_endpoint(
                 "quality_grade": quality_grade,
                 "rules_applied": summary["rules_applied"],
                 "top_issues": summary["top_issues"],
+                "persisted": persisted,
+                "persist_error": persist_error,
             }
         )
     )
