@@ -24,8 +24,8 @@ export interface Aggregates {
 
 export function ragToColor(rag: 'green' | 'amber' | 'red' | undefined): string {
   if (rag === 'green') return '#00b5a5';
-  if (rag === 'amber') return '#d97706';
-  if (rag === 'red')   return '#c0392b';
+  if (rag === 'amber') return '#e0a13c';
+  if (rag === 'red')   return '#d9534f';
   return 'var(--surface-2)';
 }
 
@@ -95,7 +95,7 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
               const geoCode = String(geo.properties['state'] ?? '').trim().toLowerCase();
               const district = lookup.get(geoCode);
               const isSelected = selectedDistrict && geoCode === selectedDistrict.toLowerCase();
-              const fill = district ? ragToColor(district.risk_rag) : 'var(--text-muted)';
+              const fill = district ? ragToColor(district.risk_rag) : 'var(--surface-2)';
 
               return (
                 <Geography
@@ -103,14 +103,15 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
                   geography={geo}
                   fill={fill}
                   stroke={isSelected ? 'var(--kkm-sky)' : 'var(--text-muted)'}
-                  strokeWidth={isSelected ? 2 : 1.25}
+                  strokeWidth={isSelected ? 2.5 : 1.25}
                   style={{
                     default: {
                       outline: 'none',
                       opacity: 1,
-                      transition: 'opacity 0.15s ease',
+                      strokeLinejoin: 'round',
+                      transition: 'opacity 0.15s ease, fill 0.15s ease',
                     },
-                    hover:   { outline: 'none', opacity: 1, cursor: 'pointer' },
+                    hover:   { outline: 'none', opacity: 0.85, cursor: 'pointer', strokeLinejoin: 'round' },
                     pressed: { outline: 'none' },
                   }}
                   onClick={() => {
@@ -131,6 +132,26 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
           }
         </Geographies>
       </ComposableMap>
+
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 10,
+        fontSize: 11, color: 'var(--text-secondary)',
+      }}>
+        {([
+          ['#00b5a5', 'Green'],
+          ['#e0a13c', 'Amber'],
+          ['#d9534f', 'Red'],
+          ['var(--surface-2)', 'No data'],
+        ] as const).map(([c, label]) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: 3, background: c,
+              border: '1px solid var(--border)', display: 'inline-block',
+            }} />
+            {label}
+          </span>
+        ))}
+      </div>
 
       {tooltip && (
         <div style={{

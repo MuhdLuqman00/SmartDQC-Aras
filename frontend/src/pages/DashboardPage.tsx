@@ -4,7 +4,7 @@ import { Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
-import { ChoroplethMap, District, ragToColor } from '../components/ChoroplethMap';
+import { ChoroplethMap, District } from '../components/ChoroplethMap';
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -53,6 +53,26 @@ const STATE_TO_CODE: Record<string, string> = {
   SARAWAK: 'swk', TERENGGANU: 'trg',
 };
 
+const STATE_CODES = new Set(Object.values(STATE_TO_CODE));
+
+/* Map a backend `state` string to a 3-letter geo code, tolerant of
+   whitespace, punctuation, federal-territory prefixes, or a value that
+   is already an abbreviation/code (e.g. "SBH", " Sabah ", "W.P. Labuan").
+   Returns '' when nothing plausibly matches so it just renders no-data
+   rather than mis-colouring. */
+function toStateCode(stateRaw: string | undefined | null): string {
+  const norm = String(stateRaw ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z\s]/g, ' ')
+    .replace(/\bW\s*P\b|WILAYAH PERSEKUTUAN/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (STATE_TO_CODE[norm]) return STATE_TO_CODE[norm];
+  const compact = norm.replace(/\s/g, '').toLowerCase();
+  if (STATE_CODES.has(compact)) return compact;
+  return '';
+}
+
 function fmt(n: number | string | null | undefined) { return n == null ? '—' : Number(n).toLocaleString(); }
 
 function GroupBars({ title, rows, labelKey, indicator, notAvail, lang }: {
@@ -91,8 +111,8 @@ function GroupBars({ title, rows, labelKey, indicator, notAvail, lang }: {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
               <span>{label} <span style={{ color: 'var(--text-muted)' }}>(n={r.n ?? 0})</span></span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
             </div>
-            <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
-              <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragBarColor(r.status[indicator]), borderRadius: 4 }} />
+            <div style={{ height: 8, background: ragTrack(r.status[indicator]), borderRadius: 4 }}>
+              <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(r.status[indicator]), borderRadius: 4 }} />
             </div>
           </div>
         );
@@ -104,7 +124,14 @@ function GroupBars({ title, rows, labelKey, indicator, notAvail, lang }: {
 const ragToLower = (r?: Rag): 'green' | 'amber' | 'red' =>
   r === 'Amber' ? 'amber' : r === 'Red' ? 'red' : 'green';
 
-const ragBarColor = (r?: Rag): string => ragToColor(ragToLower(r));
+/* Shared RAG palette — kept in sync with ChoroplethMap so list bars
+   and the map read the same. `track` is the same hue at low alpha so a
+   0%-rate "green/good" row is still visibly green even with no fill. */
+const RAG_HEX: Record<'green' | 'amber' | 'red', string> = {
+  green: '#00b5a5', amber: '#e0a13c', red: '#d9534f',
+};
+const ragSolid = (r?: Rag): string => RAG_HEX[ragToLower(r)];
+const ragTrack = (r?: Rag): string => RAG_HEX[ragToLower(r)] + '66';
 
 /* Backend returns data-driven gender values and BM-hardcoded age buckets.
    Normalise then translate so labels follow the chosen UI language. */
@@ -208,7 +235,7 @@ export function DashboardPage() {
   const selInd = indicators.find(i => i.key === selectedIndicator);
 
   const mapDistricts: District[] = (kpi?.by_state ?? []).map(s => ({
-    name: STATE_TO_CODE[(s.state ?? '').toUpperCase()] ?? (s.state ?? '').toLowerCase(),
+    name: toStateCode(s.state),
     stunting_rate: Number(s.rates.stunting ?? 0) / 100,
     wasting_rate: Number(s.rates.wasting ?? 0) / 100,
     underweight_rate: Number(s.rates.underweight ?? 0) / 100,
@@ -384,8 +411,8 @@ export function DashboardPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
                   <span>{s.state}</span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
                 </div>
-                <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragBarColor(s.status[selectedIndicator]), borderRadius: 4 }} />
+                <div style={{ height: 8, background: ragTrack(s.status[selectedIndicator]), borderRadius: 4 }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(s.status[selectedIndicator]), borderRadius: 4 }} />
                 </div>
               </div>
             );
