@@ -1191,8 +1191,11 @@ def _persist_session(
     """Upsert Dataset + Session + AnalysisResult so session data survives server restart."""
     from .db.models import Dataset, Session as _Session, AnalysisResult
     from datetime import datetime as _dt
+    from .eda.runner import json_safe
 
     now = _dt.utcnow()
+    has_quality = "quality_score" in result
+    quality = json_safe(result.get("quality_score"))
 
     ds = db.query(Dataset).filter_by(id=cache_id).first()
     if ds is None:
@@ -1202,13 +1205,13 @@ def _persist_session(
             filename=filename,
             source_type=source_type,
             row_count=row_count,
-            quality_score=result.get("quality_score"),
+            quality_score=quality,
             created_at=now,
         )
         db.add(ds)
         db.flush()
     else:
-        ds.quality_score = result.get("quality_score", ds.quality_score)
+        ds.quality_score = quality if has_quality else ds.quality_score
 
     sess_id = str(_uuid.uuid4())
     sess = _Session(
@@ -1225,10 +1228,10 @@ def _persist_session(
             id=str(_uuid.uuid4()),
             session_id=sess_id,
             result_type="quality",
-            result_json={
+            result_json=json_safe({
                 "quality_score": result.get("quality_score"),
                 "issues": result.get("issues", []),
-            },
+            }),
             created_at=now,
         )
     )
