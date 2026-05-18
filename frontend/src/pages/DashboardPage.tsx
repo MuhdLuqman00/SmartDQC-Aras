@@ -4,7 +4,7 @@ import { Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
-import { ChoroplethMap, District } from '../components/ChoroplethMap';
+import { ChoroplethMap, District, ragToColor } from '../components/ChoroplethMap';
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -55,12 +55,13 @@ const STATE_TO_CODE: Record<string, string> = {
 
 function fmt(n: number | string | null | undefined) { return n == null ? '—' : Number(n).toLocaleString(); }
 
-function GroupBars({ title, rows, labelKey, indicator, notAvail }: {
+function GroupBars({ title, rows, labelKey, indicator, notAvail, lang }: {
   title: string;
   rows: GroupRow[];
   labelKey: 'gender' | 'group';
   indicator: IndicatorKey;
   notAvail: string;
+  lang: 'en' | 'bm';
 }) {
   const wrap: React.CSSProperties = {
     flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
@@ -83,14 +84,15 @@ function GroupBars({ title, rows, labelKey, indicator, notAvail }: {
       <div style={head}>{title}</div>
       {rows.map((r, i) => {
         const v = Number(r.rates[indicator] ?? 0);
-        const label = String(r[labelKey] ?? '—');
+        const raw = String(r[labelKey] ?? '—');
+        const label = formatGroupLabel(labelKey, raw, lang);
         return (
           <div key={i} style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
               <span>{label} <span style={{ color: 'var(--text-muted)' }}>(n={r.n ?? 0})</span></span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
             </div>
             <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
-              <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: 'var(--kkm-teal)', borderRadius: 4 }} />
+              <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragBarColor(r.status[indicator]), borderRadius: 4 }} />
             </div>
           </div>
         );
@@ -101,6 +103,22 @@ function GroupBars({ title, rows, labelKey, indicator, notAvail }: {
 
 const ragToLower = (r?: Rag): 'green' | 'amber' | 'red' =>
   r === 'Amber' ? 'amber' : r === 'Red' ? 'red' : 'green';
+
+const ragBarColor = (r?: Rag): string => ragToColor(ragToLower(r));
+
+/* Backend returns data-driven gender values and BM-hardcoded age buckets.
+   Normalise then translate so labels follow the chosen UI language. */
+function formatGroupLabel(labelKey: 'gender' | 'group', raw: string, lang: 'en' | 'bm'): string {
+  const v = raw.trim().toLowerCase();
+  if (labelKey === 'gender') {
+    if (['lelaki', 'l', 'male', 'm'].includes(v)) return lang === 'en' ? 'Male' : 'Lelaki';
+    if (['perempuan', 'p', 'female', 'f'].includes(v)) return lang === 'en' ? 'Female' : 'Perempuan';
+    return raw;
+  }
+  if (v === 'bawah 2 tahun') return lang === 'en' ? 'Under 2 Years' : 'Bawah 2 Tahun';
+  if (v === '2-5 tahun' || v === '2–5 tahun') return lang === 'en' ? '2–5 Years' : '2-5 Tahun';
+  return raw;
+}
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
@@ -219,7 +237,7 @@ export function DashboardPage() {
       {/* ── Header + indicator selector ─────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>
-          {t('Child Nutrition Status (Under 5)', 'Status Pemakanan Kanak-Kanak Bawah 5 Tahun')}
+          {t('Child Nutrition Status (Under 5 Years Old)', 'Status Pemakanan Kanak-Kanak Bawah 5 Tahun')}
         </h1>
         <div style={{ flex: 1 }} />
         <select
@@ -326,7 +344,7 @@ export function DashboardPage() {
       {/* ── Map + By-State ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         <div style={{
-          flex: '1 1 420px', background: 'var(--surface)', border: '1px solid var(--border)',
+          flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -367,7 +385,7 @@ export function DashboardPage() {
                   <span>{s.state}</span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
                 </div>
                 <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4 }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: 'var(--kkm-blue)', borderRadius: 4 }} />
+                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragBarColor(s.status[selectedIndicator]), borderRadius: 4 }} />
                 </div>
               </div>
             );
@@ -388,6 +406,7 @@ export function DashboardPage() {
           labelKey="gender"
           indicator={selectedIndicator}
           notAvail={t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+          lang={lang}
         />
         <GroupBars
           title={t('By Age Group', 'Mengikut Kumpulan Umur')}
@@ -395,6 +414,7 @@ export function DashboardPage() {
           labelKey="group"
           indicator={selectedIndicator}
           notAvail={t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+          lang={lang}
         />
       </div>
     </div>

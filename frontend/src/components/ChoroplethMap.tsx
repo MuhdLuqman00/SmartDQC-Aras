@@ -95,19 +95,19 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
               const geoCode = String(geo.properties['state'] ?? '').trim().toLowerCase();
               const district = lookup.get(geoCode);
               const isSelected = selectedDistrict && geoCode === selectedDistrict.toLowerCase();
-              const fill = district ? ragToColor(district.risk_rag) : 'var(--surface-2)';
+              const fill = district ? ragToColor(district.risk_rag) : 'var(--text-muted)';
 
               return (
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
                   fill={fill}
-                  stroke={isSelected ? 'var(--kkm-sky)' : 'var(--border)'}
-                  strokeWidth={isSelected ? 2 : 1}
+                  stroke={isSelected ? 'var(--kkm-sky)' : 'var(--text-muted)'}
+                  strokeWidth={isSelected ? 2 : 1.25}
                   style={{
                     default: {
                       outline: 'none',
-                      opacity: isSelected ? 1 : 0.85,
+                      opacity: 1,
                       transition: 'opacity 0.15s ease',
                     },
                     hover:   { outline: 'none', opacity: 1, cursor: 'pointer' },

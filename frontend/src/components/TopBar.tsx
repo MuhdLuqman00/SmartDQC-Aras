@@ -21,7 +21,7 @@ const PAGE_TITLES: Record<string, { en: string; bm: string }> = {
 
 export function TopBar() {
   const { theme, toggleTheme } = useTheme();
-  const { lang, toggleLang, t } = useLang();
+  const { lang, setLang, t } = useLang();
   const { user, logout } = useAuth();
   const { filename } = useSession();
   const location = useLocation();
@@ -65,20 +65,31 @@ export function TopBar() {
         {filename || t('No active session', 'Tiada sesi aktif')}
       </button>
 
-      {/* Lang toggle */}
-      <button
-        onClick={toggleLang}
-        style={{
-          background: 'transparent', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '5px 10px',
-          color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
-          transition: 'all var(--transition)',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--kkm-sky)')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-      >
-        {lang === 'en' ? 'BM' : 'EN'}
-      </button>
+      {/* Lang segmented control */}
+      <div style={{
+        display: 'flex', border: '1px solid var(--border)',
+        borderRadius: 6, overflow: 'hidden',
+      }}>
+        {(['en', 'bm'] as const).map(code => {
+          const active = lang === code;
+          return (
+            <button
+              key={code}
+              onClick={() => setLang(code)}
+              aria-pressed={active}
+              style={{
+                background: active ? 'var(--kkm-blue)' : 'transparent',
+                border: 'none', padding: '5px 12px',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                transition: 'all var(--transition)',
+              }}
+            >
+              {code.toUpperCase()}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Theme toggle */}
       <button
