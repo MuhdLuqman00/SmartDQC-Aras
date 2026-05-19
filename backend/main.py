@@ -1180,6 +1180,20 @@ def _cache_evict(key: str) -> bool:
     return removed
 
 
+def _coerce_float(v):
+    """Force a true builtin float (or None).
+
+    np.float64 is a *subclass* of Python ``float``, so json_safe()'s
+    ``isinstance(obj, float)`` branch returns it UNCHANGED — the value
+    stays np.float64. psycopg2 has no adapter for it and falls back to
+    NumPy 2.x ``repr`` -> the literal ``np.float64(79.0)`` lands in the
+    SQL, and Postgres reads ``np`` as a schema -> InvalidSchemaName.
+    A bare float() is the only thing that actually fixes this; do NOT
+    "simplify" this back to json_safe().
+    """
+    return float(v) if v is not None else None
+
+
 def _persist_session(
     cache_id: str,
     filename: str,
@@ -1195,7 +1209,7 @@ def _persist_session(
 
     now = _dt.utcnow()
     has_quality = "quality_score" in result
-    quality = json_safe(result.get("quality_score"))
+    quality = _coerce_float(result.get("quality_score"))
 
     ds = db.query(Dataset).filter_by(id=cache_id).first()
     if ds is None:

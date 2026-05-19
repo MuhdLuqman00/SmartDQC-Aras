@@ -30,6 +30,10 @@ COPY backend/requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Backend code + alembic
+# CACHE_BUST forces this COPY (and only the cheap layers after it) to rebuild.
+# apt/pip/npm layers sit ABOVE this line and stay cached, so no network is
+# needed. Pass a changing value: --build-arg CACHE_BUST=<timestamp>.
+ARG CACHE_BUST=0
 COPY backend/ ./backend/
 COPY data/zscore/ ./data/zscore/
 COPY alembic.ini ./alembic.ini

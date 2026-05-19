@@ -2,8 +2,22 @@ import pytest
 import uuid
 import numpy as np
 from datetime import datetime
-from backend.main import _persist_session
+from backend.main import _persist_session, _coerce_float
 from backend.db.models import Dataset, Session as DBSession, AnalysisResult
+
+
+def test_coerce_float_returns_builtin_float_not_numpy():
+    # The bug: np.float64 is a float SUBCLASS. The previous json_safe-based
+    # fix returned it unchanged (type stayed np.float64), psycopg2 then
+    # serialized it via NumPy 2.x repr -> "np.float64(79.0)" -> Postgres
+    # "schema np does not exist". This asserts a TRUE builtin float so the
+    # test goes red against the old approach and green against float().
+    out = _coerce_float(np.float64(79.0))
+    assert out == 79.0
+    assert type(out) is float                 # exact type, not subclass
+    assert not isinstance(out, np.floating)   # would be True for np.float64
+    assert _coerce_float(None) is None
+    assert type(_coerce_float(np.int64(5))) is float
 
 
 def test_persist_session_creates_dataset(db_session):
