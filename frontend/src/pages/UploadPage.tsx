@@ -161,7 +161,26 @@ export function UploadPage() {
       );
       setStep(2);
     } catch (e: unknown) {
-      setError(t('Upload failed. Check file format.', 'Muat naik gagal. Semak format fail.'));
+      const err = e as { response?: { status?: number; data?: unknown }; code?: string };
+      const status = err.response?.status;
+      let msg: string;
+      if (status === 413) {
+        msg = t('File too large for the server.', 'Fail terlalu besar untuk pelayan.');
+      } else if (status === 502 || status === 504 || err.code === 'ECONNABORTED') {
+        msg = t(
+          'Server is busy or still starting up and timed out. Wait a moment and try again.',
+          'Pelayan sibuk atau masih dimulakan dan tamat masa. Tunggu sebentar dan cuba lagi.',
+        );
+      } else {
+        const data = err.response?.data;
+        const detail = data && typeof data === 'object'
+          ? (data as { detail?: string }).detail
+          : undefined;
+        msg = detail
+          ? t(`Upload failed: ${detail}`, `Muat naik gagal: ${detail}`)
+          : t('Upload failed. Check file format.', 'Muat naik gagal. Semak format fail.');
+      }
+      setError(msg);
     } finally { setLoading(false); }
   };
 

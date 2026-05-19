@@ -131,7 +131,14 @@ const RAG_HEX: Record<'green' | 'amber' | 'red', string> = {
   green: '#00b5a5', amber: '#e0a13c', red: '#d9534f',
 };
 const ragSolid = (r?: Rag): string => RAG_HEX[ragToLower(r)];
-const ragTrack = (r?: Rag): string => RAG_HEX[ragToLower(r)] + '66';
+/* Track tint per RAG (8-digit hex incl. alpha). Green uses a brighter
+   hue at higher opacity so a 0%-rate "good" row — where the track is
+   the whole signal (no fill on top) — reads as clearly bright green.
+   Amber/red stay ~40% since they sit behind a solid fill. */
+const RAG_TRACK_HEX: Record<'green' | 'amber' | 'red', string> = {
+  green: '#2fe3c2cc', amber: '#e0a13c66', red: '#d9534f66',
+};
+const ragTrack = (r?: Rag): string => RAG_TRACK_HEX[ragToLower(r)];
 
 /* Backend returns data-driven gender values and BM-hardcoded age buckets.
    Normalise then translate so labels follow the chosen UI language. */

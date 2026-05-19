@@ -16,6 +16,12 @@ standard field name from the provided schema. Respond ONLY with valid JSON:
 Every standard field must appear as a key. Use null if no column matches."""
 
 
+# Schema mapping is best-effort and sits on the synchronous /upload/preview
+# path. Bound it well under the nginx gateway timeout so a cold/slow model
+# fails fast to the heuristic fallback instead of hanging the upload (504).
+_SCHEMA_MAP_TIMEOUT = 20.0
+
+
 def _needs_ai_assist(auto_map: dict, unmapped_threshold: int = 3) -> bool:
     """Return True if enough fields are unmapped to justify an LLM call."""
     unmapped = sum(1 for v in auto_map.values() if v is None)
@@ -42,7 +48,12 @@ def ai_suggest_mapping(
     )
 
     try:
-        raw = generate(prompt, system=_SCHEMA_SYSTEM, json_mode=True)
+        raw = generate(
+            prompt,
+            system=_SCHEMA_SYSTEM,
+            json_mode=True,
+            timeout=_SCHEMA_MAP_TIMEOUT,
+        )
         raw = raw.strip()
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         result = json.loads(match.group() if match else raw)

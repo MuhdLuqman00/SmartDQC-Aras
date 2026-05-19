@@ -9,7 +9,12 @@ class OllamaError(Exception):
     pass
 
 
-def generate(prompt: str, system: str | None = None, json_mode: bool = False) -> str:
+def generate(
+    prompt: str,
+    system: str | None = None,
+    json_mode: bool = False,
+    timeout: float = 300.0,
+) -> str:
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
@@ -24,7 +29,7 @@ def generate(prompt: str, system: str | None = None, json_mode: bool = False) ->
         resp = httpx.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json=payload,
-            timeout=300.0,
+            timeout=timeout,
         )
     except httpx.TimeoutException:
         raise OllamaError("Model timed out after 300s")

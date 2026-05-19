@@ -12,33 +12,87 @@ Always respond with valid JSON only. No markdown, no explanation outside the JSO
 
 
 def build_context(eda_result: dict) -> str:
+    """Render run_eda()'s report into LLM context.
+
+    Reads the keys run_eda actually emits (top-level total_rows, nested
+    data_quality_score / indicators, per-column outliers) — NOT the legacy
+    summary/quality/by_negeri shape, which produced empty context and made
+    the model reply "no dataset provided".
+    """
     parts = []
 
-    summary = eda_result.get("summary", {})
-    if summary:
-        parts.append(f"Dataset: {summary.get('total_rows', 'N/A')} records, source: {summary.get('source_type', 'unknown')}")
+    rows = eda_result.get("total_rows")
+    if rows is not None:
+        cols = eda_result.get("total_columns", "N/A")
+        src = eda_result.get("source_type", "unknown")
+        parts.append(f"Dataset: {rows} records, {cols} columns, source: {src}")
 
-    quality = eda_result.get("quality", {})
-    if quality:
-        score = quality.get("overall_score", quality.get("score", "N/A"))
-        parts.append(f"Overall quality score: {score}")
-        missing = quality.get("missing_rate", quality.get("missing_pct", "N/A"))
-        parts.append(f"Missing data rate: {missing}")
+    dq = eda_result.get("data_quality_score") or {}
+    if dq:
+        line = f"Data quality score: {dq.get('score', 'N/A')}"
+        if dq.get("grade"):
+            line += f" (grade {dq['grade']})"
+        parts.append(line)
 
-    indicators = eda_result.get("indicators", {})
-    if indicators:
-        for k, v in list(indicators.items())[:10]:
-            parts.append(f"{k}: {v}")
+    ic = eda_result.get("ic_validation") or {}
+    if ic:
+        parts.append(
+            f"IC validity: {ic.get('valid', 'N/A')}/{ic.get('total', 'N/A')} "
+            f"valid ({ic.get('pct_valid', 'N/A')}%)"
+        )
 
-    outliers = eda_result.get("outliers", {})
-    if outliers:
-        total = outliers.get("total_flagged", outliers.get("count", "N/A"))
-        parts.append(f"Outliers flagged: {total}")
+    # KKM indicators are nested: indicators[age_group][indicator] = {label,
+    # overall: {pct, n_affected, n_total}, by_negeri: {...}, ...}
+    indicators = eda_result.get("indicators") or {}
+    ind_lines = []
+    if isinstance(indicators, dict):
+        for age_key, by_ind in indicators.items():
+            if not isinstance(by_ind, dict):
+                continue
+            for ind_key, ind in by_ind.items():
+                if not isinstance(ind, dict):
+                    continue
+                overall = ind.get("overall") or {}
+                pct = overall.get("pct")
+                if pct is None:
+                    continue
+                label = ind.get("label", ind_key)
+                ind_lines.append(
+                    f"  {label} [{age_key}]: {pct}% "
+                    f"({overall.get('n_affected', '?')}/{overall.get('n_total', '?')})"
+                )
+    if ind_lines:
+        parts.append("KKM nutrition indicators:\n" + "\n".join(ind_lines[:20]))
 
-    negeri = eda_result.get("by_negeri", eda_result.get("negeri_breakdown", {}))
-    if negeri:
-        top = list(negeri.items())[:5]
-        parts.append("By state (top 5): " + ", ".join(f"{k}={v}" for k, v in top))
+    # run_eda stores outliers as a per-column report; summarise as a total.
+    outliers = eda_result.get("outliers") or {}
+    if isinstance(outliers, dict) and outliers:
+        total_out = sum(
+            int(v.get("combined_outliers", 0) or 0)
+            for v in outliers.values()
+            if isinstance(v, dict)
+        )
+        cols_checked = [v.get("column", k) for k, v in outliers.items()
+                        if isinstance(v, dict)]
+        if cols_checked:
+            parts.append(
+                f"Outliers: {total_out} flagged across columns "
+                f"{', '.join(map(str, cols_checked))}"
+            )
+
+    bmi = eda_result.get("bmi_consistency") or {}
+    if isinstance(bmi, dict):
+        scal = {k: v for k, v in bmi.items()
+                if isinstance(v, (int, float, str)) and not isinstance(v, bool)}
+        if scal:
+            parts.append(
+                "BMI consistency: "
+                + ", ".join(f"{k}={v}" for k, v in list(scal.items())[:4])
+            )
+
+    changes = eda_result.get("changes_applied") or []
+    if changes:
+        parts.append(f"Cleaning steps applied: {len(changes)}")
 
     return "\n".join(parts) if parts else "No structured context available."
 

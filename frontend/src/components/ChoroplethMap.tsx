@@ -139,7 +139,6 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
       }}>
         {([
           ['#00b5a5', 'Green'],
-          ['#e0a13c', 'Amber'],
           ['#d9534f', 'Red'],
           ['var(--surface-2)', 'No data'],
         ] as const).map(([c, label]) => (
