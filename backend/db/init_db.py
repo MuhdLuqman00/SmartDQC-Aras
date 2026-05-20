@@ -28,6 +28,17 @@ def init_db() -> None:
         conn.execute(text("SELECT 1"))
     logger.info("Database connection verified.")
 
+    # Idempotent additive migration — create_all only creates tables that
+    # don't already exist, so this is safe to run on every boot. Lets the
+    # chat_sessions / chat_messages tables come into existence without an
+    # external migration step. Existing tables are untouched.
+    try:
+        from .models import Base
+        Base.metadata.create_all(engine)
+        logger.info("Database schema ensured (Base.metadata.create_all).")
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("create_all() failed: %s", exc)
+
 
 def get_db():
     db = SessionLocal()

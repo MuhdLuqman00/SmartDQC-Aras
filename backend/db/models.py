@@ -118,3 +118,49 @@ class AuditLog(Base):
     dataset_id: Mapped[str | None]    = mapped_column(String, ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True)
     detail:     Mapped[str | None]    = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime]      = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class ChatSession(Base):
+    """A persistent chat thread anchored to a dataset.
+
+    One dataset can have many chat sessions (e.g. user opens a "stunting
+    by district" chat, then later starts a "compare gender" chat against
+    the same dataset). Cascading delete on dataset_id means the existing
+    /datasets/delete flow auto-removes a dataset's chats with no extra
+    code in _delete_datasets.
+    """
+    __tablename__ = "chat_sessions"
+
+    id:         Mapped[str]      = mapped_column(String, primary_key=True)
+    dataset_id: Mapped[str]      = mapped_column(String, ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Auto-titled to the truncated first user question; user-renameable.
+    title:      Mapped[str]      = mapped_column(String(200), nullable=False, default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="chat_session", cascade="all, delete-orphan",
+        order_by="ChatMessage.created_at",
+    )
+
+
+class ChatMessage(Base):
+    """One turn in a chat session — user question, AI answer, or AI narrative.
+
+    `data_json` carries auxiliary structured payload for the message:
+    NLQ tabular results + optional chart_b64 for AI replies, the
+    NarrativeRaw blob for narrative messages. `role` is the discriminator.
+    """
+    __tablename__ = "chat_messages"
+
+    id:              Mapped[int]              = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_session_id: Mapped[str]              = mapped_column(
+        String, ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    role:            Mapped[str]              = mapped_column(String(20), nullable=False)  # 'user' | 'ai' | 'narrative'
+    content:         Mapped[str]              = mapped_column(Text, nullable=False)
+    data_json:       Mapped[dict | None]      = mapped_column(JSONB, nullable=True)
+    created_at:      Mapped[datetime]         = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    chat_session: Mapped["ChatSession"] = relationship(back_populates="messages")

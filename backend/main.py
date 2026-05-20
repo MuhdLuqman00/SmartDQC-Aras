@@ -3091,8 +3091,16 @@ def _format_narrative(n: dict) -> str:
 
 
 @app.post("/ai/narrative")
-async def ai_narrative(cache_id: str = Query(...)):
-    """Generate an AI narrative for the cleaned dataset referenced by cache_id."""
+async def ai_narrative(
+    cache_id: str = Query(...),
+    chat_id: str | None = Query(None, description="Optional chat session to persist this exchange into."),
+):
+    """Generate an AI narrative for the cleaned dataset referenced by cache_id.
+
+    When chat_id is provided the AI message is also appended to that chat
+    session so the user's transcript survives page reloads. Omit chat_id
+    for the legacy stateless behaviour.
+    """
     entry = _cache_get(cache_id)
     if entry is None:
         raise HTTPException(404, "cache_id not found — re-upload or re-run cleaning.")
@@ -3106,12 +3114,25 @@ async def ai_narrative(cache_id: str = Query(...)):
     # Persist by cache_id (overwrite — regeneration is latest-wins) so the
     # report endpoints embed the same insights the AI page shows.
     _cache_set_narrative(cache_id, narrative)
-    return {"narrative": _format_narrative(narrative), "raw": narrative}
+    formatted = _format_narrative(narrative)
+
+    if chat_id:
+        _chat_append_message(chat_id, role="narrative", content=formatted, data_json=narrative)
+
+    return {"narrative": formatted, "raw": narrative}
 
 
 @app.post("/ai/nlq")
-async def ai_nlq(cache_id: str = Query(...), body: _AIBody | None = None):
-    """Answer a natural-language question against the cleaned dataset."""
+async def ai_nlq(
+    cache_id: str = Query(...),
+    chat_id: str | None = Query(None, description="Optional chat session to persist this exchange into."),
+    body: _AIBody | None = None,
+):
+    """Answer a natural-language question against the cleaned dataset.
+
+    When chat_id is provided both the user question and the AI answer are
+    appended to that chat session. Omit chat_id for legacy stateless use.
+    """
     entry = _cache_get(cache_id)
     if entry is None:
         raise HTTPException(404, "cache_id not found — re-upload or re-run cleaning.")
@@ -3121,11 +3142,202 @@ async def ai_nlq(cache_id: str = Query(...), body: _AIBody | None = None):
         result = answer_query(question, df)
     except Exception as e:
         raise HTTPException(500, f"NLQ failed: {e}")
+    answer = _localize(result.get("answer"))
+
+    if chat_id and question:
+        _chat_append_message(chat_id, role="user", content=question)
+        _chat_append_message(
+            chat_id, role="ai", content=answer or "",
+            data_json={
+                "data":      result.get("result"),
+                "chart_b64": result.get("chart_b64"),
+            },
+        )
+
     return {
-        "answer": _localize(result.get("answer")),
+        "answer": answer,
         "data": result.get("result"),
         "chart_b64": result.get("chart_b64"),
     }
+
+
+# ── Chat sessions ────────────────────────────────────────────────────────────
+# Anchored to a dataset (cache_id == Dataset.id). The /ai/nlq and
+# /ai/narrative hooks above call _chat_append_message() when a chat_id is
+# supplied so the user's transcript survives reloads.
+
+class _ChatTitleBody(BaseModel):
+    title: str
+
+
+class _ChatMessageBody(BaseModel):
+    role: str
+    content: str
+    data_json: dict | None = None
+
+
+def _chat_append_message(
+    chat_session_id: str,
+    role: str,
+    content: str,
+    data_json: dict | None = None,
+) -> None:
+    """Best-effort append. Auto-titles the chat from the first user
+    question when the title is still the placeholder "New chat" so the
+    sidebar entry becomes meaningful without an explicit rename."""
+    from .db.init_db import SessionLocal
+    from .db.models import ChatSession as _ChatSession, ChatMessage as _ChatMessage
+
+    if SessionLocal is None:
+        return
+    try:
+        db = SessionLocal()
+        try:
+            cs = db.get(_ChatSession, chat_session_id)
+            if cs is None:
+                logger.warning("chat append: session %s not found; dropping message", chat_session_id)
+                return
+            db.add(_ChatMessage(
+                chat_session_id=chat_session_id,
+                role=role, content=content, data_json=data_json,
+            ))
+            cs.updated_at = datetime.utcnow()
+            if role == "user" and cs.title == "New chat":
+                trimmed = content.strip().splitlines()[0] if content.strip() else ""
+                cs.title = (trimmed[:60] + "…") if len(trimmed) > 60 else (trimmed or "New chat")
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("chat append failed for session %s: %s", chat_session_id, exc)
+
+
+@app.get("/chats")
+def list_chats(dataset_id: str = Query(...), db=Depends(get_db)):
+    """List chat sessions for a dataset, newest activity first."""
+    from .db.models import ChatSession as _ChatSession, ChatMessage as _ChatMessage
+    from sqlalchemy import func
+
+    rows = (
+        db.query(
+            _ChatSession,
+            func.count(_ChatMessage.id).label("message_count"),
+        )
+        .outerjoin(_ChatMessage, _ChatMessage.chat_session_id == _ChatSession.id)
+        .filter(_ChatSession.dataset_id == dataset_id)
+        .group_by(_ChatSession.id)
+        .order_by(_ChatSession.updated_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id":            cs.id,
+            "title":         cs.title,
+            "message_count": int(msg_count or 0),
+            "created_at":    cs.created_at.isoformat(),
+            "updated_at":    cs.updated_at.isoformat(),
+        }
+        for cs, msg_count in rows
+    ]
+
+
+@app.post("/chats")
+def create_chat(dataset_id: str = Query(...), db=Depends(get_db)):
+    """Create a new empty chat session for a dataset."""
+    from .db.models import ChatSession as _ChatSession, Dataset as _Dataset
+
+    if db.get(_Dataset, dataset_id) is None:
+        raise HTTPException(404, f"dataset_id {dataset_id} not found")
+    cs = _ChatSession(id=str(_uuid.uuid4()), dataset_id=dataset_id, title="New chat")
+    db.add(cs)
+    db.commit()
+    _log_audit(action="chat.create", dataset_id=dataset_id, detail=f"chat_id={cs.id}")
+    return {
+        "id":         cs.id,
+        "title":      cs.title,
+        "created_at": cs.created_at.isoformat(),
+        "updated_at": cs.updated_at.isoformat(),
+    }
+
+
+@app.get("/chats/{chat_id}")
+def get_chat(chat_id: str, db=Depends(get_db)):
+    """Return chat metadata + ordered messages."""
+    from .db.models import ChatSession as _ChatSession
+
+    cs = db.get(_ChatSession, chat_id)
+    if cs is None:
+        raise HTTPException(404, f"chat_id {chat_id} not found")
+    return {
+        "id":         cs.id,
+        "dataset_id": cs.dataset_id,
+        "title":      cs.title,
+        "created_at": cs.created_at.isoformat(),
+        "updated_at": cs.updated_at.isoformat(),
+        "messages": [
+            {
+                "id":         m.id,
+                "role":       m.role,
+                "content":    m.content,
+                "data_json":  m.data_json,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in cs.messages
+        ],
+    }
+
+
+@app.patch("/chats/{chat_id}")
+def rename_chat(chat_id: str, body: _ChatTitleBody, db=Depends(get_db)):
+    """Rename a chat session."""
+    from .db.models import ChatSession as _ChatSession
+
+    cs = db.get(_ChatSession, chat_id)
+    if cs is None:
+        raise HTTPException(404, f"chat_id {chat_id} not found")
+    cs.title = (body.title or "").strip()[:200] or cs.title
+    cs.updated_at = datetime.utcnow()
+    db.commit()
+    return {"id": cs.id, "title": cs.title}
+
+
+@app.delete("/chats/{chat_id}")
+def delete_chat(chat_id: str, db=Depends(get_db)):
+    """Delete a chat session — messages cascade away with it."""
+    from .db.models import ChatSession as _ChatSession
+
+    cs = db.get(_ChatSession, chat_id)
+    if cs is None:
+        raise HTTPException(404, f"chat_id {chat_id} not found")
+    dataset_id = cs.dataset_id
+    db.delete(cs)
+    db.commit()
+    _log_audit(action="chat.delete", dataset_id=dataset_id, detail=f"chat_id={chat_id}")
+    return {"deleted": chat_id}
+
+
+@app.post("/chats/{chat_id}/messages")
+def post_chat_message(chat_id: str, body: _ChatMessageBody, db=Depends(get_db)):
+    """Append a message to a chat session (manual write — most messages
+    go in via the /ai/nlq and /ai/narrative auto-persist hooks)."""
+    from .db.models import ChatSession as _ChatSession, ChatMessage as _ChatMessage
+
+    cs = db.get(_ChatSession, chat_id)
+    if cs is None:
+        raise HTTPException(404, f"chat_id {chat_id} not found")
+    if body.role not in ("user", "ai", "narrative"):
+        raise HTTPException(400, "role must be one of: user, ai, narrative")
+    m = _ChatMessage(
+        chat_session_id=chat_id,
+        role=body.role, content=body.content, data_json=body.data_json,
+    )
+    db.add(m)
+    cs.updated_at = datetime.utcnow()
+    if body.role == "user" and cs.title == "New chat":
+        trimmed = (body.content or "").strip().splitlines()[0] if body.content.strip() else ""
+        cs.title = (trimmed[:60] + "…") if len(trimmed) > 60 else (trimmed or "New chat")
+    db.commit()
+    return {"id": m.id, "created_at": m.created_at.isoformat()}
 
 
 # ── Multi-Dataset Comparison ─────────────────────────────────────────────────
