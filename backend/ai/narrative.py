@@ -187,7 +187,8 @@ Respond with this exact JSON structure:
 {{
   "recommendations": [
     {{
-      "action": "short action title",
+      "action_en": "short action title in English",
+      "action_bm": "tajuk tindakan ringkas dalam Bahasa Malaysia",
       "priority": "high",
       "bm": "detailed recommendation in Bahasa Malaysia",
       "en": "detailed recommendation in English",
@@ -196,7 +197,7 @@ Respond with this exact JSON structure:
   ]
 }}
 
-Provide 3-5 recommendations ordered by priority (high/medium/low)."""
+Both action_en and action_bm are REQUIRED — never leave either blank, never reuse the same string for both. Provide 3-5 recommendations ordered by priority (high/medium/low)."""
 
     if not raw_ok(insights):
         # Insights failed; don't waste a second model call or imply success.

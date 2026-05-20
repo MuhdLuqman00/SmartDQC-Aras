@@ -2,16 +2,28 @@ import React from 'react';
 import { Sparkles, Lightbulb, ListChecks } from 'lucide-react';
 import { useLang } from '../context/LanguageContext';
 
+export interface NarrativeRecommendation {
+  action_en?: string;
+  action_bm?: string;
+  /** Legacy single-language action — kept for back-compat with cached narratives. */
+  action?: string;
+  priority?: string;
+  bm?: string;
+  en?: string;
+  reasoning?: string;
+}
+
 export interface NarrativeRaw {
   executive_summary?: { bm?: string; en?: string };
   insights_5w1h?: Record<string, { bm?: string; en?: string }>;
-  recommendations?: Array<{
-    action?: string;
-    priority?: string;
-    bm?: string;
-    en?: string;
-    reasoning?: string;
-  }>;
+  recommendations?: NarrativeRecommendation[];
+}
+
+/* Pick the action title in the active language; fall back to the other
+   language, then to the legacy single-string `action`. */
+function pickAction(r: NarrativeRecommendation, lang: 'en' | 'bm'): string {
+  if (lang === 'en') return r.action_en || r.action_bm || r.action || '';
+  return r.action_bm || r.action_en || r.action || '';
 }
 
 const W5H1_ORDER = ['who', 'what', 'when', 'where', 'why', 'how'] as const;
@@ -74,7 +86,7 @@ export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
             {recs.map((r, i) => (
               <div key={i} style={{ borderLeft: `3px solid ${prioColor(r.priority)}`, paddingLeft: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{r.action}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{pickAction(r, lang)}</span>
                   {r.priority && (
                     <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: prioColor(r.priority) }}>
                       {r.priority}

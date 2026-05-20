@@ -263,6 +263,15 @@ def _slide_quality(prs, layout, eda: dict, district: str):
     _footer_bar_pptx(s, district)
 
 
+def _action_for(rec: dict, lang: str) -> str:
+    """Pick the recommendation action title in the requested language;
+    fall back to the other language, then to the legacy single-string
+    `action` so cached narratives keep rendering."""
+    if lang == "bm":
+        return rec.get("action_bm") or rec.get("action_en") or rec.get("action") or ""
+    return rec.get("action_en") or rec.get("action_bm") or rec.get("action") or ""
+
+
 def _slide_recommendations(prs, layout, narrative: dict, district: str):
     s = prs.slides.add_slide(layout)
     _bg(s, "#FFFFFF")
@@ -270,7 +279,14 @@ def _slide_recommendations(prs, layout, narrative: dict, district: str):
     for i, rec in enumerate(narrative.get("recommendations", [])[:3]):
         y = 0.75 + i * 2.0
         priority = rec.get("priority", "").upper()
-        _box(s, f"[{priority}] {rec.get('action', '')}", 0.5, y, 12.3, 0.45,
+        action_bm = _action_for(rec, "bm")
+        action_en = _action_for(rec, "en")
+        # Priority pill spans both columns; per-language action sits with its body.
+        _box(s, f"[{priority}]", 0.5, y, 1.2, 0.45,
+             size=12, bold=True, color=KKM_NAVY)
+        _box(s, action_bm, 1.8, y, 4.7, 0.45,
+             size=12, bold=True, color=KKM_NAVY)
+        _box(s, action_en, 6.7, y, 6.0, 0.45,
              size=12, bold=True, color=KKM_NAVY)
         _box(s, rec.get("bm", ""), 0.5, y + 0.48, 6.0, 1.3, size=10, color=KKM_MID_GRAY)
         _box(s, rec.get("en",  ""), 6.7, y + 0.48, 6.0, 1.3, size=10, color=KKM_MID_GRAY)
@@ -519,7 +535,7 @@ def _pdf_section_quality(story, eda: dict, sec_label, h2, body):
     story.append(Spacer(1, 0.5 * cm))
 
 
-def _pdf_section_recommendations(story, narrative: dict, sec_label, h2, body):
+def _pdf_section_recommendations(story, narrative: dict, sec_label, h2, body, lang: str = "en"):
     recs = narrative.get("recommendations", [])
     if not recs:
         return
@@ -528,8 +544,9 @@ def _pdf_section_recommendations(story, narrative: dict, sec_label, h2, body):
     story.append(Spacer(1, 0.2 * cm))
     for rec in recs[:5]:
         priority = rec.get("priority", "").upper()
+        action = _action_for(rec, lang)
         story.append(Paragraph(
-            f"<b>[{priority}] {rec.get('action', '')}</b>", h2))
+            f"<b>[{priority}] {action}</b>", h2))
         story.append(Paragraph(
             f"<b>BM:</b> {rec.get('bm', '-')}", body))
         story.append(Paragraph(
@@ -617,7 +634,7 @@ def build_pdf_bytes(
     _pdf_section_cover(story, eda_result, district, date_range, cover_h, small)
     _pdf_section_exec_summary(story, narrative, sec_label, h2, body)
     _pdf_section_quality(story, eda_result, sec_label, h2, body)
-    _pdf_section_recommendations(story, narrative, sec_label, h2, body)
+    _pdf_section_recommendations(story, narrative, sec_label, h2, body, lang)
 
     if kpi_result:
         _pdf_section_indicator_table(story, kpi_result, sec_label, lang)
