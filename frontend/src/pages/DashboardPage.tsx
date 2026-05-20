@@ -1,10 +1,19 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X } from 'lucide-react';
+import { Upload, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { ChoroplethMap, District } from '../components/ChoroplethMap';
+import { DonutCard } from '../components/DonutCard';
+import { MiniBarCard } from '../components/MiniBarCard';
+import { TrendLineCard } from '../components/TrendLineCard';
+import {
+  catalogByHome,
+  isPieArrayBlock,
+  isBarLabeledBlock,
+  isTrendRecordsBlock,
+} from '../lib/chartCatalog';
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -195,6 +204,10 @@ export function DashboardPage() {
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorKey>('stunting');
   const [kpiError, setKpiError] = useState(false);
   const [loading, setLoading] = useState(true);
+  /* Population breakdown — fetched lazily from /charts/blocks. Collapsed
+     by default so the dashboard stays scannable on first paint. */
+  const [blocks, setBlocks] = useState<Record<string, unknown> | null>(null);
+  const [popOpen, setPopOpen] = useState(false);
 
   /* fetch summary (always-on) */
   useEffect(() => {
@@ -221,6 +234,16 @@ export function DashboardPage() {
   }, [activeCacheId]);
 
   useEffect(() => { fetchKpi(); }, [fetchKpi]);
+
+  /* Population breakdown blocks — only fetched once we have a cache id. */
+  useEffect(() => {
+    if (!activeCacheId) { setBlocks(null); return; }
+    let cancelled = false;
+    api.get<Record<string, unknown>>(`/charts/blocks?cache_id=${activeCacheId}`)
+      .then(r => { if (!cancelled) setBlocks(r.data); })
+      .catch(() => { if (!cancelled) setBlocks(null); });
+    return () => { cancelled = true; };
+  }, [activeCacheId]);
 
   const handleStateClick = (code: string | null) => {
     setSelectedStateCode(code);
@@ -479,6 +502,52 @@ export function DashboardPage() {
           lang={lang}
         />
       </div>
+
+      {/* ── Population breakdown (collapsed by default) ─────────────────────
+          Trend line + cohort splits (gender / state / income / vaccine)
+          driven by /charts/blocks via the shared chart catalog. Hidden
+          entirely when the dataset emits none of these blocks. */}
+      {blocks && catalogByHome('dashboard').some(e => e.key in blocks) && (
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
+          overflow: 'hidden',
+        }}>
+          <button
+            onClick={() => setPopOpen(o => !o)}
+            style={{
+              width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+              padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 8,
+              color: 'var(--text-primary)', fontWeight: 600, fontSize: 13,
+            }}
+          >
+            {popOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            {t('Population breakdown', 'Pecahan populasi')}
+            <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: 12 }}>
+              ({catalogByHome('dashboard').filter(e => e.key in blocks).length})
+            </span>
+          </button>
+          {popOpen && (
+            <div style={{ padding: '0 20px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {catalogByHome('dashboard').map(entry => {
+                const b = blocks[entry.key];
+                if (!b) return null;
+                const title = lang === 'en' ? entry.titleEn : entry.titleBm;
+                if (entry.shape === 'trend_records' && isTrendRecordsBlock(b)) {
+                  return <TrendLineCard key={entry.key} title={title} data={b} lang={lang} />;
+                }
+                if (entry.shape === 'pie_array' && isPieArrayBlock(b)) {
+                  return <DonutCard key={entry.key} title={title} data={b} />;
+                }
+                if (entry.shape === 'bar_labeled' && entry.labelKey && isBarLabeledBlock(b, entry.labelKey)) {
+                  return <MiniBarCard key={entry.key} title={title} data={b} labelKey={entry.labelKey} />;
+                }
+                return null;
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

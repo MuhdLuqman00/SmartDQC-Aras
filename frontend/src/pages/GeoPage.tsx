@@ -10,6 +10,11 @@ import { SessionGuard } from '../components/SessionGuard';
 import { ChartTooltip } from '../components/ChartTooltip';
 import { useSession } from '../context/SessionContext';
 import { useLang } from '../context/LanguageContext';
+import {
+  catalogByHome,
+  isHistogramBlock,
+  isScatterBlock,
+} from '../lib/chartCatalog';
 
 // ── KPI types ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +57,8 @@ interface RiskResult {
 }
 
 // ── Chart blocks types ───────────────────────────────────────────────────────
+// Shape guards (isHistogramBlock / isScatterBlock / etc) live in the
+// shared lib/chartCatalog so QualityPage and DashboardPage can reuse them.
 
 interface HistogramBlock {
   label: string;
@@ -63,23 +70,7 @@ interface ScatterBlock {
   y_label: string;
   points: { x: number; y: number }[];
 }
-/* build_chart_blocks also emits pies / donuts / trend rows with very
-   different shapes. We render only histograms and scatters — the
-   isHistogram / isScatter guards below skip anything else cleanly. */
 type ChartBlocks = Record<string, unknown>;
-
-function isHistogram(b: unknown): b is HistogramBlock {
-  if (!b || typeof b !== 'object' || Array.isArray(b)) return false;
-  const obj = b as Record<string, unknown>;
-  if (typeof obj.label !== 'string' || !Array.isArray(obj.data)) return false;
-  const first = obj.data[0];
-  return !first || (typeof first === 'object' && first !== null && 'range' in first);
-}
-
-function isScatter(b: unknown): b is ScatterBlock {
-  if (!b || typeof b !== 'object' || Array.isArray(b)) return false;
-  return Array.isArray((b as Record<string, unknown>).points);
-}
 
 // ── Status palette helpers (Navy-Gold-Brick) ─────────────────────────────────
 
@@ -221,38 +212,31 @@ function BreakdownChart({
   );
 }
 
-// ── Distribution panels (driven by /charts/blocks) ───────────────────────────
+// ── Distribution panels (driven by /charts/blocks via chartCatalog) ─────────
+// Keys / titles / "recommended" flags now live in lib/chartCatalog.ts so all
+// pages stay in lock-step. GeoPage shows every catalog entry whose `home`
+// is 'geo' — currently 7 histograms + 5 scatters.
 
-const DISTRIBUTION_KEYS = [
-  'bmi_distribution',
-  'age_months_computed_distribution',
-  'waz_distribution',
-  'haz_distribution',
-  'baz_distribution',
-] as const;
-
-const SCATTER_KEY = 'scatter_berat_kg_vs_tinggi_cm';
-
-function HistogramPanel({ block }: { block: HistogramBlock }) {
+function HistogramPanel({ title, block }: { title: string; block: HistogramBlock }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '16px 18px', boxShadow: 'var(--shadow-card)' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{block.label}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{title}</div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={block.data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="range" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} interval={Math.max(1, Math.floor(block.data.length / 8))} />
           <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
           <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
-          <Bar dataKey="count" fill="var(--kkm-sky)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="count" fill="var(--status-good)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-function ScatterPanel({ block }: { block: ScatterBlock }) {
+function ScatterPanel({ title, block }: { title: string; block: ScatterBlock }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '16px 18px', boxShadow: 'var(--shadow-card)' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{block.title}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{title}</div>
       <ResponsiveContainer width="100%" height={200}>
         <ScatterChart margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis type="number" dataKey="x" name={block.x_label} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
@@ -545,17 +529,20 @@ export function GeoPage() {
           )}
         </div>
 
-        {/* Data distributions — 6 recommended charts driven by /charts/blocks */}
+        {/* Distributions & relationships — 12 charts (7 histograms + 5 scatters)
+            sourced from chartCatalog. The "Show all" toggle is kept for parity
+            with prior UX but recommended already covers the full catalog for
+            this page. */}
         {(blocks || blocksLoading) && (
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
-                {t('Data Distributions', 'Taburan Data')}
+                {t('Distributions & relationships', 'Taburan & hubungan')}
               </div>
               {blocks && (
                 <button
                   onClick={() => setShowAllDist(s => !s)}
-                  style={{ background: 'none', border: 'none', color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: 'var(--status-good)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
                 >
                   {showAllDist ? t('Show recommended only', 'Tunjuk yang disyorkan sahaja') : t('Show all', 'Tunjuk semua')}
                 </button>
@@ -565,18 +552,29 @@ export function GeoPage() {
               <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('Loading distributions…', 'Memuatkan taburan…')}</div>
             ) : blocks ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
-                {/* Recommended 5 histograms + 1 scatter, expandable to all available blocks. */}
-                {(showAllDist
-                  ? Object.keys(blocks)
-                  : [...DISTRIBUTION_KEYS.filter(k => k in blocks), ...(SCATTER_KEY in blocks ? [SCATTER_KEY] : [])]
-                ).map(key => {
-                  const b = blocks[key];
-                  if (isScatter(b))   return <ScatterPanel key={key} block={b} />;
-                  if (isHistogram(b)) return <HistogramPanel key={key} block={b} />;
-                  // Pies/donuts/trend rows have different shapes; skip them
-                  // here — they're surfaced elsewhere in the app.
-                  return null;
-                })}
+                {(() => {
+                  // Recommended: every catalog entry whose home === 'geo'.
+                  // "Show all": fall back to anything in blocks that matches a
+                  // histogram or scatter shape, including future additions.
+                  const catalogKeys = catalogByHome('geo').map(e => e.key);
+                  const allHistOrScatter = Object.keys(blocks).filter(k => {
+                    const b = blocks[k];
+                    return isHistogramBlock(b) || isScatterBlock(b);
+                  });
+                  const keysToRender = showAllDist
+                    ? Array.from(new Set([...catalogKeys, ...allHistOrScatter]))
+                    : catalogKeys.filter(k => k in blocks);
+                  return keysToRender.map(key => {
+                    const b = blocks[key];
+                    const entry = catalogByHome('geo').find(e => e.key === key);
+                    const title = entry
+                      ? (lang === 'en' ? entry.titleEn : entry.titleBm)
+                      : key;
+                    if (isScatterBlock(b))   return <ScatterPanel   key={key} title={title} block={b} />;
+                    if (isHistogramBlock(b)) return <HistogramPanel key={key} title={title} block={b} />;
+                    return null;
+                  });
+                })()}
               </div>
             ) : null}
           </div>

@@ -6,6 +6,8 @@ import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { ColumnHistogram } from '../components/ColumnHistogram';
+import { DonutCard } from '../components/DonutCard';
+import { catalogByHome, isPieArrayBlock, isDonutObjectBlock } from '../lib/chartCatalog';
 
 interface Issue { description: string; severity: 'critical' | 'warning' | 'info'; count: number; samples?: string[]; }
 interface AnomalyRow { row_index: number; columns: string[]; suggestion: string; }
@@ -44,6 +46,10 @@ export function QualityPage() {
   const rulesApplied: string[] = (stats?.rules_applied as string[]) ?? [];
 
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
+  /* Classification breakdown — fetched from the same /charts/blocks
+     endpoint Geo uses. Lazy + tolerant of missing columns: if the dataset
+     has no WHO z-score classes, the donuts simply render nothing. */
+  const [blocks, setBlocks] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (!cacheId) return;
@@ -51,6 +57,9 @@ export function QualityPage() {
     api.get(`/clean/preview-cached/${cacheId}`)
       .then(r => { if (!cancelled) setPreviewRows(Array.isArray(r.data?.rows) ? r.data.rows : []); })
       .catch(() => { if (!cancelled) setPreviewRows([]); });
+    api.get<Record<string, unknown>>(`/charts/blocks?cache_id=${cacheId}`)
+      .then(r => { if (!cancelled) setBlocks(r.data); })
+      .catch(() => { if (!cancelled) setBlocks(null); });
     return () => { cancelled = true; };
   }, [cacheId]);
 
@@ -239,6 +248,31 @@ export function QualityPage() {
             )}
           </div>
         </div>
+
+        {/* ── Classification breakdown ─────────────────────────────────────
+            WHO z-score classes (WAZ/HAZ/BAZ) + BMI status pie. Hidden when
+            the dataset has none of these columns. */}
+        {blocks && catalogByHome('quality').some(e => e.key in blocks) && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              {t('Classification breakdown', 'Pecahan klasifikasi')}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {catalogByHome('quality').map(entry => {
+                const b = blocks[entry.key];
+                if (!b) return null;
+                const title = lang === 'en' ? entry.titleEn : entry.titleBm;
+                if (entry.shape === 'donut_object' && isDonutObjectBlock(b)) {
+                  return <DonutCard key={entry.key} title={title} data={b.data} />;
+                }
+                if (entry.shape === 'pie_array' && isPieArrayBlock(b)) {
+                  return <DonutCard key={entry.key} title={title} data={b} />;
+                }
+                return null;
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </SessionGuard>
   );
