@@ -55,6 +55,30 @@ const STATE_TO_CODE: Record<string, string> = {
 
 const STATE_CODES = new Set(Object.values(STATE_TO_CODE));
 
+/* Canonical state names for backend filter + tooltip display.
+   "Pulau Pinang" is preferred over "Penang" (matches KKM/MOH usage). */
+const CODE_TO_STATE_NAME: Record<string, string> = {
+  jhr: 'Johor',
+  kdh: 'Kedah',
+  ktn: 'Kelantan',
+  kul: 'Kuala Lumpur',
+  lbn: 'Labuan',
+  mlk: 'Melaka',
+  nsn: 'Negeri Sembilan',
+  pjy: 'Putrajaya',
+  pls: 'Perlis',
+  png: 'Pulau Pinang',
+  prk: 'Perak',
+  phg: 'Pahang',
+  sbh: 'Sabah',
+  sgr: 'Selangor',
+  swk: 'Sarawak',
+  trg: 'Terengganu',
+};
+
+const codeToStateName = (code: string): string =>
+  CODE_TO_STATE_NAME[code.trim().toLowerCase()] || code.toUpperCase();
+
 /* Map a backend `state` string to a 3-letter geo code, tolerant of
    whitespace, punctuation, federal-territory prefixes, or a value that
    is already an abbreviation/code (e.g. "SBH", " Sabah ", "W.P. Labuan").
@@ -163,7 +187,9 @@ export function DashboardPage() {
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [kpi, setKpi] = useState<KpiResult | null>(null);
-  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  /* selectedStateCode is the 3-letter geo code (e.g. 'jhr'); converted to a
+     canonical state name before being sent to the backend filter. */
+  const [selectedStateCode, setSelectedStateCode] = useState<string | null>(null);
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorKey>('stunting');
   const [kpiError, setKpiError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -179,11 +205,11 @@ export function DashboardPage() {
   /* fetch kpi for current/latest session */
   const activeCacheId = cacheId || summary?.latest_session?.cache_id;
 
-  const fetchKpi = useCallback(async (district?: string | null) => {
+  const fetchKpi = useCallback(async (stateCode?: string | null) => {
     if (!activeCacheId) return;
     try {
       const params: Record<string, string> = { cache_id: activeCacheId };
-      if (district) params.district = district;
+      if (stateCode) params.state = codeToStateName(stateCode);
       const r = await api.post<KpiResult>(`/kpi/dashboard?${new URLSearchParams(params)}`);
       setKpi(r.data);
       setKpiError(false);
@@ -194,9 +220,9 @@ export function DashboardPage() {
 
   useEffect(() => { fetchKpi(); }, [fetchKpi]);
 
-  const handleDistrictClick = (d: string | null) => {
-    setSelectedDistrict(d);
-    fetchKpi(d);
+  const handleStateClick = (code: string | null) => {
+    setSelectedStateCode(code);
+    fetchKpi(code);
   };
 
   /* ── Welcome / empty state ───────────────────────────────────────────── */
@@ -385,14 +411,14 @@ export function DashboardPage() {
             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
               {t('State Risk Map', 'Peta Risiko Negeri')}
             </span>
-            {selectedDistrict && (
-              <button onClick={() => handleDistrictClick(null)}
+            {selectedStateCode && (
+              <button onClick={() => handleStateClick(null)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,163,224,0.12)',
                   border: '1px solid var(--kkm-sky)', borderRadius: 999, padding: '4px 12px',
                   fontSize: 12, fontWeight: 600, color: 'var(--kkm-sky)', cursor: 'pointer',
                 }}>
-                {selectedDistrict} <X size={12} />
+                {codeToStateName(selectedStateCode)} <X size={12} />
               </button>
             )}
           </div>
@@ -400,7 +426,7 @@ export function DashboardPage() {
             ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                 {t('No state data for this dataset.', 'Tiada data negeri untuk dataset ini.')}
               </div>
-            : <ChoroplethMap districts={mapDistricts} selectedDistrict={selectedDistrict} onDistrictClick={handleDistrictClick} />}
+            : <ChoroplethMap districts={mapDistricts} selectedDistrict={selectedStateCode} onDistrictClick={handleStateClick} />}
         </div>
 
         <div style={{

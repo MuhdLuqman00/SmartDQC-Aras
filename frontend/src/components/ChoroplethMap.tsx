@@ -1,5 +1,6 @@
 import React from 'react';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { useLang } from '../context/LanguageContext';
 
 export interface District {
   name: string;
@@ -58,13 +59,35 @@ export function computeAggregates(districts: District[]): Aggregates {
     stuntingRag:    rateToRag(stunting),
     wastingRag:     rateToRag(wasting),
     underweightRag: rateToRag(underweight),
-    overweightRag:  rateToRag(overweight),
+    overweightRag: rateToRag(overweight),
   };
 }
 
-const RAG_LABEL: Record<'green' | 'amber' | 'red', string> = {
-  green: 'Baik', amber: 'Sederhana', red: 'Kritikal',
+/* Reverse of DashboardPage/GeoPage STATE_TO_CODE — display only.
+   Canonical "Pulau Pinang" preferred over "Penang" (matches MOH/KKM usage). */
+const CODE_TO_STATE_DISPLAY: Record<string, string> = {
+  jhr: 'Johor',
+  kdh: 'Kedah',
+  ktn: 'Kelantan',
+  kul: 'Kuala Lumpur',
+  lbn: 'Labuan',
+  mlk: 'Melaka',
+  nsn: 'Negeri Sembilan',
+  pjy: 'Putrajaya',
+  pls: 'Perlis',
+  png: 'Pulau Pinang',
+  prk: 'Perak',
+  phg: 'Pahang',
+  sbh: 'Sabah',
+  sgr: 'Selangor',
+  swk: 'Sarawak',
+  trg: 'Terengganu',
 };
+
+function displayStateName(code: string): string {
+  const k = code.trim().toLowerCase();
+  return CODE_TO_STATE_DISPLAY[k] || code.toUpperCase();
+}
 
 interface TooltipState { x: number; y: number; district: District; }
 
@@ -75,8 +98,15 @@ interface Props {
 }
 
 export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: Props): JSX.Element {
+  const { t } = useLang();
   const [tooltip, setTooltip] = React.useState<TooltipState | null>(null);
   const lookup = React.useMemo(() => buildDistrictLookup(districts), [districts]);
+
+  const ragLabel = (rag: 'green' | 'amber' | 'red'): string => {
+    if (rag === 'green') return t('Good', 'Baik');
+    if (rag === 'amber') return t('Moderate', 'Sederhana');
+    return t('Critical', 'Kritikal');
+  };
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
@@ -138,9 +168,10 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
         fontSize: 11, color: 'var(--text-secondary)',
       }}>
         {([
-          ['#00b5a5', 'Green'],
-          ['#d9534f', 'Red'],
-          ['var(--surface-2)', 'No data'],
+          ['#00b5a5', t('Good', 'Baik')],
+          ['#e0a13c', t('Moderate', 'Sederhana')],
+          ['#d9534f', t('Critical', 'Kritikal')],
+          ['var(--surface-2)', t('No data', 'Tiada data')],
         ] as const).map(([c, label]) => (
           <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{
@@ -160,19 +191,19 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
           border: '1px solid var(--border)',
           borderRadius: 8, padding: '10px 14px',
           pointerEvents: 'none', zIndex: 9999,
-          minWidth: 164, boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          minWidth: 184, boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
         }}>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 13, marginBottom: 6 }}>
-            {tooltip.district.name}
+            {displayStateName(tooltip.district.name)}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
-            Stunting: {(Number(tooltip.district.stunting_rate) * 100).toFixed(1)}%
+            {t('Stunting', 'Kelaparan')}: {(Number(tooltip.district.stunting_rate) * 100).toFixed(1)}%
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Wasting: {(Number(tooltip.district.wasting_rate) * 100).toFixed(1)}%
+            {t('Wasting', 'Kurus')}: {(Number(tooltip.district.wasting_rate) * 100).toFixed(1)}%
           </div>
           <div style={{ fontSize: 12, fontWeight: 600, color: ragToColor(tooltip.district.risk_rag) }}>
-            ● {RAG_LABEL[tooltip.district.risk_rag]}
+            ● {ragLabel(tooltip.district.risk_rag)}
           </div>
         </div>
       )}

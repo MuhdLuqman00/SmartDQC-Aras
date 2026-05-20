@@ -2167,6 +2167,7 @@ async def risk_forecast(req: ForecastRequest):
 async def kpi_dashboard_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
     district: str | None = Query(None, description="Filter by district name"),
+    state: str | None = Query(None, description="Filter by state name (full name, case-insensitive)"),
 ):
     """Return RAG traffic-light KPI status benchmarked against Malaysian national targets."""
     entry = _cache_get(cache_id)
@@ -2182,6 +2183,13 @@ async def kpi_dashboard_endpoint(
         )
         if district_col:
             df = df[df[district_col].str.lower() == district.lower()]
+    if state:
+        state_col = next(
+            (c for c in df.columns if c.lower() in ("negeri", "state")),
+            None,
+        )
+        if state_col:
+            df = df[df[state_col].astype(str).str.strip().str.lower() == state.strip().lower()]
     result = compute_kpi_dashboard(df)
     return JSONResponse(content=json_safe(result))
 
