@@ -1,22 +1,25 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Sun, Moon, LogOut, FileText } from 'lucide-react';
+import { Sun, Moon, LogOut, FileText, ChevronRight } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { useSession } from '../context/SessionContext';
 
 const PAGE_TITLES: Record<string, { en: string; bm: string }> = {
-  '/':         { en: 'Dashboard',     bm: 'Papan Pemuka'    },
-  '/upload':   { en: 'Upload',        bm: 'Muat Naik'       },
-  '/explorer': { en: 'Explorer',      bm: 'Penjelajah'      },
-  '/quality':  { en: 'Quality Report',bm: 'Laporan Kualiti' },
-  '/ai':       { en: 'AI Assistant',  bm: 'Pembantu AI'     },
-  '/reports':  { en: 'Reports',       bm: 'Laporan'         },
-  '/datasets': { en: 'Library',       bm: 'Perpustakaan'    },
-  '/history':  { en: 'History',       bm: 'Sejarah'         },
-  '/settings': { en: 'Settings',      bm: 'Tetapan'         },
-  '/audit':    { en: 'Audit Log',     bm: 'Log Audit'       },
+  '/':         { en: 'Dashboard',       bm: 'Papan Pemuka'    },
+  '/features': { en: 'Capabilities',    bm: 'Keupayaan'       },
+  '/upload':   { en: 'Upload & Map',    bm: 'Muat Naik'       },
+  '/explorer': { en: 'Data Explorer',   bm: 'Penjelajah'      },
+  '/quality':  { en: 'Quality Report',  bm: 'Laporan Kualiti' },
+  '/cleaning': { en: 'Cleaning',        bm: 'Pembersihan'     },
+  '/geo':      { en: 'Geo & Risk',      bm: 'Geo & Risiko'    },
+  '/ai':       { en: 'AI Assistant',    bm: 'Pembantu AI'     },
+  '/reports':  { en: 'Reports',         bm: 'Laporan'         },
+  '/datasets': { en: 'Dataset Library', bm: 'Perpustakaan'    },
+  '/history':  { en: 'History',         bm: 'Sejarah'         },
+  '/settings': { en: 'Settings',        bm: 'Tetapan'         },
+  '/audit':    { en: 'Audit Log',       bm: 'Log Audit'       },
 };
 
 export function TopBar() {
@@ -27,48 +30,58 @@ export function TopBar() {
   const location = useLocation();
   const nav = useNavigate();
 
-  const pageTitles = PAGE_TITLES[location.pathname] || { en: 'SmartDQC', bm: 'SmartDQC' };
+  const page = PAGE_TITLES[location.pathname] || { en: 'SmartDQC', bm: 'SmartDQC' };
+
+  const iconBtn: React.CSSProperties = {
+    background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 9, padding: 8, color: 'var(--text-secondary)',
+    display: 'flex', alignItems: 'center', transition: 'all var(--transition)',
+  };
 
   return (
-    <div style={{
-      height: 64, background: 'var(--surface)',
-      borderBottom: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center',
-      padding: '0 28px', gap: 16, flexShrink: 0,
+    <header className="glass" style={{
+      height: 64, borderBottom: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', padding: '0 28px', gap: 14,
+      flexShrink: 0, position: 'sticky', top: 0, zIndex: 'var(--z-sticky)' as React.CSSProperties['zIndex'],
     }}>
-      {/* Page title */}
-      <h1 style={{
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-        fontWeight: 600, fontSize: 16,
-        color: 'var(--text-primary)', whiteSpace: 'nowrap',
-      }}>
-        {lang === 'en' ? pageTitles.en : pageTitles.bm}
-      </h1>
+      {/* Breadcrumb */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>SmartDQC</span>
+        <ChevronRight size={13} style={{ color: 'var(--text-muted)' }} />
+        <h1 style={{
+          fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 16,
+          color: 'var(--text-primary)', whiteSpace: 'nowrap',
+        }}>
+          {lang === 'en' ? page.en : page.bm}
+        </h1>
+      </div>
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
       {/* Session chip */}
       <button
         onClick={() => nav('/history')}
+        title={t('Go to history', 'Ke sejarah')}
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: filename ? 'rgba(0,163,224,0.10)' : 'transparent',
-          border: `1px solid ${filename ? 'var(--kkm-sky)' : 'var(--border)'}`,
-          borderRadius: 999, padding: '4px 12px',
-          color: filename ? 'var(--kkm-sky)' : 'var(--text-muted)',
-          fontSize: 12, fontWeight: 500, cursor: 'pointer',
-          transition: 'all var(--transition)', whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: 7,
+          background: filename ? 'var(--info-bg)' : 'transparent',
+          border: `1px solid ${filename ? 'var(--primary-light)' : 'var(--border)'}`,
+          borderRadius: 'var(--radius-pill)', padding: '6px 14px',
+          color: filename ? 'var(--primary-light)' : 'var(--text-muted)',
+          fontSize: 12, fontWeight: 600, maxWidth: 220,
+          transition: 'all var(--transition)',
         }}
       >
-        <FileText size={13} />
-        {filename || t('No active session', 'Tiada sesi aktif')}
+        <FileText size={13} style={{ flexShrink: 0 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {filename || t('No active session', 'Tiada sesi aktif')}
+        </span>
       </button>
 
-      {/* Lang segmented control */}
+      {/* Language segmented control */}
       <div style={{
         display: 'flex', border: '1px solid var(--border)',
-        borderRadius: 6, overflow: 'hidden',
+        borderRadius: 8, overflow: 'hidden', background: 'var(--surface-2)',
       }}>
         {(['en', 'bm'] as const).map(code => {
           const active = lang === code;
@@ -78,10 +91,10 @@ export function TopBar() {
               onClick={() => setLang(code)}
               aria-pressed={active}
               style={{
-                background: active ? 'var(--kkm-blue)' : 'transparent',
-                border: 'none', padding: '5px 12px',
+                background: active ? 'var(--gradient-brand)' : 'transparent',
+                border: 'none', padding: '6px 13px',
                 color: active ? '#fff' : 'var(--text-secondary)',
-                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em',
                 transition: 'all var(--transition)',
               }}
             >
@@ -94,13 +107,10 @@ export function TopBar() {
       {/* Theme toggle */}
       <button
         onClick={toggleTheme}
-        style={{
-          background: 'transparent', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '6px', color: 'var(--text-secondary)',
-          display: 'flex', alignItems: 'center', transition: 'all var(--transition)',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--kkm-sky)')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+        title={theme === 'dark' ? t('Light mode', 'Mod terang') : t('Dark mode', 'Mod gelap')}
+        style={iconBtn}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary-light)'; e.currentTarget.style.color = 'var(--primary-light)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
       >
         {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
       </button>
@@ -108,25 +118,25 @@ export function TopBar() {
       {/* User chip */}
       {user && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 9,
           background: 'var(--surface-2)', border: '1px solid var(--border)',
-          borderRadius: 999, padding: '4px 12px 4px 8px',
+          borderRadius: 'var(--radius-pill)', padding: '4px 12px 4px 5px',
         }}>
           <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: 'var(--kkm-blue)', color: '#fff',
+            width: 27, height: 27, borderRadius: '50%',
+            background: 'var(--gradient-brand)', color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 700,
+            fontSize: 11, fontWeight: 700,
           }}>
             {user.username.charAt(0).toUpperCase()}
           </div>
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
             {user.username}
           </span>
           <span style={{
-            fontSize: 10, fontWeight: 600,
-            background: 'var(--kkm-teal)', color: '#fff',
-            borderRadius: 999, padding: '1px 6px',
+            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em',
+            background: 'var(--gradient-gold)', color: '#0F1B2F',
+            borderRadius: 'var(--radius-pill)', padding: '2px 8px', textTransform: 'uppercase',
           }}>
             {user.role}
           </span>
@@ -137,16 +147,12 @@ export function TopBar() {
       <button
         onClick={logout}
         title={t('Logout', 'Log Keluar')}
-        style={{
-          background: 'transparent', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '6px', color: 'var(--text-secondary)',
-          display: 'flex', alignItems: 'center', transition: 'all var(--transition)',
-        }}
+        style={iconBtn}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--danger)'; e.currentTarget.style.color = 'var(--danger)'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
       >
         <LogOut size={15} />
       </button>
-    </div>
+    </header>
   );
 }

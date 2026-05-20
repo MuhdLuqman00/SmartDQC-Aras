@@ -4,9 +4,11 @@ import { useAuth } from './context/AuthContext';
 import { Layout }             from './components/Layout';
 import { LoginPage }          from './pages/LoginPage';
 import { DashboardPage }      from './pages/DashboardPage';
+import { FeaturesPage }       from './pages/FeaturesPage';
 import { UploadPage }         from './pages/UploadPage';
 import { ExplorerPage }       from './pages/ExplorerPage';
 import { QualityPage }        from './pages/QualityPage';
+import { CleaningPage }       from './pages/CleaningPage';
 import { AIPage }             from './pages/AIPage';
 import { ReportsPage }        from './pages/ReportsPage';
 import { DatasetLibraryPage } from './pages/DatasetLibraryPage';
@@ -28,10 +30,15 @@ export function App(): JSX.Element {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<AuthGuard><Layout /></AuthGuard>}>
           <Route path="/"         element={<DashboardPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
           <Route path="/upload"   element={<UploadPage />} />
           <Route path="/explorer" element={<ExplorerPage />} />
           <Route path="/quality"  element={<QualityPage />} />
+          <Route path="/cleaning" element={<CleaningPage />} />
           <Route path="/ai"       element={<AIPage />} />
+          {/* /chatbot used to render AIPage directly; keep as a redirect so
+              old bookmarks and the legacy FeaturesPage NLQ card still resolve. */}
+          <Route path="/chatbot"  element={<Navigate to="/ai" replace />} />
           <Route path="/geo"      element={<GeoPage />} />
           <Route path="/reports"  element={<ReportsPage />} />
           <Route path="/datasets" element={<DatasetLibraryPage />} />

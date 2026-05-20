@@ -15,6 +15,9 @@ interface Message {
   raw?: NarrativeRaw;
 }
 
+/* Unified AI Assistant page — NLQ chat is the primary interface, the
+   "Generate AI Insight" header button drops a narrative card into the
+   same thread. Both /ai and /chatbot now route here. */
 export function AIPage() {
   const { t, lang } = useLang();
   const { cacheId, filename, sourceType, rowCount, qualityScore } = useSession();
@@ -60,57 +63,48 @@ export function AIPage() {
 
   return (
     <SessionGuard>
-      <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - 160px)', minHeight: 500 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: 'calc(100vh - 160px)', minHeight: 520 }}>
 
-        {/* Left panel */}
+        {/* ── Header strip: session info on the left, Generate Insight on the right ── */}
         <div style={{
-          flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 16,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)', padding: '14px 18px',
+          boxShadow: 'var(--shadow-card)',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
-          {/* Session card */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 12 }}>
-              {t('Active Session', 'Sesi Aktif')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {filename}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6, wordBreak: 'break-all' }}>{filename}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {sourceType && (
-                <span style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                  {sourceType}
-                </span>
-              )}
-              {rowCount && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {rowCount.toLocaleString()} {t('rows', 'baris')}
-                </span>
-              )}
-              {qualityScore != null && <RagBadge rag={scoreToRag(qualityScore)} lang={lang} />}
-            </div>
+            {sourceType && (
+              <span style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                {sourceType}
+              </span>
+            )}
+            {rowCount != null && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {rowCount.toLocaleString()} {t('rows', 'baris')}
+              </span>
+            )}
+            {qualityScore != null && <RagBadge rag={scoreToRag(qualityScore)} lang={lang} />}
           </div>
-
-          {/* Narrative button */}
           <button
             onClick={handleNarrative}
-            disabled={narrativeLoading}
+            disabled={narrativeLoading || !cacheId}
             style={{
               background: 'var(--kkm-blue)', color: '#fff', border: 'none',
-              borderRadius: 'var(--radius-btn)', padding: '12px 16px',
-              fontWeight: 600, fontSize: 14, cursor: 'pointer',
-              opacity: narrativeLoading ? 0.6 : 1,
-              display: 'flex', alignItems: 'center', gap: 8,
+              borderRadius: 'var(--radius-btn)', padding: '9px 16px',
+              fontWeight: 600, fontSize: 13, cursor: 'pointer',
+              opacity: (narrativeLoading || !cacheId) ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
             }}
           >
-            <Sparkles size={16} />
-            {narrativeLoading ? t('Generating…', 'Sedang menjana…') : t('Generate AI Narrative', 'Jana Naratif AI')}
+            <Sparkles size={15} />
+            {narrativeLoading ? t('Generating…', 'Sedang menjana…') : t('Generate AI Insight', 'Jana Cerapan AI')}
           </button>
-
-          {/* Model info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
-            <Cpu size={13} />
-            Ollama · Local inference
-          </div>
         </div>
 
-        {/* Chat panel */}
+        {/* ── Chat panel (full width) ── */}
         <div style={{
           flex: 1, background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
@@ -119,8 +113,11 @@ export function AIPage() {
           {/* Thread */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {messages.length === 0 && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', margin: 'auto' }}>
-                {t('Ask a question about your data or generate a narrative.', 'Tanya soalan tentang data anda atau jana naratif.')}
+              <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', margin: 'auto', maxWidth: 460, lineHeight: 1.6 }}>
+                {t(
+                  'Ask a question about your data, or generate an AI insight to begin.',
+                  'Tanya soalan tentang data anda, atau jana cerapan AI untuk bermula.'
+                )}
               </div>
             )}
             {messages.map(msg => (
@@ -135,7 +132,7 @@ export function AIPage() {
                 ) : msg.role === 'narrative' ? (
                   <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '14px 16px', fontSize: 13, lineHeight: 1.7 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
-                      <Sparkles size={13} /> {t('AI Narrative', 'Naratif AI')}
+                      <Sparkles size={13} /> {t('AI Insight', 'Cerapan AI')}
                     </div>
                     {msg.raw
                       ? <NarrativePanel raw={msg.raw} />
@@ -158,31 +155,37 @@ export function AIPage() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
-          <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder={t('Ask about your data…', 'Tanya tentang data anda…')}
-              style={{
-                flex: 1, padding: '10px 14px',
-                background: 'var(--surface-2)', border: '1px solid var(--border)',
-                borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none',
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || loading}
-              style={{
-                background: 'var(--kkm-blue)', color: '#fff', border: 'none',
-                borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
-                opacity: !input.trim() || loading ? 0.5 : 1,
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <Send size={16} />
-            </button>
+          {/* Input + Ollama footer line */}
+          <div style={{ padding: '14px 20px 10px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                placeholder={t('Ask about your data…', 'Tanya tentang data anda…')}
+                style={{
+                  flex: 1, padding: '10px 14px',
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || loading || !cacheId}
+                style={{
+                  background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+                  borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
+                  opacity: !input.trim() || loading || !cacheId ? 0.5 : 1,
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                <Send size={16} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+              <Cpu size={11} />
+              Ollama · Local inference
+            </div>
           </div>
         </div>
       </div>
