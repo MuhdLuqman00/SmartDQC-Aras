@@ -143,8 +143,10 @@ def health():
 def login(form: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
     user = db.query(User).filter_by(username=form.username, is_active=True).first()
     if not user or not verify_password(form.password, user.password_hash):
+        _log_audit("login_failed", detail=f"username={form.username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token({"sub": user.username, "role": user.role})
+    _log_audit("login", user_id=user.id, detail=f"role={user.role}")
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 
 
@@ -1254,13 +1256,18 @@ def _persist_session(
 
 def _log_audit(
     action: str,
-    dataset_id: int | None = None,
+    dataset_id: str | None = None,
     detail: str | None = None,
     user_id: int | None = None,
 ) -> None:
-    """Best-effort audit write — never raises."""
+    """Best-effort audit write — logs a warning if it fails but never raises.
+
+    Previously imported from a non-existent `db.session` module so every
+    call silently no-op'd — the audit table stayed empty regardless of
+    activity. Fixed to use the real SessionLocal from db.init_db.
+    """
     try:
-        from .db.session import SessionLocal
+        from .db.init_db import SessionLocal
         from .db.models import AuditLog
 
         db = SessionLocal()
@@ -1273,8 +1280,8 @@ def _log_audit(
             db.commit()
         finally:
             db.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Audit log write failed for action=%s: %s", action, e)
 
 
 def _resolve_source(
@@ -3228,10 +3235,18 @@ def list_sessions(db=Depends(get_db)):
 
 
 @app.get("/audit/log")
-def get_audit_log(dataset_id: int | None = None, limit: int = 100, db=Depends(get_db)):
-    from .db.models import AuditLog
+def get_audit_log(dataset_id: str | None = None, limit: int = 100, db=Depends(get_db)):
+    """List audit entries with the user's username resolved via LEFT JOIN.
 
-    q = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+    dataset_id is a string FK to datasets.id (was incorrectly typed as int
+    before, so the filter never matched anything)."""
+    from .db.models import AuditLog, User
+
+    q = (
+        db.query(AuditLog, User.username)
+        .outerjoin(User, AuditLog.user_id == User.id)
+        .order_by(AuditLog.created_at.desc())
+    )
     if dataset_id is not None:
         q = q.filter(AuditLog.dataset_id == dataset_id)
     rows = q.limit(limit).all()
@@ -3241,10 +3256,10 @@ def get_audit_log(dataset_id: int | None = None, limit: int = 100, db=Depends(ge
             "action": r.action,
             "dataset_id": r.dataset_id,
             "detail": r.detail,
-            "user_id": r.user_id,
+            "username": username,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
-        for r in rows
+        for r, username in rows
     ]
 
 
@@ -3306,6 +3321,7 @@ def post_thresholds(updates: dict, db=Depends(get_db)):
     current = _get_setting("threshold.all", _DEFAULT_THRESHOLDS, db)
     current.update(updates)
     _set_setting("threshold.all", current, db)
+    _log_audit(action="settings.thresholds", detail=",".join(f"{k}={v}" for k, v in updates.items()))
     return current
 
 
@@ -3323,4 +3339,5 @@ def toggle_rule(body: dict, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Rule '{rule}' not found")
     current[rule]["enabled"] = enabled
     _set_setting("rules.all", current, db)
+    _log_audit(action="settings.rule_toggle", detail=f"{rule}={'on' if enabled else 'off'}")
     return current

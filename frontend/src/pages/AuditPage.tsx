@@ -6,7 +6,9 @@ import { useLang } from '../context/LanguageContext';
 interface AuditEntry {
   id: number;
   action: string;
-  details: string | null;
+  /** Backend column is `detail` (singular); the prior `details` typo left
+      the Details column blank for every row. */
+  detail: string | null;
   username: string | null;
   created_at: string;
 }
@@ -40,7 +42,7 @@ export function AuditPage() {
 
   const exportCsv = () => {
     const header = ['Time', 'Action', 'Details', 'User'].join(',');
-    const rows = filtered.map(l => [l.created_at, l.action, `"${(l.details ?? '').replace(/"/g, '""')}"`, l.username ?? ''].join(','));
+    const rows = filtered.map(l => [l.created_at, l.action, `"${(l.detail ?? '').replace(/"/g, '""')}"`, l.username ?? ''].join(','));
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'audit_log.csv'; a.click();
   };
@@ -94,7 +96,7 @@ export function AuditPage() {
                     </span>
                   </td>
                   <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', maxWidth: 360 }}>
-                    {entry.details ?? '—'}
+                    {entry.detail ?? '—'}
                   </td>
                   <td style={{ padding: '10px 16px', color: 'var(--text-primary)', fontWeight: 500 }}>
                     {entry.username ?? '—'}
