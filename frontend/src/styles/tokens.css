@@ -45,17 +45,18 @@
   --danger-bg:  #FBEAE8;
   --info-bg:    #E9EEF7;
 
-  /* ── Data viz status palette (KKM Navy-Gold-Brick) ───────────────────────
-     Replaces the generic RAG (#00b5a5/#e0a13c/#d9534f) on charts, maps and
-     bar fills with a navy-aligned set that matches the sidebar gold accent.
-     Use these for any "good / watch / critical" indicator-driven colour. */
-  --status-good:     #2D9BC9;  /* KKM Sky                                  */
-  --status-watch:    #C8962E;  /* KKM Gold (= --accent)                    */
-  --status-critical: #B83A2E;  /* Brick — slightly muted than --danger     */
+  /* ── Data viz status palette (light theme) ────────────────────────────
+     Soft, dashboard-appropriate hues that all sit at roughly equal
+     perceptual brightness so a Good bar reads as confidently as a
+     Critical bar. Backgrounds are derived as the same hue at ~14%
+     lightness lift for tints on cards/badges. */
+  --status-good:     #2BB6A8;  /* Soft Teal                                */
+  --status-watch:    #E9A23B;  /* Warm Amber                               */
+  --status-critical: #E56B6F;  /* Soft Coral Red                           */
   --status-neutral:  #8A94A6;  /* unmatched / no-data tone                 */
-  --status-good-bg:     #E5F2F8;
-  --status-watch-bg:    #FBF1DD;
-  --status-critical-bg: #F8E6E3;
+  --status-good-bg:     #E1F5F2;
+  --status-watch-bg:    #FCEFD8;
+  --status-critical-bg: #FCE3E4;
 
   /* ── Gradients & glow ────────────────────────────────────────────────── */
   --gradient-navy:  linear-gradient(160deg, #1B2A4A 0%, #0F1B2F 100%);
@@ -125,14 +126,17 @@
   --danger-bg:  #331412;
   --info-bg:    #16243E;
 
-  /* Data viz status palette — dark-mode variants slightly desaturated */
-  --status-good:     #4DB5DD;
-  --status-watch:    #E0B458;
-  --status-critical: #D45449;
+  /* Data viz status palette — dark-mode hues lifted toward pastel so
+     they sit comfortably on the navy surface tokens without
+     out-shouting body text. Backgrounds are deep tints of the same
+     hue for selected-row / badge backdrops. */
+  --status-good:     #4FD1C5;  /* Muted Aqua                              */
+  --status-watch:    #F6C177;  /* Muted Amber                              */
+  --status-critical: #F38BA8;  /* Rose Red                                */
   --status-neutral:  #6B7C99;
-  --status-good-bg:     #112B36;
-  --status-watch-bg:    #2E2410;
-  --status-critical-bg: #2E1714;
+  --status-good-bg:     #11302C;
+  --status-watch-bg:    #2E2510;
+  --status-critical-bg: #2C1620;
 
   --gradient-navy:  linear-gradient(160deg, #1B2942 0%, #0B1424 100%);
   --gradient-brand: linear-gradient(135deg, #2E4A7A 0%, #14203A 60%, #0B1424 100%);

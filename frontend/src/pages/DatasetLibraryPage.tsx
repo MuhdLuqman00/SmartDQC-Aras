@@ -6,7 +6,6 @@ import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { EmptyState } from '../components/EmptyState';
-import { EntityLinkPanel } from '../components/EntityLinkPanel';
 import { JoinWizardModal } from '../components/JoinWizardModal';
 
 interface Dataset {
@@ -232,7 +231,8 @@ export function DatasetLibraryPage() {
         </div>
       )}
 
-      <EntityLinkPanel datasetIds={Array.from(selected)} />
+      {/* The v1 entity link panel has moved to the dedicated /linkage page
+         (admin-only, with fuzzy IC + name/DOB boost + CSV export). */}
 
       {/* Join wizard modal — opens when exactly 2 datasets are selected. */}
       {joinOpen && selected.size === 2 && (() => {

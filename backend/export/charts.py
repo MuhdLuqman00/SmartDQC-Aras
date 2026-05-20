@@ -16,13 +16,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-# KKM Navy palette (mirrors frontend tokens.css + report_template_spec.py).
+# Palette mirrors frontend tokens.css light-theme --status-* tokens.
 # Names retained so the chart functions stay unchanged.
 _NAVY       = "#1B2A4A"   # primary fill / axis text
 _NAVY_DARK  = "#0F1B2F"
-_SKY        = "#2D9BC9"   # status-good
-_GOLD       = "#C8962E"   # status-watch
-_BRICK      = "#B83A2E"   # status-critical
+_SKY        = "#2BB6A8"   # status-good      (Soft Teal)
+_GOLD       = "#E9A23B"   # status-watch     (Warm Amber)
+_BRICK      = "#E56B6F"   # status-critical  (Soft Coral Red)
 _GRAY       = "#4A5568"
 # Legacy aliases used by chart bodies — point to the new palette.
 _TEAL       = _NAVY        # primary bar fill

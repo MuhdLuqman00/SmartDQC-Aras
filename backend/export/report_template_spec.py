@@ -23,10 +23,11 @@ KKM_LIGHT_GRAY  = "#F1F4FA"
 KKM_MID_GRAY    = "#4A5568"
 KKM_RULE_LINE   = "#D8DFEC"
 
-# Data-viz status palette — must mirror the frontend --status-* tokens.
-STATUS_ON_TRACK  = "#2D9BC9"   # KKM Sky  (good)
-STATUS_AT_RISK   = "#C8962E"   # KKM Gold (watch)
-STATUS_OFF_TRACK = "#B83A2E"   # Brick    (critical)
+# Data-viz status palette — must mirror the frontend light-theme
+# --status-* tokens so PDF/PPTX exports look like the on-screen UI.
+STATUS_ON_TRACK  = "#2BB6A8"   # Soft Teal      (good)
+STATUS_AT_RISK   = "#E9A23B"   # Warm Amber     (watch)
+STATUS_OFF_TRACK = "#E56B6F"   # Soft Coral Red (critical)
 STATUS_NEUTRAL   = "#8A94A6"   # grey fallback
 
 # ---------------------------------------------------------------------------

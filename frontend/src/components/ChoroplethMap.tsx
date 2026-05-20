@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
 import { useLang } from '../context/LanguageContext';
 
@@ -186,7 +187,11 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
         ))}
       </div>
 
-      {tooltip && (
+      {/* Tooltip is portaled to document.body so the .page-enter
+         animation (which leaves a `transform` on every page ancestor)
+         can't capture position:fixed and pull the tooltip away from
+         the cursor. */}
+      {tooltip && createPortal(
         <div style={{
           position: 'fixed',
           top: tooltip.y + 14, left: tooltip.x + 14,
@@ -208,7 +213,8 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
           <div style={{ fontSize: 12, fontWeight: 600, color: ragToColor(tooltip.district.risk_rag) }}>
             ● {ragLabel(tooltip.district.risk_rag)}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
