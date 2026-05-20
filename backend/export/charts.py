@@ -16,14 +16,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-# KKM palette
-_TEAL       = "#00697A"
-_TEAL_DARK  = "#004F5C"
-_AMBER      = "#E8A020"
-_GREEN      = "#2D7A4F"
-_RED        = "#C0392B"
-_NAVY       = "#1A3A5C"
-_GRAY       = "#64748B"
+# KKM Navy palette (mirrors frontend tokens.css + report_template_spec.py).
+# Names retained so the chart functions stay unchanged.
+_NAVY       = "#1B2A4A"   # primary fill / axis text
+_NAVY_DARK  = "#0F1B2F"
+_SKY        = "#2D9BC9"   # status-good
+_GOLD       = "#C8962E"   # status-watch
+_BRICK      = "#B83A2E"   # status-critical
+_GRAY       = "#4A5568"
+# Legacy aliases used by chart bodies — point to the new palette.
+_TEAL       = _NAVY        # primary bar fill
+_TEAL_DARK  = _NAVY_DARK
+_AMBER      = _GOLD
+_GREEN      = _SKY
+_RED        = _BRICK
 
 _FONT = "DejaVu Sans"
 

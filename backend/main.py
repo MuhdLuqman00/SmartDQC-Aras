@@ -2143,10 +2143,25 @@ async def ml_suggest_endpoint(
 # --- REPORT NAMESPACE -----------------------------------------------------------
 
 
+def _parse_charts(charts: str | None) -> set[str] | None:
+    """Parse a comma-separated charts query into a set of keys, or None
+    when the caller wants the default (all recommended) chart set."""
+    if not charts:
+        return None
+    return {c.strip() for c in charts.split(",") if c.strip()}
+
+
 @app.get("/report/pptx")
 async def report_pptx_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
     include_kpi: bool = Query(True, description="Embed KPI dashboard slides"),
+    charts: str | None = Query(
+        None,
+        description=(
+            "Comma-separated chart keys to embed; omit for the recommended "
+            "defaults. Known keys: quality_bar, nutritional_rates, kpi_vs_target."
+        ),
+    ),
 ):
     """Generate a PPTX report from the cached EDA result."""
     entry = _cache_get(cache_id)
@@ -2161,8 +2176,8 @@ async def report_pptx_endpoint(
     eda_result = run_eda_auto(entry["df"], _src)
     kpi_result = compute_kpi_dashboard(entry["df"]) if include_kpi else None
     narrative = _get_or_build_narrative(cache_id, entry)
-    data = build_pptx_bytes(eda_result, narrative, kpi_result=kpi_result)
-    _log_audit(action="report.pptx", detail=f"cache_id={cache_id}")
+    data = build_pptx_bytes(eda_result, narrative, kpi_result=kpi_result, charts=_parse_charts(charts))
+    _log_audit(action="report.pptx", detail=f"cache_id={cache_id} charts={charts or 'default'}")
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -2174,6 +2189,13 @@ async def report_pptx_endpoint(
 async def report_pdf_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
     include_kpi: bool = Query(True, description="Embed KPI dashboard section"),
+    charts: str | None = Query(
+        None,
+        description=(
+            "Comma-separated chart keys to embed; omit for the recommended "
+            "defaults. Known keys: quality_bar, nutritional_rates, kpi_vs_target."
+        ),
+    ),
 ):
     """Generate a PDF report from the cached EDA result."""
     entry = _cache_get(cache_id)
@@ -2188,8 +2210,8 @@ async def report_pdf_endpoint(
     eda_result = run_eda_auto(entry["df"], _src)
     kpi_result = compute_kpi_dashboard(entry["df"]) if include_kpi else None
     narrative = _get_or_build_narrative(cache_id, entry)
-    data = build_pdf_bytes(eda_result, narrative, kpi_result=kpi_result)
-    _log_audit(action="report.pdf", detail=f"cache_id={cache_id}")
+    data = build_pdf_bytes(eda_result, narrative, kpi_result=kpi_result, charts=_parse_charts(charts))
+    _log_audit(action="report.pdf", detail=f"cache_id={cache_id} charts={charts or 'default'}")
     return Response(
         content=data,
         media_type="application/pdf",
@@ -2896,33 +2918,84 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
             ("BAZ Negeri", baz_negeri),
             ("BAZ Daerah", baz_daerah),
         ]
+        # Pivot tabs each contain four section blocks (Detailed Count,
+        # Detailed Percentage, Combined Count, Combined Percentage). Each
+        # block has three header rows: "Count of …" (section title),
+        # classification labels, and "Row Labels" (age categories). Previously
+        # only the "Row Labels" row got blue-filled and no borders / column
+        # widths / freeze panes were applied, so sections 2-4 looked unstyled
+        # compared to the Executive Summary tab. This pass applies the same
+        # visual treatment everywhere, plus the new KKM Navy palette.
+        navy_hex          = "1B2A4A"   # KKM Navy — header fill
+        navy_text_hex     = "0F1B2F"   # KKM Navy Dark — bold title text
+        gold_text_hex     = "C8962E"   # KKM Gold  — section-title accent
+        thin = Side(style="thin", color="D8DFEC")
+        all_borders = Border(left=thin, right=thin, top=thin, bottom=thin)
+        hdr_font     = Font(bold=True, color="FFFFFF", size=11)
+        hdr_fill     = PatternFill(start_color=navy_hex, end_color=navy_hex, fill_type="solid")
+        section_font = Font(bold=True, size=12, color=gold_text_hex)
+        title_font   = Font(bold=True, size=14, color=navy_text_hex)
+
+        def _style_header_row(row):
+            for cell in row:
+                cell.font = hdr_font
+                cell.fill = hdr_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = all_borders
+
         for sheet_name, rows_data in pivot_tabs:
             pd.DataFrame(rows_data).to_excel(
                 writer, sheet_name=sheet_name, index=False, header=False
             )
             ws = writer.sheets[sheet_name]
-            # Style header rows and section dividers
-            for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+
+            # Pass 1: identify header rows so we can style each block's
+            # three-row header consistently (section title + sub-header +
+            # Row Labels row).
+            header_rows: set[int] = set()
+            for i, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
                 val = str(row[0].value or "")
                 if val.startswith("Count of"):
-                    for cell in row:
-                        cell.font = Font(bold=True, size=12, color="1F3864")
-                if val in ("Row Labels", ""):
-                    first_val = str(row[1].value or "") if len(row) > 1 else ""
-                    if first_val in ("Column Labels", ""):
-                        pass
+                    # mark the next two rows as part of this block's header
+                    header_rows.update({i, i + 1, i + 2})
                 if val == "Row Labels":
-                    for cell in row:
-                        cell.font = Font(bold=True, color="FFFFFF", size=10)
-                        cell.fill = PatternFill(
-                            start_color="2F5496", end_color="2F5496", fill_type="solid"
-                        )
-                        cell.alignment = Alignment(horizontal="center")
-                if val == "Grand Total":
-                    for cell in row:
-                        cell.font = Font(bold=True)
+                    header_rows.add(i)
 
-        title_font = Font(bold=True, size=14, color="1F3864")
+            # Pass 2: apply styles
+            for i, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
+                val = str(row[0].value or "")
+                if val.startswith("Count of"):
+                    # Section title row — gold-accented bold, no fill so it
+                    # reads as a banner above the navy-filled column header.
+                    for cell in row:
+                        cell.font = section_font
+                        cell.border = all_borders
+                elif i in header_rows:
+                    _style_header_row(row)
+                elif val == "Grand Total":
+                    for cell in row:
+                        cell.font = Font(bold=True, color=navy_text_hex)
+                        cell.border = all_borders
+                else:
+                    for cell in row:
+                        cell.border = all_borders
+
+            # Column widths sized to longest value (capped at 45).
+            for col_idx in range(1, ws.max_column + 1):
+                letter = get_column_letter(col_idx)
+                max_len = 0
+                for cell in ws[letter]:
+                    try:
+                        max_len = max(max_len, len(str(cell.value or "")))
+                    except Exception:
+                        pass
+                ws.column_dimensions[letter].width = min(max_len + 4, 45)
+
+            # Freeze panes below the first block's three header rows so the
+            # column categories stay visible while scrolling.
+            ws.freeze_panes = ws.cell(row=4, column=2)
+
+        # Title-style the first cell of every sheet (Executive Summary, etc.).
         for ws in writer.sheets.values():
             if ws.cell(1, 1).value:
                 ws.cell(1, 1).font = title_font

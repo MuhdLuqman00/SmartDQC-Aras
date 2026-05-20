@@ -2,21 +2,32 @@
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Colours (hex strings, used by both PDF and PPTX builders)
+# Colours — KKM Navy palette (matches frontend tokens.css). Names retained
+# (KKM_TEAL, KKM_TEAL_DARK, KKM_TEAL_LIGHT) so report.py keeps working with
+# zero re-wiring; the values now resolve to the navy palette.
 # ---------------------------------------------------------------------------
-KKM_TEAL        = "#00697A"   # MOH Malaysia primary
-KKM_TEAL_DARK   = "#004F5C"
-KKM_TEAL_LIGHT  = "#E6F4F5"
-KKM_NAVY        = "#1A3A5C"
-KKM_WHITE       = "#FFFFFF"
-KKM_LIGHT_GRAY  = "#F5F7F8"
-KKM_MID_GRAY    = "#64748B"
-KKM_RULE_LINE   = "#C8D8DC"
+KKM_NAVY        = "#1B2A4A"   # primary surface (sidebar / section bars)
+KKM_NAVY_DARK   = "#0F1B2F"   # cover background / footer
+KKM_SKY         = "#2E4A7A"   # secondary accent
+KKM_GOLD        = "#C8962E"   # warm accent / highlights
+KKM_GOLD_LIGHT  = "#E8C77A"
+KKM_BG          = "#EEF2F8"   # page surface
 
-STATUS_ON_TRACK  = "#2D7A4F"   # green
-STATUS_AT_RISK   = "#E8A020"   # amber
-STATUS_OFF_TRACK = "#C0392B"   # red
-STATUS_NEUTRAL   = "#64748B"   # grey fallback
+# Legacy aliases — point to the new palette so report.py reskin is automatic.
+KKM_TEAL        = KKM_NAVY        # was #00697A (teal)
+KKM_TEAL_DARK   = KKM_NAVY_DARK   # was #004F5C
+KKM_TEAL_LIGHT  = KKM_BG          # was #E6F4F5 (pale teal)
+
+KKM_WHITE       = "#FFFFFF"
+KKM_LIGHT_GRAY  = "#F1F4FA"
+KKM_MID_GRAY    = "#4A5568"
+KKM_RULE_LINE   = "#D8DFEC"
+
+# Data-viz status palette — must mirror the frontend --status-* tokens.
+STATUS_ON_TRACK  = "#2D9BC9"   # KKM Sky  (good)
+STATUS_AT_RISK   = "#C8962E"   # KKM Gold (watch)
+STATUS_OFF_TRACK = "#B83A2E"   # Brick    (critical)
+STATUS_NEUTRAL   = "#8A94A6"   # grey fallback
 
 # ---------------------------------------------------------------------------
 # Section labels (BM / EN pairs)

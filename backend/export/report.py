@@ -246,7 +246,7 @@ def _quality_overview_rows(eda: dict) -> list[list[str]]:
     ]
 
 
-def _slide_quality(prs, layout, eda: dict, district: str):
+def _slide_quality(prs, layout, eda: dict, district: str, charts: set[str] | None = None):
     s = prs.slides.add_slide(layout)
     _bg(s, KKM_TEAL_LIGHT)
     _section_bar_pptx(s, "quality_overview")
@@ -256,9 +256,10 @@ def _slide_quality(prs, layout, eda: dict, district: str):
 
     _pptx_table(s, rows, l=0.4, t=0.75, w=6.0, h=min(0.45 * len(rows), 6.3))
 
-    chart_png = chart_quality_bar(eda)
-    if chart_png:
-        s.shapes.add_picture(BytesIO(chart_png), Inches(6.8), Inches(0.75), Inches(6.1), Inches(5.8))
+    if charts is None or "quality_bar" in charts:
+        chart_png = chart_quality_bar(eda)
+        if chart_png:
+            s.shapes.add_picture(BytesIO(chart_png), Inches(6.8), Inches(0.75), Inches(6.1), Inches(5.8))
 
     _footer_bar_pptx(s, district)
 
@@ -293,7 +294,8 @@ def _slide_recommendations(prs, layout, narrative: dict, district: str):
     _footer_bar_pptx(s, district)
 
 
-def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: str = "en"):
+def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: str = "en",
+                           charts: set[str] | None = None):
     breakdown = kpi_result.get("district_breakdown") or []
     s = prs.slides.add_slide(layout)
     _bg(s, KKM_TEAL_LIGHT)
@@ -318,11 +320,15 @@ def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: s
         _box(s, "No district breakdown available.", 0.5, 1.5, 12, 1.0,
              size=11, color=KKM_NAVY)
 
+    # Honour the per-chart filter; default (charts is None) embeds both.
+    want_rates  = charts is None or "nutritional_rates" in charts
+    want_target = charts is None or "kpi_vs_target" in charts
+
     chart_y = 0.75 + table_h + 0.15
     chart_h = min(6.9 - chart_y, 3.2)
     if chart_h > 1.0:
-        chart2 = chart_nutritional_rates(kpi_result)
-        chart3 = chart_kpi_vs_target(kpi_result)
+        chart2 = chart_nutritional_rates(kpi_result) if want_rates else None
+        chart3 = chart_kpi_vs_target(kpi_result) if want_target else None
         if chart2:
             s.shapes.add_picture(BytesIO(chart2), Inches(0.4), Inches(chart_y),
                                  Inches(6.4), Inches(chart_h))
@@ -351,7 +357,15 @@ def build_pptx_bytes(
     district: str = "Malaysia",
     date_range: str = "",
     lang: str = "en",
+    charts: set[str] | None = None,
 ) -> bytes:
+    """Render the PPTX report.
+
+    `charts` controls which chart PNGs are embedded:
+      None         → default (every recommended chart)
+      set of keys  → only those keys; known: quality_bar, nutritional_rates,
+                     kpi_vs_target.
+    """
     prs = Presentation()
     prs.slide_width  = Inches(13.33)
     prs.slide_height = Inches(7.5)
@@ -359,11 +373,11 @@ def build_pptx_bytes(
 
     _slide_cover(prs, blank, eda_result, district, date_range)
     _slide_exec_summary(prs, blank, narrative, district)
-    _slide_quality(prs, blank, eda_result, district)
+    _slide_quality(prs, blank, eda_result, district, charts=charts)
     _slide_recommendations(prs, blank, narrative, district)
 
     if kpi_result:
-        _slide_indicator_table(prs, blank, kpi_result, district, lang)
+        _slide_indicator_table(prs, blank, kpi_result, district, lang, charts=charts)
 
     _slide_methodology(prs, blank, district)
 
@@ -514,7 +528,7 @@ def _pdf_section_exec_summary(story, narrative: dict, sec_label, h2, body):
     story.append(Spacer(1, 0.5 * cm))
 
 
-def _pdf_section_quality(story, eda: dict, sec_label, h2, body):
+def _pdf_section_quality(story, eda: dict, sec_label, h2, body, charts: set[str] | None = None):
     story.append(_section_bar_pdf(_sec("quality_overview", "en"),
                                   _sec("quality_overview", "bm"), sec_label))
     story.append(Spacer(1, 0.2 * cm))
@@ -526,11 +540,12 @@ def _pdf_section_quality(story, eda: dict, sec_label, h2, body):
     tbl.setStyle(TableStyle(_base_table_style()))
     story.append(tbl)
 
-    chart_png = chart_quality_bar(eda)
-    if chart_png:
-        img = Image(BytesIO(chart_png), width=14 * cm, height=7 * cm)
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(img)
+    if charts is None or "quality_bar" in charts:
+        chart_png = chart_quality_bar(eda)
+        if chart_png:
+            img = Image(BytesIO(chart_png), width=14 * cm, height=7 * cm)
+            story.append(Spacer(1, 0.3 * cm))
+            story.append(img)
 
     story.append(Spacer(1, 0.5 * cm))
 
@@ -555,7 +570,8 @@ def _pdf_section_recommendations(story, narrative: dict, sec_label, h2, body, la
     story.append(Spacer(1, 0.3 * cm))
 
 
-def _pdf_section_indicator_table(story, kpi_result: dict, sec_label, lang: str = "en"):
+def _pdf_section_indicator_table(story, kpi_result: dict, sec_label, lang: str = "en",
+                                 charts: set[str] | None = None):
     breakdown = kpi_result.get("district_breakdown") or []
     story.append(_section_bar_pdf(_sec("indicator_table", "en"),
                                   _sec("indicator_table", "bm"), sec_label))
@@ -582,8 +598,11 @@ def _pdf_section_indicator_table(story, kpi_result: dict, sec_label, lang: str =
         story.append(Paragraph("No district breakdown available.",
                                getSampleStyleSheet()["Normal"]))
 
-    chart2 = chart_nutritional_rates(kpi_result)
-    chart3 = chart_kpi_vs_target(kpi_result)
+    # Honour the per-chart filter; default (charts is None) embeds both.
+    want_rates  = charts is None or "nutritional_rates" in charts
+    want_target = charts is None or "kpi_vs_target" in charts
+    chart2 = chart_nutritional_rates(kpi_result) if want_rates else None
+    chart3 = chart_kpi_vs_target(kpi_result) if want_target else None
     if chart2 or chart3:
         story.append(Spacer(1, 0.3 * cm))
         chart_row = []
@@ -619,7 +638,15 @@ def build_pdf_bytes(
     district: str = "Malaysia",
     date_range: str = "",
     lang: str = "en",
+    charts: set[str] | None = None,
 ) -> bytes:
+    """Render the PDF report.
+
+    `charts` controls which chart images are embedded:
+      None         → default (every recommended chart)
+      set of keys  → only those keys; known: quality_bar, nutritional_rates,
+                     kpi_vs_target.
+    """
     buf = BytesIO()
     footer_canvas = _make_footer_canvas(district, date.today().year)
     doc = SimpleDocTemplate(
@@ -633,11 +660,11 @@ def build_pdf_bytes(
 
     _pdf_section_cover(story, eda_result, district, date_range, cover_h, small)
     _pdf_section_exec_summary(story, narrative, sec_label, h2, body)
-    _pdf_section_quality(story, eda_result, sec_label, h2, body)
+    _pdf_section_quality(story, eda_result, sec_label, h2, body, charts=charts)
     _pdf_section_recommendations(story, narrative, sec_label, h2, body, lang)
 
     if kpi_result:
-        _pdf_section_indicator_table(story, kpi_result, sec_label, lang)
+        _pdf_section_indicator_table(story, kpi_result, sec_label, lang, charts=charts)
 
     _pdf_section_methodology(story, sec_label, small)
 
