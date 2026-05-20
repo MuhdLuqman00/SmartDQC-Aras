@@ -1,20 +1,94 @@
 import React, { useEffect, useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save, RotateCcw, Info } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 
+/* Threshold keys MUST match backend _DEFAULT_THRESHOLDS in main.py.
+   Prior shape (missing_warn / duplicate_warn / outlier_zscore) didn't
+   round-trip: GET returned the backend keys, save POSTed the truncated
+   keys, and the next reload showed defaults again. */
 interface Thresholds {
-  missing_warn: number; missing_fail: number;
-  duplicate_warn: number; duplicate_fail: number;
-  outlier_zscore: number;
+  missing_rate_warn: number;
+  missing_rate_fail: number;
+  duplicate_rate_warn: number;
+  duplicate_rate_fail: number;
+  outlier_zscore_threshold: number;
 }
 
+const DEFAULT_THRESHOLDS: Thresholds = {
+  missing_rate_warn: 0.05,
+  missing_rate_fail: 0.15,
+  duplicate_rate_warn: 0.02,
+  duplicate_rate_fail: 0.10,
+  outlier_zscore_threshold: 3.0,
+};
+
 interface Rule { id: string; description: string; enabled: boolean; }
+
+/* Rule metadata — backend defaults don't ship descriptions, so we
+   surface them here. Grouped so the rules tab reads as a checklist
+   rather than 9 anonymous toggles. */
+const RULE_META: Record<string, { groupEn: string; groupBm: string; nameEn: string; nameBm: string; descEn: string; descBm: string }> = {
+  duplicate_check: {
+    groupEn: 'Integrity', groupBm: 'Integriti',
+    nameEn: 'Duplicate row detection', nameBm: 'Pengesanan baris duplikat',
+    descEn: 'Flag exact-duplicate rows (same IC + same measurement date).',
+    descBm: 'Tandakan baris duplikat tepat (IC dan tarikh pengukuran sama).',
+  },
+  missing_value_check: {
+    groupEn: 'Integrity', groupBm: 'Integriti',
+    nameEn: 'Missing-value check', nameBm: 'Semakan nilai hilang',
+    descEn: 'Flag rows where critical columns (IC, height, weight, date) are blank.',
+    descBm: 'Tandakan baris di mana lajur kritikal (IC, tinggi, berat, tarikh) kosong.',
+  },
+  ic_format_check: {
+    groupEn: 'Format', groupBm: 'Format',
+    nameEn: 'IC number format', nameBm: 'Format nombor IC',
+    descEn: 'Verify each IC is a 12-digit Malaysian identification number.',
+    descBm: 'Sahkan setiap IC ialah nombor pengenalan Malaysia 12-digit.',
+  },
+  date_format_check: {
+    groupEn: 'Format', groupBm: 'Format',
+    nameEn: 'Date format', nameBm: 'Format tarikh',
+    descEn: 'Verify dates parse to a valid calendar value (no Feb 30, no future birth dates).',
+    descBm: 'Sahkan tarikh dihurai kepada nilai kalendar sah (tiada 30 Februari, tiada tarikh lahir akan datang).',
+  },
+  gender_value_check: {
+    groupEn: 'Format', groupBm: 'Format',
+    nameEn: 'Gender value', nameBm: 'Nilai jantina',
+    descEn: 'Restrict gender values to L/P (or Male/Female aliases).',
+    descBm: 'Hadkan nilai jantina kepada L/P (atau alias Lelaki/Perempuan).',
+  },
+  age_range_check: {
+    groupEn: 'Range', groupBm: 'Julat',
+    nameEn: 'Age range', nameBm: 'Julat umur',
+    descEn: 'Reject ages outside 0–60 months for paediatric nutrition datasets.',
+    descBm: 'Tolak umur di luar 0–60 bulan untuk dataset pemakanan pediatrik.',
+  },
+  height_range_check: {
+    groupEn: 'Range', groupBm: 'Julat',
+    nameEn: 'Height range', nameBm: 'Julat tinggi',
+    descEn: 'Reject heights outside 40–130 cm (WHO under-5 reference window).',
+    descBm: 'Tolak tinggi di luar 40–130 cm (rujukan WHO bawah-5 tahun).',
+  },
+  weight_range_check: {
+    groupEn: 'Range', groupBm: 'Julat',
+    nameEn: 'Weight range', nameBm: 'Julat berat',
+    descEn: 'Reject weights outside 1.5–35 kg (WHO under-5 reference window).',
+    descBm: 'Tolak berat di luar 1.5–35 kg (rujukan WHO bawah-5 tahun).',
+  },
+  bmi_range_check: {
+    groupEn: 'Consistency', groupBm: 'Konsistensi',
+    nameEn: 'BMI consistency', nameBm: 'Konsistensi BMI',
+    descEn: 'Verify recorded BMI matches weight/height² to within rounding tolerance.',
+    descBm: 'Sahkan BMI yang direkodkan sepadan dengan berat/tinggi² dalam toleransi pembundaran.',
+  },
+};
 
 export function SettingsPage() {
   const { t } = useLang();
   const [tab, setTab] = useState<'thresholds' | 'rules'>('thresholds');
-  const [thresholds, setThresholds] = useState<Thresholds>({ missing_warn: 5, missing_fail: 15, duplicate_warn: 2, duplicate_fail: 10, outlier_zscore: 3.0 });
+  const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [rules, setRules] = useState<Rule[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -46,6 +120,10 @@ export function SettingsPage() {
     } finally { setSaving(false); }
   };
 
+  const restoreDefaults = () => {
+    setThresholds(DEFAULT_THRESHOLDS);
+  };
+
   const toggleRule = async (id: string) => {
     const rule = rules.find(r => r.id === id);
     if (!rule) return;
@@ -56,13 +134,55 @@ export function SettingsPage() {
 
   const sliderStyle: React.CSSProperties = { width: '100%', accentColor: 'var(--kkm-blue)' };
 
-  const sliders: { key: keyof Thresholds; labelEn: string; labelBm: string; max: number; step: number; unit: string }[] = [
-    { key: 'missing_warn',    labelEn: 'Missing Rate Warn',    labelBm: 'Had Amaran Hilang',       max: 30,  step: 0.5, unit: '%' },
-    { key: 'missing_fail',    labelEn: 'Missing Rate Fail',    labelBm: 'Had Gagal Hilang',        max: 50,  step: 0.5, unit: '%' },
-    { key: 'duplicate_warn',  labelEn: 'Duplicate Rate Warn',  labelBm: 'Had Amaran Duplikat',     max: 20,  step: 0.5, unit: '%' },
-    { key: 'duplicate_fail',  labelEn: 'Duplicate Rate Fail',  labelBm: 'Had Gagal Duplikat',      max: 30,  step: 0.5, unit: '%' },
-    { key: 'outlier_zscore',  labelEn: 'Outlier Z-score',      labelBm: 'Z-skor Pencilan',         max: 5,   step: 0.1, unit: ''  },
+  /* Threshold metadata. `scale` is the multiplier from stored value to
+     display value: 100 for rate columns (0.05 → 5%), 1 for the z-score.
+     `recommended` is shown as a chip + tick mark below the slider. */
+  type SliderMeta = {
+    key: keyof Thresholds;
+    labelEn: string; labelBm: string;
+    max: number; step: number; unit: string; scale: number;
+    recommended: number;
+    descEn: string; descBm: string;
+  };
+  const sliders: SliderMeta[] = [
+    {
+      key: 'missing_rate_warn',
+      labelEn: 'Missing Rate — Warning', labelBm: 'Kadar Hilang — Amaran',
+      max: 30, step: 0.5, unit: '%', scale: 100, recommended: 5,
+      descEn: 'Columns missing this fraction of values trigger a Warning on the quality report. NPAN guidance: 5%.',
+      descBm: 'Lajur dengan kadar hilang melebihi ini akan mencetuskan Amaran pada laporan kualiti. Garis panduan NPAN: 5%.',
+    },
+    {
+      key: 'missing_rate_fail',
+      labelEn: 'Missing Rate — Fail', labelBm: 'Kadar Hilang — Gagal',
+      max: 50, step: 0.5, unit: '%', scale: 100, recommended: 15,
+      descEn: 'Above this level the column is marked Critical and excluded from KPI roll-ups. NPAN guidance: 15%.',
+      descBm: 'Melebihi paras ini, lajur ditanda Kritikal dan dikecualikan dari KPI. Garis panduan NPAN: 15%.',
+    },
+    {
+      key: 'duplicate_rate_warn',
+      labelEn: 'Duplicate Rate — Warning', labelBm: 'Kadar Duplikat — Amaran',
+      max: 20, step: 0.5, unit: '%', scale: 100, recommended: 2,
+      descEn: 'Records sharing the same IC and date are flagged as duplicates. 2% is the recommended ceiling for healthy data entry.',
+      descBm: 'Rekod dengan IC dan tarikh yang sama dianggap duplikat. 2% ialah had yang disyorkan untuk kemasukan data yang sihat.',
+    },
+    {
+      key: 'duplicate_rate_fail',
+      labelEn: 'Duplicate Rate — Fail', labelBm: 'Kadar Duplikat — Gagal',
+      max: 30, step: 0.5, unit: '%', scale: 100, recommended: 10,
+      descEn: 'Above this level the dataset is marked Critical for uniqueness. Investigate data-entry workflows before continuing.',
+      descBm: 'Melebihi paras ini, dataset ditanda Kritikal untuk keunikan. Periksa aliran kerja kemasukan data sebelum meneruskan.',
+    },
+    {
+      key: 'outlier_zscore_threshold',
+      labelEn: 'Outlier Z-score Threshold', labelBm: 'Ambang Z-skor Pencilan',
+      max: 5, step: 0.1, unit: '', scale: 1, recommended: 3.0,
+      descEn: 'Numeric values further than this many standard deviations from the column mean are flagged as outliers. 3.0 is standard for normal distributions.',
+      descBm: 'Nilai numerik yang melebihi bilangan sisihan piawai ini dari min lajur akan ditanda sebagai pencilan. 3.0 adalah piawai untuk taburan normal.',
+    },
   ];
+
+  const [openHelp, setOpenHelp] = useState<string | null>(null);
 
   return (
     <div style={{ maxWidth: 700 }}>
@@ -80,57 +200,126 @@ export function SettingsPage() {
       {tab === 'thresholds' && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 28, boxShadow: 'var(--shadow-card)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {sliders.map(s => (
-              <div key={s.key}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {t(s.labelEn, s.labelBm)}
-                  </label>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--kkm-blue)', fontFamily: 'JetBrains Mono, monospace' }}>
-                    {thresholds[s.key]}{s.unit}
-                  </span>
+            {sliders.map(s => {
+              const display = (thresholds[s.key] ?? 0) * s.scale;
+              const recDisplay = s.recommended;
+              const isOpen = openHelp === s.key;
+              const isRecommended = Math.abs(display - recDisplay) < (s.step / 2);
+              return (
+                <div key={s.key}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {t(s.labelEn, s.labelBm)}
+                      <button
+                        type="button"
+                        onClick={() => setOpenHelp(isOpen ? null : s.key)}
+                        aria-label="Help"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isOpen ? 'var(--kkm-blue)' : 'var(--text-muted)', display: 'inline-flex' }}
+                      >
+                        <Info size={13} />
+                      </button>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {isRecommended && (
+                        <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--success-bg)', color: 'var(--success)', borderRadius: 999, padding: '1px 8px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          {t('Recommended', 'Disyorkan')}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--kkm-blue)', fontFamily: 'JetBrains Mono, monospace' }}>
+                        {display.toFixed(s.step < 1 ? 1 : 0)}{s.unit}
+                      </span>
+                    </div>
+                  </div>
+                  <input type="range" min={0} max={s.max} step={s.step}
+                    value={display}
+                    onChange={e => setThresholds(prev => ({ ...prev, [s.key]: parseFloat(e.target.value) / s.scale }))}
+                    style={sliderStyle} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <span>0{s.unit}</span>
+                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                      ▼ {t('Rec.', 'Disyor.')} {recDisplay}{s.unit}
+                    </span>
+                    <span>{s.max}{s.unit}</span>
+                  </div>
+                  {isOpen && (
+                    <div style={{
+                      marginTop: 8, padding: '10px 12px', fontSize: 12, lineHeight: 1.6,
+                      color: 'var(--text-secondary)', background: 'var(--surface-2)',
+                      border: '1px solid var(--border)', borderRadius: 8,
+                    }}>
+                      {t(s.descEn, s.descBm)}
+                    </div>
+                  )}
                 </div>
-                <input type="range" min={0} max={s.max} step={s.step}
-                  value={thresholds[s.key]}
-                  onChange={e => setThresholds(prev => ({ ...prev, [s.key]: parseFloat(e.target.value) }))}
-                  style={sliderStyle} />
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <button onClick={saveThresholds} disabled={saving}
-            style={{ marginTop: 28, background: saved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Save size={15} />
-            {saving ? t('Saving…', 'Menyimpan…') : saved ? t('Saved!', 'Disimpan!') : t('Save', 'Simpan')}
-          </button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 28 }}>
+            <button onClick={saveThresholds} disabled={saving}
+              style={{ background: saved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Save size={15} />
+              {saving ? t('Saving…', 'Menyimpan…') : saved ? t('Saved!', 'Disimpan!') : t('Save', 'Simpan')}
+            </button>
+            <button onClick={restoreDefaults} type="button"
+              style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '10px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RotateCcw size={14} />
+              {t('Restore defaults', 'Pulihkan tetapan asal')}
+            </button>
+          </div>
         </div>
       )}
 
       {/* Rules tab */}
       {tab === 'rules' && (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {rules.length === 0 ? (
-            <div style={{ padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
               {t('No rules found.', 'Tiada peraturan ditemui.')}
             </div>
-          ) : rules.map((rule, i) => (
-            <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px', borderBottom: i < rules.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0 }}>
-                <input type="checkbox" checked={rule.enabled} onChange={() => toggleRule(rule.id)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: 'pointer' }}>
-                  <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
+          ) : (() => {
+            // Group rules by RULE_META.group; rules without metadata fall under "Other".
+            const groups: Record<string, { en: string; bm: string; items: Rule[] }> = {};
+            for (const rule of rules) {
+              const meta = RULE_META[rule.id];
+              const key = meta?.groupEn ?? 'Other';
+              groups[key] ||= { en: meta?.groupEn ?? 'Other', bm: meta?.groupBm ?? 'Lain-lain', items: [] };
+              groups[key].items.push(rule);
+            }
+            return Object.entries(groups).map(([key, g]) => (
+              <div key={key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                  {t(g.en, g.bm)}
                 </div>
-              </label>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{rule.description || rule.id}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>{rule.id}</div>
+                {g.items.map((rule, i) => {
+                  const meta = RULE_META[rule.id];
+                  const name = meta ? t(meta.nameEn, meta.nameBm) : (rule.description || rule.id);
+                  const desc = meta ? t(meta.descEn, meta.descBm) : '';
+                  return (
+                    <div key={rule.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < g.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2 }}>
+                        <input type="checkbox" checked={rule.enabled} onChange={() => toggleRule(rule.id)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: 'pointer' }}>
+                          <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
+                        </div>
+                      </label>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</div>
+                        {desc && (
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{desc}</div>
+                        )}
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: 4 }}>{rule.id}</div>
+                      </div>
+                      {!rule.enabled && (
+                        <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          {t('Disabled', 'Dilumpuhkan')}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              {!rule.enabled && (
-                <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  {t('Disabled', 'Dilumpuhkan')}
-                </span>
-              )}
-            </div>
-          ))}
+            ));
+          })()}
         </div>
       )}
     </div>
