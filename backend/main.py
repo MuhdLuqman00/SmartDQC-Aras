@@ -2032,6 +2032,17 @@ async def join_preview_endpoint(
     }
 
 
+def _join_source_label(cache_id: str | None, upload_filename: str | None) -> str:
+    """Resolve a human-friendly label for a join side: prefer the cached
+    dataset filename, fall back to the upload filename, then to the
+    truncated cache_id."""
+    if cache_id:
+        entry = _cache_get(cache_id)
+        stats = (entry or {}).get("stats") or {}
+        return stats.get("filename") or cache_id[:8]
+    return upload_filename or "upload"
+
+
 @app.post("/join/run")
 async def join_run_endpoint(
     file_left: UploadFile | None = File(None),
@@ -2043,8 +2054,9 @@ async def join_run_endpoint(
         None, description="Comma-separated key column names (horizontal joins)"
     ),
     dedup: bool = Query(False, description="Remove duplicate rows after union"),
+    db=Depends(get_db),
 ):
-    """Execute a full join and cache the result. Returns cache_id for download or EDA."""
+    """Execute a full join, cache the result, and persist it as a library Dataset row."""
     left_bytes = (await file_left.read()) if file_left else None
     right_bytes = (await file_right.read()) if file_right else None
 
@@ -2058,7 +2070,51 @@ async def join_run_endpoint(
     parsed_keys = [c.strip() for c in key_cols.split(",")] if key_cols else None
     result, stats = _perform_join(df_left, df_right, join_type, parsed_keys, dedup)
 
-    cache_id = _cache_cleaned(result)
+    # Synthesise a human-friendly filename for the joined dataset.
+    left_label = _join_source_label(cache_id_left, file_left.filename if file_left else None)
+    right_label = _join_source_label(cache_id_right, file_right.filename if file_right else None)
+    join_symbol = "∪" if join_type == "union" else "⨝"
+    joined_name = f"{left_label} {join_symbol} {right_label} ({join_type})"
+
+    # Inherit source_type from the left side when both sides agree, so the
+    # cleaner downstream knows what shape to expect. Otherwise mark as
+    # "joined" — the cleaner will fall through to the generic path.
+    left_st = ((_cache_get(cache_id_left) or {}).get("stats") or {}).get("source_type") if cache_id_left else None
+    right_st = ((_cache_get(cache_id_right) or {}).get("stats") or {}).get("source_type") if cache_id_right else None
+    effective_st = left_st if (left_st and left_st == right_st) else "joined"
+
+    cache_id = _cache_cleaned(
+        result,
+        {
+            "filename": joined_name,
+            "source_type": effective_st,
+            "rows": len(result),
+            "cols": len(result.columns),
+            "join_type": join_type,
+            "join_stats": stats,
+        },
+    )
+
+    # Best-effort persist so the joined dataset shows up in the library /
+    # history list. A DB failure here must not break the join.
+    try:
+        _persist_session(
+            cache_id=cache_id,
+            filename=joined_name,
+            source_type=effective_st,
+            row_count=len(result),
+            result={"join_type": join_type, "join_stats": stats},
+            db=db,
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("Joined-dataset persist failed for %s: %s", cache_id, exc)
+
+    _log_audit(
+        action="dataset.join",
+        dataset_id=cache_id,
+        detail=f"{join_type}: {left_label} + {right_label}",
+    )
+
     return {
         "cache_id": cache_id,
         "shape": {"rows": len(result), "cols": len(result.columns)},

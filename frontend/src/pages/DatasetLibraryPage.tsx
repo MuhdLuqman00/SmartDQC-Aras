@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, GitMerge } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { EmptyState } from '../components/EmptyState';
 import { EntityLinkPanel } from '../components/EntityLinkPanel';
+import { JoinWizardModal } from '../components/JoinWizardModal';
 
 interface Dataset {
   id: string;
@@ -27,6 +28,7 @@ export function DatasetLibraryPage() {
   const [comparing, setComparing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
+  const [joinOpen, setJoinOpen] = useState(false);
 
   useEffect(() => {
     api.get<Dataset[]>('/datasets')
@@ -83,6 +85,12 @@ export function DatasetLibraryPage() {
             <button onClick={handleCompare} disabled={comparing}
               style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: comparing ? 0.6 : 1 }}>
               {comparing ? t('Comparing…', 'Sedang membandingkan…') : t('Compare', 'Bandingkan')}
+            </button>
+          )}
+          {selected.size === 2 && (
+            <button onClick={() => setJoinOpen(true)}
+              style={{ background: 'var(--kkm-teal)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GitMerge size={14} /> {t('Join', 'Cantum')}
             </button>
           )}
           <button onClick={handleDelete} disabled={deleting}
@@ -225,6 +233,26 @@ export function DatasetLibraryPage() {
       )}
 
       <EntityLinkPanel datasetIds={Array.from(selected)} />
+
+      {/* Join wizard modal — opens when exactly 2 datasets are selected. */}
+      {joinOpen && selected.size === 2 && (() => {
+        const ids = Array.from(selected);
+        const left = datasets.find(d => d.id === ids[0]);
+        const right = datasets.find(d => d.id === ids[1]);
+        if (!left || !right) return null;
+        return (
+          <JoinWizardModal
+            left={{ id: left.id, filename: left.filename, source_type: left.source_type, row_count: left.row_count }}
+            right={{ id: right.id, filename: right.filename, source_type: right.source_type, row_count: right.row_count }}
+            onClose={() => setJoinOpen(false)}
+            onJoined={() => {
+              // Refresh the library so the joined dataset appears.
+              api.get<Dataset[]>('/datasets').then(r => setDatasets(r.data)).catch(console.error);
+              setSelected(new Set());
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
