@@ -51,6 +51,7 @@ def _resolve_flag_col(df: pd.DataFrame, flag: str) -> str | None:
 
 
 _DISTRICT_COLS = ["NEGERI", "STATE", "negeri", "state", "Negeri", "State"]
+_DAERAH_COLS   = ["daerah", "Daerah", "DAERAH", "district", "District", "kawasan", "Kawasan"]
 
 # Periods ahead to forecast for "will meet 2027 target" check
 _FORECAST_PERIODS = 4
@@ -100,6 +101,7 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
         "indicators": [],
         "unavailable_indicators": [],
         "by_state": [],
+        "by_daerah": [],
         "by_gender": [],
         "by_age": [],
     }
@@ -142,6 +144,13 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
     # by_state — group on the first available state column
     state_col = next((c for c in _DISTRICT_COLS if c in df.columns), None)
     by_state = _group_breakdown(df, state_col, "state") if state_col else []
+
+    # by_daerah — same shape as by_state, scoped to the district column
+    # if present. When the endpoint is called with ?state=X the upstream
+    # filter has already narrowed df to that state, so by_daerah here is
+    # already state-scoped (or national when unfiltered).
+    daerah_col = next((c for c in _DAERAH_COLS if c in df.columns), None)
+    by_daerah = _group_breakdown(df, daerah_col, "district") if daerah_col else []
 
     # by_gender — tolerant column detection
     gender_col = next(
@@ -193,6 +202,7 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
         "indicators": indicators,
         "unavailable_indicators": unavailable,
         "by_state": by_state,
+        "by_daerah": by_daerah,
         "by_gender": by_gender,
         "by_age": by_age,
     }

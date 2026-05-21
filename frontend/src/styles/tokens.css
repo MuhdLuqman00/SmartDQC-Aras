@@ -58,6 +58,25 @@
   --status-watch-bg:    #FCEFD8;
   --status-critical-bg: #FCE3E4;
 
+  /* ── Categorical chart palette (light theme) ──────────────────────────
+     Six brand-anchored hues for non-status charts (gender, income,
+     vaccine, by-state etc). Chemistry: navy → sky → teal → gold →
+     terracotta → periwinkle. All sit at roughly equal perceptual
+     vibrance (no neons, no muddy mids) so adjacent slices feel
+     distinct yet harmonious. Lifted variants (`*-soft`) are for
+     gradient stops & area fills; deepened variants (`*-deep`) anchor
+     the gradient root and bar bases. */
+  --chart-1:       #2E4A7A;  --chart-1-soft: #6A8AC2;  --chart-1-deep: #1B2A4A;
+  --chart-2:       #4A90D9;  --chart-2-soft: #8FBDEC;  --chart-2-deep: #1F5FA3;
+  --chart-3:       #2BB6A8;  --chart-3-soft: #7AD8CE;  --chart-3-deep: #15877A;
+  --chart-4:       #C8962E;  --chart-4-soft: #E8C77A;  --chart-4-deep: #8A6A1F;
+  --chart-5:       #E07A5F;  --chart-5-soft: #F1AC9B;  --chart-5-deep: #A85542;
+  --chart-6:       #7B6CD9;  --chart-6-soft: #B4AAEC;  --chart-6-deep: #5142A8;
+
+  --chart-grid:    #E1E6F0;  /* hairline grid lines                        */
+  --chart-axis:    #8A94A6;  /* axis tick text                             */
+  --chart-track:   #F1F4FA;  /* hover cursor / bar track                   */
+
   /* ── Gradients & glow ────────────────────────────────────────────────── */
   --gradient-navy:  linear-gradient(160deg, #1B2A4A 0%, #0F1B2F 100%);
   --gradient-brand: linear-gradient(135deg, #2E4A7A 0%, #1B2A4A 60%, #0F1B2F 100%);
@@ -137,6 +156,20 @@
   --status-good-bg:     #11302C;
   --status-watch-bg:    #2E2510;
   --status-critical-bg: #2C1620;
+
+  /* Categorical chart palette (dark theme) — same hue family as light
+     mode but lifted toward pastel so they sit on the navy surfaces
+     without out-shouting body text. */
+  --chart-1:       #6E8FC4;  --chart-1-soft: #A5BDDF;  --chart-1-deep: #3B5B92;
+  --chart-2:       #7AB5F0;  --chart-2-soft: #ABD0F5;  --chart-2-deep: #4A88C8;
+  --chart-3:       #4FD1C5;  --chart-3-soft: #92E5DD;  --chart-3-deep: #1F9A8C;
+  --chart-4:       #E0B458;  --chart-4-soft: #F0D596;  --chart-4-deep: #A48238;
+  --chart-5:       #F2A088;  --chart-5-soft: #F8C5B5;  --chart-5-deep: #B86D55;
+  --chart-6:       #9F92E6;  --chart-6-soft: #C6BDF0;  --chart-6-deep: #6F62B8;
+
+  --chart-grid:    #2A3A57;
+  --chart-axis:    #6B7C99;
+  --chart-track:   #1B2942;
 
   --gradient-navy:  linear-gradient(160deg, #1B2942 0%, #0B1424 100%);
   --gradient-brand: linear-gradient(135deg, #2E4A7A 0%, #14203A 60%, #0B1424 100%);

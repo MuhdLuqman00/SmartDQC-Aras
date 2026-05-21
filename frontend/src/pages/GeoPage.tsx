@@ -27,7 +27,7 @@ interface KpiIndicator {
   rag: 'Green' | 'Amber' | 'Red';
 }
 interface KpiGroupRow {
-  state?: string; gender?: string; group?: string;
+  state?: string; district?: string; gender?: string; group?: string;
   n?: number;
   rates?: Record<string, number>;
   status?: Record<string, string>;
@@ -38,6 +38,7 @@ interface KpiDashboard {
   total_children: number;
   indicators: KpiIndicator[];
   by_state: KpiGroupRow[];
+  by_daerah?: KpiGroupRow[];
   by_gender: KpiGroupRow[];
   by_age: KpiGroupRow[];
 }
@@ -180,7 +181,7 @@ const labelKeyForRow = (row: KpiGroupRow, groupKey: string): string =>
 function BreakdownChart({
   title, rows, groupKey, indicator,
 }: {
-  title: string; rows: KpiGroupRow[]; groupKey: 'state' | 'gender' | 'group'; indicator: IndicatorKey;
+  title: string; rows: KpiGroupRow[]; groupKey: 'state' | 'district' | 'gender' | 'group'; indicator: IndicatorKey;
 }) {
   const { lang } = useLang();
   const data = useMemo(() => rows.map(r => {
@@ -417,6 +418,9 @@ export function GeoPage() {
         {kpi && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 16 }}>
             <BreakdownChart title={`${t('By State', 'Mengikut Negeri')} — ${indLabel}`}   rows={kpi.by_state}  groupKey="state"  indicator={selectedIndicator} />
+            {(kpi.by_daerah?.length ?? 0) > 0 && (
+              <BreakdownChart title={`${t('By Daerah', 'Mengikut Daerah')} — ${indLabel}`} rows={kpi.by_daerah!} groupKey="district" indicator={selectedIndicator} />
+            )}
             <BreakdownChart title={`${t('By Gender', 'Mengikut Jantina')} — ${indLabel}`} rows={kpi.by_gender} groupKey="gender" indicator={selectedIndicator} />
             <BreakdownChart title={`${t('By Age', 'Mengikut Umur')} — ${indLabel}`}       rows={kpi.by_age}    groupKey="group"  indicator={selectedIndicator} />
           </div>

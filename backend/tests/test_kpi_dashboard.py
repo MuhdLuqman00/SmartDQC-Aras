@@ -80,10 +80,50 @@ def test_compute_missing_optional_columns():
     assert len(out["by_state"]) == 2
 
 
+# ── Daerah drill-down (Feature 6 / 11 / 16 — district-level analytics) ───────
+
+def _df_with_daerah():
+    return pd.DataFrame({
+        "NEGERI":      ["Sabah", "Sabah", "Sabah", "Sabah"],
+        "daerah":      ["Beaufort", "Beaufort", "Penampang", "Penampang"],
+        "Jantina":     ["Lelaki", "Perempuan", "Lelaki", "Perempuan"],
+        "Age_Months":  [12, 30, 18, 48],
+        "stunting":    [1, 1, 0, 0],
+        "wasting":     [0, 0, 1, 0],
+        "underweight": [0, 1, 0, 0],
+        "overweight":  [0, 0, 0, 0],
+    })
+
+
+def test_compute_includes_by_daerah_when_daerah_column_present():
+    out = compute_kpi_dashboard(_df_with_daerah())
+    assert "by_daerah" in out, "by_daerah field missing from KPI dashboard payload"
+    daerahs = {r["district"] for r in out["by_daerah"]}
+    assert daerahs == {"Beaufort", "Penampang"}
+    beaufort = next(r for r in out["by_daerah"] if r["district"] == "Beaufort")
+    assert beaufort["n"] == 2
+    assert beaufort["rates"]["stunting"] == 100.0  # 2 of 2 stunted
+    assert beaufort["status"]["stunting"] == "Red"
+
+
+def test_compute_by_daerah_empty_when_no_daerah_column():
+    df = _full_df()  # no daerah column
+    out = compute_kpi_dashboard(df)
+    assert out["by_daerah"] == []
+
+
+def test_compute_empty_df_includes_by_daerah_key():
+    out = compute_kpi_dashboard(pd.DataFrame())
+    assert out["by_daerah"] == []
+
+
 if __name__ == "__main__":
     test_group_breakdown_rates_and_status()
     test_group_breakdown_missing_flag_column()
     test_compute_contract_shape()
     test_compute_empty_df()
     test_compute_missing_optional_columns()
+    test_compute_includes_by_daerah_when_daerah_column_present()
+    test_compute_by_daerah_empty_when_no_daerah_column()
+    test_compute_empty_df_includes_by_daerah_key()
     print("ALL PASS")

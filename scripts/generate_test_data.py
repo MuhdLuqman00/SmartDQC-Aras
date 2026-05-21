@@ -155,6 +155,32 @@ def bmi_status_grouped(bmi: float, age_months: int) -> str:
     return "Obese"
 
 
+# Upstream Malay status columns the backend cleaner expects — derived
+# from Z-scores using KKM-standard nomenclature. Without these, the
+# label-based flag pipeline in eda/indicators.py:_add_label_based_flags
+# falls back to False for every row → trend chart is empty.
+
+def status_berat_from_waz(waz: float) -> str:
+    if waz < -3: return "Sangat Kurang Berat Badan"
+    if waz < -2: return "Kurang Berat Badan"
+    if waz > 2:  return "Berlebihan Berat Badan"
+    return "Normal"
+
+
+def status_tinggi_from_haz(haz: float) -> str:
+    if haz < -3: return "Bantut Teruk"
+    if haz < -2: return "Bantut"
+    return "Normal"
+
+
+def status_bmi_from_baz(baz: float) -> str:
+    if baz < -3: return "Susut Teruk"
+    if baz < -2: return "Susut"
+    if baz > 2:  return "Obes"
+    if baz > 1:  return "Risiko Berlebihan Berat Badan"
+    return "Normal"
+
+
 # ── Row generator ────────────────────────────────────────────────────────────
 
 def build_myvass_row(force_ic: str | None = None) -> dict:
@@ -193,12 +219,20 @@ def build_myvass_row(force_ic: str | None = None) -> dict:
     waz = round(random.gauss(0, 1.05), 2)
     haz = round(random.gauss(0, 1.10), 2)
     baz = round(random.gauss(0, 1.00), 2)
-    # Inject a few children into the tails so class donuts have variety.
-    if random.random() < 0.08:
-        waz = round(random.gauss(-2.5, 0.5), 2)
-        haz = round(random.gauss(-2.5, 0.5), 2)
-    if random.random() < 0.05:
-        baz = round(random.gauss(2.5, 0.4), 2)
+    # Deliberate malnutrition injection so the trend chart has real
+    # shape across all 3 years. Rates chosen to roughly match Malaysia's
+    # NPAN baseline: stunting ~21%, underweight ~14%, wasting ~9%,
+    # obesity ~6%. The independent rolls let each indicator hit its own
+    # target prevalence rather than always co-occurring.
+    if random.random() < 0.14:
+        waz = round(random.gauss(-2.5, 0.4), 2)  # underweight tail
+    if random.random() < 0.21:
+        haz = round(random.gauss(-2.5, 0.4), 2)  # stunting tail
+    roll = random.random()
+    if roll < 0.09:
+        baz = round(random.gauss(-2.5, 0.4), 2)  # wasting tail
+    elif roll < 0.15:
+        baz = round(random.gauss(2.7, 0.4), 2)   # obesity tail
 
     first  = (random.choice(NAMES_FEMALE) if gender == "P" else random.choice(NAMES_MALE))
     second = random.choice(NAMES_FEMALE + NAMES_MALE)
@@ -229,6 +263,12 @@ def build_myvass_row(force_ic: str | None = None) -> dict:
         "haz_class": haz_class_from_z(haz),
         "baz_class": baz_class_from_z(baz),
         "status_bmi_grouped": bmi_status_grouped(bmi, age_m) if bmi else None,
+        # Upstream status columns the cleaner's _add_label_based_flags()
+        # consumes. Without these, the cleaner sets every ind_*_label
+        # to False and the trend chart goes empty.
+        "status_berat":  status_berat_from_waz(waz),
+        "status_tinggi": status_tinggi_from_haz(haz),
+        "status_bmi":    status_bmi_from_baz(baz),
         "ind_bantut_zscore":       1 if haz < -2 else 0,
         "ind_obes_zscore":         1 if baz > 2  else 0,
         "ind_kurang_berat_zscore": 1 if waz < -2 else 0,

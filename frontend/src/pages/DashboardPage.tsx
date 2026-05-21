@@ -37,7 +37,7 @@ interface IndicatorKpi {
   gap: number; rag: Rag;
 }
 interface GroupRow {
-  state?: string; gender?: string; group?: string;
+  state?: string; district?: string; gender?: string; group?: string;
   n: number;
   rates: Partial<Record<IndicatorKey, number>>;
   status: Partial<Record<IndicatorKey, Rag>>;
@@ -47,6 +47,7 @@ interface KpiResult {
   total_children: number;
   indicators: IndicatorKpi[];
   by_state: GroupRow[];
+  by_daerah?: GroupRow[];
   by_gender: GroupRow[];
   by_age: GroupRow[];
 }
@@ -302,7 +303,13 @@ export function DashboardPage() {
     vs_target: 0,
   }));
 
-  const sortedStates = [...(kpi?.by_state ?? [])].sort(
+  /* When a state is selected and the backend returned a daerah
+     breakdown, swap the right-hand panel from "By State" to
+     "By Daerah — {state}". When unfiltered, keep the by-state list. */
+  const drilledToDaerah = !!selectedStateCode && !!kpi?.by_daerah?.length;
+  const breakdownRows = drilledToDaerah ? (kpi!.by_daerah ?? []) : (kpi?.by_state ?? []);
+  const breakdownKey: 'state' | 'district' = drilledToDaerah ? 'district' : 'state';
+  const sortedStates = [...breakdownRows].sort(
     (a, b) => Number(b.rates[selectedIndicator] ?? 0) - Number(a.rates[selectedIndicator] ?? 0),
   );
 
@@ -459,15 +466,22 @@ export function DashboardPage() {
           borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
         }}>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
-            {t('By State', 'Mengikut Negeri')}
-            {selInd ? ` — ${lang === 'en' ? selInd.label_en : selInd.label_bm}` : ''}
+            {drilledToDaerah
+              ? `${t('By Daerah', 'Mengikut Daerah')} — ${codeToStateName(selectedStateCode!)}`
+              : t('By State', 'Mengikut Negeri')}
+            {selInd ? ` · ${lang === 'en' ? selInd.label_en : selInd.label_bm}` : ''}
           </div>
           {sortedStates.map(s => {
             const v = Number(s.rates[selectedIndicator] ?? 0);
+            const label = breakdownKey === 'district' ? s.district : s.state;
             return (
-              <div key={s.state} style={{ marginBottom: 8 }}>
+              <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
-                  <span>{s.state}</span><span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                  <span>{label}</span>
+                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
+                    <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                  </span>
                 </div>
                 <div style={{ height: 8, background: ragTrack(s.status[selectedIndicator]), borderRadius: 4 }}>
                   <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(s.status[selectedIndicator]), borderRadius: 4 }} />
@@ -477,7 +491,9 @@ export function DashboardPage() {
           })}
           {sortedStates.length === 0 && (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-              {t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+              {drilledToDaerah
+                ? t('No daerah data for this state.', 'Tiada data daerah untuk negeri ini.')
+                : t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
             </div>
           )}
         </div>

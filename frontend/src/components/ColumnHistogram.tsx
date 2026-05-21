@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useId, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ChartTooltip } from './ChartTooltip';
 
 export function ColumnHistogram({ values, bins = 12 }: { values: number[]; bins?: number }) {
+  const gradId = useId().replace(/:/g, '');
   const data = useMemo(() => {
     const nums = values.filter(v => typeof v === 'number' && Number.isFinite(v));
     if (nums.length === 0) return [];
@@ -32,11 +34,32 @@ export function ColumnHistogram({ values, bins = 12 }: { values: number[]; bins?
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={data}>
-        <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
-        <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-        <Tooltip />
-        <Bar dataKey="count" fill="var(--kkm-blue)" />
+      <BarChart data={data} margin={{ top: 6, right: 8, left: -16, bottom: 0 }}>
+        <defs>
+          <linearGradient id={`hist-${gradId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={1} />
+            <stop offset="100%" stopColor="var(--chart-2-deep)" stopOpacity={1} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 4" vertical={false} />
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 10, fill: 'var(--chart-axis)' }}
+          interval={0}
+          angle={-30}
+          textAnchor="end"
+          height={50}
+          tickLine={false}
+          axisLine={{ stroke: 'var(--chart-grid)' }}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: 'var(--chart-axis)' }}
+          allowDecimals={false}
+          tickLine={false}
+          axisLine={false}
+        />
+        <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--chart-track)', opacity: 0.5 }} />
+        <Bar dataKey="count" fill={`url(#hist-${gradId})`} radius={[4, 4, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   );
