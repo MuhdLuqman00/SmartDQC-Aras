@@ -296,7 +296,7 @@ def _slide_recommendations(prs, layout, narrative: dict, district: str):
 
 def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: str = "en",
                            charts: set[str] | None = None):
-    breakdown = kpi_result.get("district_breakdown") or []
+    breakdown = kpi_result.get("by_daerah") or kpi_result.get("by_state") or []
     s = prs.slides.add_slide(layout)
     _bg(s, KKM_TEAL_LIGHT)
     _section_bar_pptx(s, "indicator_table")
@@ -304,13 +304,14 @@ def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: s
     headers = NUTRITIONAL_TABLE_HEADERS[lang]
     rows = [headers]
     for row in breakdown[:8]:
+        rates = row.get("rates") or {}
         rows.append([
-            str(row.get("district", "")),
-            str(row.get("n_records", "")),
-            _fmt(row.get("stunting_rate_rate")),
-            _fmt(row.get("wasting_rate_rate")),
-            _fmt(row.get("underweight_rate_rate")),
-            _fmt(row.get("overweight_rate_rate")),
+            str(row.get("district") or row.get("state") or ""),
+            str(row.get("n", "")),
+            _fmt(rates.get("stunting")),
+            _fmt(rates.get("wasting")),
+            _fmt(rates.get("underweight")),
+            _fmt(rates.get("overweight")),
         ])
 
     table_h = min(0.42 * len(rows), 3.5)
@@ -572,7 +573,7 @@ def _pdf_section_recommendations(story, narrative: dict, sec_label, h2, body, la
 
 def _pdf_section_indicator_table(story, kpi_result: dict, sec_label, lang: str = "en",
                                  charts: set[str] | None = None):
-    breakdown = kpi_result.get("district_breakdown") or []
+    breakdown = kpi_result.get("by_daerah") or kpi_result.get("by_state") or []
     story.append(_section_bar_pdf(_sec("indicator_table", "en"),
                                   _sec("indicator_table", "bm"), sec_label))
     story.append(Spacer(1, 0.2 * cm))
@@ -580,13 +581,14 @@ def _pdf_section_indicator_table(story, kpi_result: dict, sec_label, lang: str =
     headers = NUTRITIONAL_TABLE_HEADERS[lang]
     data = [headers]
     for row in breakdown:
+        rates = row.get("rates") or {}
         data.append([
-            str(row.get("district", "")),
-            str(row.get("n_records", "")),
-            _fmt(row.get("stunting_rate_rate")),
-            _fmt(row.get("wasting_rate_rate")),
-            _fmt(row.get("underweight_rate_rate")),
-            _fmt(row.get("overweight_rate_rate")),
+            str(row.get("district") or row.get("state") or ""),
+            str(row.get("n", "")),
+            _fmt(rates.get("stunting")),
+            _fmt(rates.get("wasting")),
+            _fmt(rates.get("underweight")),
+            _fmt(rates.get("overweight")),
         ])
 
     if len(data) > 1:

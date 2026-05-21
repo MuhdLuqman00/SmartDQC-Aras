@@ -128,31 +128,40 @@ def chart_quality_bar(eda_result: dict[str, Any]) -> bytes | None:
 # Chart 2 — Nutritional indicator rates by district (top 10 by stunting)
 # ---------------------------------------------------------------------------
 
+# Indicator keys as emitted by compute_kpi_dashboard's per-row `rates` dict.
 _INDICATOR_COLS = [
-    ("stunting_rate_rate",    "Stunting"),
-    ("wasting_rate_rate",     "Wasting"),
-    ("underweight_rate_rate", "Underweight"),
-    ("overweight_rate_rate",  "Overweight"),
+    ("stunting",    "Stunting"),
+    ("wasting",     "Wasting"),
+    ("underweight", "Underweight"),
+    ("overweight",  "Overweight"),
 ]
 _BAR_COLORS = [_TEAL, _AMBER, _NAVY, _RED]
+
+
+def _breakdown_rows(kpi_result: dict[str, Any]) -> list[dict]:
+    """Prefer per-district breakdown, fall back to per-state."""
+    return kpi_result.get("by_daerah") or kpi_result.get("by_state") or []
 
 
 def chart_nutritional_rates(kpi_result: dict[str, Any] | None) -> bytes | None:
     """Grouped horizontal bar chart of nutritional rates across districts (top 10)."""
     if not kpi_result:
         return None
-    breakdown: list[dict] = kpi_result.get("district_breakdown") or []
+    breakdown = _breakdown_rows(kpi_result)
     if not breakdown:
         return None
 
-    sample = breakdown[0]
-    present = [(col, lbl) for col, lbl in _INDICATOR_COLS if col in sample]
+    sample_rates = breakdown[0].get("rates") or {}
+    present = [(col, lbl) for col, lbl in _INDICATOR_COLS if col in sample_rates]
     if not present:
         return None
 
+    def _rate(row: dict, col: str) -> float:
+        return float((row.get("rates") or {}).get(col) or 0)
+
     sort_col = present[0][0]
-    rows = sorted(breakdown, key=lambda r: r.get(sort_col) or 0, reverse=True)[:10]
-    districts  = [r.get("district", "?") for r in rows]
+    rows = sorted(breakdown, key=lambda r: _rate(r, sort_col), reverse=True)[:10]
+    districts  = [r.get("district") or r.get("state") or "?" for r in rows]
     n_districts  = len(districts)
     n_indicators = len(present)
 
@@ -163,7 +172,7 @@ def chart_nutritional_rates(kpi_result: dict[str, Any] | None) -> bytes | None:
     fig.patch.set_facecolor("#FFFFFF")
 
     for i, (col, lbl) in enumerate(present):
-        vals   = [float(r.get(col) or 0) for r in rows]
+        vals   = [_rate(r, col) for r in rows]
         offset = (i - (n_indicators - 1) / 2) * bar_h
         bars   = ax.barh(y + offset, vals, height=bar_h * 0.88,
                          color=_BAR_COLORS[i % len(_BAR_COLORS)], label=lbl, zorder=2)
@@ -205,14 +214,14 @@ def chart_kpi_vs_target(kpi_result: dict[str, Any] | None) -> bytes | None:
     """Grouped bar chart: actual vs NPAN target vs WHO target per KPI."""
     if not kpi_result:
         return None
-    kpis: list[dict] = kpi_result.get("kpis") or []
+    kpis: list[dict] = kpi_result.get("indicators") or []
     if not kpis:
         return None
 
-    labels  = [_KPI_LABEL_MAP.get(k.get("kpi", ""), k.get("kpi", "?")) for k in kpis]
-    actuals = [float(k.get("actual")     or 0) for k in kpis]
-    npan    = [float(k.get("target")     or 0) for k in kpis]
-    who     = [float(k.get("who_target") or 0) for k in kpis]
+    labels  = [k.get("label_en") or _KPI_LABEL_MAP.get(k.get("key", ""), k.get("key", "?")) for k in kpis]
+    actuals = [float(k.get("actual")      or 0) for k in kpis]
+    npan    = [float(k.get("npan_target") or 0) for k in kpis]
+    who     = [float(k.get("who_target")  or 0) for k in kpis]
 
     n = len(labels)
     x = np.arange(n)

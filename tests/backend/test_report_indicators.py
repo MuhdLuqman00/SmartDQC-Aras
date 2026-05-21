@@ -14,6 +14,8 @@ from backend.export.report_template_spec import (
 from backend.export.charts import (
     chart_quality_bar, chart_nutritional_rates, chart_kpi_vs_target,
 )
+import pandas as pd
+from backend.eda.kpi import compute_kpi_dashboard
 
 
 def _pdf_text(data: bytes) -> str:
@@ -88,21 +90,17 @@ def _narrative():
 
 
 def _kpi():
-    return {
-        "kpis": [
-            {"kpi": "stunting_rate", "actual": 18.5, "target": 15.0,
-             "who_target": 20.0, "status": "Amber", "who_status": "Green"},
-        ],
-        "overall_status": "Amber",
-        "district_breakdown": [
-            {"district": "Petaling", "n_records": 100,
-             "stunting_rate_rate": 18.5, "wasting_rate_rate": 3.2,
-             "underweight_rate_rate": 9.1, "overweight_rate_rate": 8.0},
-            {"district": "Klang",    "n_records": 80,
-             "stunting_rate_rate": 22.1, "wasting_rate_rate": 6.0,
-             "underweight_rate_rate": 11.0, "overweight_rate_rate": 9.5},
-        ],
-    }
+    # Build from the REAL producer so the report consumers are pinned to the
+    # actual compute_kpi_dashboard contract (indicators + by_state/by_daerah
+    # with nested `rates`), not a hand-written fiction that drifts from it.
+    df = pd.DataFrame({
+        "stunting":    [1] * 18 + [0] * 82,
+        "wasting":     [1] * 3  + [0] * 97,
+        "underweight": [1] * 9  + [0] * 91,
+        "overweight":  [1] * 8  + [0] * 92,
+        "NEGERI":      ["Selangor"] * 50 + ["Johor"] * 50,
+    })
+    return compute_kpi_dashboard(df)
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +270,8 @@ def test_chart_nutritional_rates_returns_png():
 
 
 def test_chart_nutritional_rates_returns_none_without_breakdown():
-    assert chart_nutritional_rates({"kpis": []}) is None
+    assert chart_nutritional_rates({"by_state": [], "by_daerah": []}) is None
+    assert chart_nutritional_rates({}) is None
     assert chart_nutritional_rates(None) is None
 
 
