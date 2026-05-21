@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link2, Download, Play, Filter, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Link2, Download, Play, Filter, AlertTriangle,
+  ChevronDown, ChevronRight, AlertCircle, Info, History,
+} from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { EmptyState } from '../components/EmptyState';
@@ -14,10 +17,37 @@ interface Dataset {
 
 interface LinkSource {
   ic?: string;
-  name?: string;
-  dob?: string;
+  name?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+  state?: string | null;
+  district?: string | null;
+  measure_date?: string | null;
+  weight_kg?: number | null;
+  height_cm?: number | null;
+  bmi?: number | null;
+  waz?: number | null;
+  haz?: number | null;
+  baz?: number | null;
   source_type: string;
   dataset_id: string;
+}
+
+interface ConflictEntry {
+  field: string;
+  severity: 'hard' | 'soft' | 'strong';
+  values: { source_type: string; value: string }[];
+}
+
+interface TimelineEntry {
+  date: string;
+  source_type: string;
+  weight_kg: number | null;
+  height_cm: number | null;
+  bmi: number | null;
+  waz: number | null;
+  haz: number | null;
+  baz: number | null;
 }
 
 interface LinkProfile {
@@ -27,13 +57,31 @@ interface LinkProfile {
   confidence: number;
   match_reasons: string[];
   sources: LinkSource[];
+  conflicts: ConflictEntry[];
+  profile?: {
+    canonical: {
+      ic?: string | null;
+      name?: string | null;
+      dob?: string | null;
+      gender?: string | null;
+      state?: string | null;
+      district?: string | null;
+    };
+    timeline: TimelineEntry[];
+  };
 }
 
 interface LinkResult {
   total_groups: number;
   linked_groups: number;
   unlinked: number;
-  datasets: Array<{ dataset_id: string; filename: string; source_type: string | null; records: number }>;
+  datasets: Array<{
+    dataset_id: string;
+    filename: string;
+    source_type: string | null;
+    records: number;
+    created_at?: string | null;
+  }>;
   profiles: LinkProfile[];
   warning?: string;
 }
@@ -42,21 +90,33 @@ interface Settings {
   fuzzy_ic: boolean;
   fuzzy_ic_max_distance: number;
   name_dob_boost: boolean;
+  name_fuzzy: boolean;
+  name_fuzzy_threshold: number;
+  dob_tolerance_days: number;
+  location_boost: boolean;
   min_confidence: number;
 }
 
-const REASON_COLOR: Record<string, string> = {
-  exact_ic:  'var(--status-good)',
-  name_dob:  'var(--status-good)',
-  unmatched: 'var(--text-muted)',
+const DEFAULT_SETTINGS: Settings = {
+  fuzzy_ic: true,
+  fuzzy_ic_max_distance: 1,
+  name_dob_boost: true,
+  name_fuzzy: true,
+  name_fuzzy_threshold: 0.85,
+  dob_tolerance_days: 1,
+  location_boost: true,
+  min_confidence: 0,
 };
+
 const reasonColor = (r: string): string => {
-  if (r.startsWith('fuzzy_ic')) return 'var(--status-watch)';
-  return REASON_COLOR[r] || 'var(--text-muted)';
+  if (r === 'exact_ic' || r === 'name+dob' || r === 'same_state') return 'var(--status-good)';
+  if (r.startsWith('fuzzy_ic') || r.startsWith('name_fuzzy'))     return 'var(--status-watch)';
+  if (r === 'unmatched') return 'var(--text-muted)';
+  return 'var(--text-secondary)';
 };
 const reasonBg = (r: string): string => {
-  if (r === 'exact_ic' || r === 'name_dob') return 'var(--status-good-bg)';
-  if (r.startsWith('fuzzy_ic')) return 'var(--status-watch-bg)';
+  if (r === 'exact_ic' || r === 'name+dob' || r === 'same_state') return 'var(--status-good-bg)';
+  if (r.startsWith('fuzzy_ic') || r.startsWith('name_fuzzy'))     return 'var(--status-watch-bg)';
   return 'var(--surface-2)';
 };
 
@@ -67,25 +127,81 @@ const confidenceColor = (c: number): string => {
   return 'var(--text-muted)';
 };
 
+const severityColor = (sev: 'hard' | 'soft' | 'strong'): string =>
+  sev === 'soft' ? 'var(--status-watch)' : 'var(--status-critical)';
+const severityBg = (sev: 'hard' | 'soft' | 'strong'): string =>
+  sev === 'soft' ? 'var(--status-watch-bg)' : 'var(--status-critical-bg)';
+
+const conflictWorstSeverity = (cs: ConflictEntry[]): 'hard' | 'soft' | 'strong' | null => {
+  if (!cs.length) return null;
+  if (cs.some(c => c.severity === 'strong')) return 'strong';
+  if (cs.some(c => c.severity === 'hard'))   return 'hard';
+  return 'soft';
+};
+
+/* ── Inline sparkline (no chart library) ─────────────────────────────────
+   Plots up to 3 series (WAZ/HAZ/BAZ) over a shared x-axis. Skips series
+   with <2 datapoints. ~25 LOC. */
+function Sparkline({ timeline, width = 96, height = 28 }: {
+  timeline: TimelineEntry[]; width?: number; height?: number;
+}): JSX.Element | null {
+  if (timeline.length < 2) return null;
+  const series: { key: 'waz' | 'haz' | 'baz'; color: string }[] = [
+    { key: 'waz', color: 'var(--status-good)' },
+    { key: 'haz', color: 'var(--status-watch)' },
+    { key: 'baz', color: 'var(--status-critical)' },
+  ];
+  const active = series.filter(s => timeline.filter(t => t[s.key] != null).length >= 2);
+  if (active.length === 0) return null;
+  const all = active.flatMap(s => timeline.map(t => t[s.key]).filter((v): v is number => v != null));
+  const min = Math.min(...all, -3);
+  const max = Math.max(...all,  3);
+  const range = (max - min) || 1;
+  const pad = 2;
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      {active.map(s => {
+        const pts = timeline.map((t, i) => {
+          const v = t[s.key];
+          if (v == null) return null;
+          const x = pad + (timeline.length === 1 ? w / 2 : (i / (timeline.length - 1)) * w);
+          const y = pad + h - ((v - min) / range) * h;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).filter((p): p is string => p !== null);
+        return (
+          <polyline
+            key={s.key}
+            points={pts.join(' ')}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={1.4}
+            strokeLinejoin="round"
+            opacity={0.85}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 export function LinkagePage() {
   const { t } = useLang();
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const [settings, setSettings] = useState<Settings>({
-    fuzzy_ic: true,
-    fuzzy_ic_max_distance: 1,
-    name_dob_boost: true,
-    min_confidence: 0,
-  });
-  const [showOnlyLinked, setShowOnlyLinked] = useState(true);
+  const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
+  const [showOnlyLinked,    setShowOnlyLinked]    = useState(true);
+  const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
 
   const [result, setResult] = useState<LinkResult | null>(null);
   const [running, setRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedTab, setExpandedTab] = useState<Record<string, 'sources' | 'timeline'>>({});
 
   useEffect(() => {
     api.get<Dataset[]>('/datasets')
@@ -123,10 +239,6 @@ export function LinkagePage() {
     if (!canRun) return;
     setExporting(true);
     try {
-      /* Use the axios api client (which already adds the bearer token from
-         the 'token' localStorage key — same one AuthContext writes — so we
-         don't drift out of sync with the rest of the app). responseType
-         'blob' makes axios hand back the binary CSV. */
       const r = await api.post('/entity/link/v2/export',
         { dataset_ids: Array.from(selected), ...settings },
         { responseType: 'blob' },
@@ -144,12 +256,20 @@ export function LinkagePage() {
     }
   };
 
+  /* AND-combined filters: "cross-dataset" AND "has conflicts" when both on. */
   const visibleProfiles = useMemo(() => {
     if (!result) return [];
-    return showOnlyLinked
-      ? result.profiles.filter(p => p.sources.length > 1)
-      : result.profiles;
-  }, [result, showOnlyLinked]);
+    return result.profiles.filter(p => {
+      if (showOnlyLinked    && p.sources.length <= 1)    return false;
+      if (showOnlyConflicts && p.conflicts.length === 0) return false;
+      return true;
+    });
+  }, [result, showOnlyLinked, showOnlyConflicts]);
+
+  const datasetLookup = useMemo(() => {
+    if (!result) return new Map<string, string>();
+    return new Map(result.datasets.map(d => [d.dataset_id, d.filename]));
+  }, [result]);
 
   const toggleExpand = (key: string) => setExpanded(prev => {
     const next = new Set(prev);
@@ -157,7 +277,7 @@ export function LinkagePage() {
     return next;
   });
 
-  /* ── small atom helpers (kept inline for one-off page) ── */
+  /* ── shared atoms ── */
   const sectionCard: React.CSSProperties = {
     background: 'var(--surface)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius-card)', padding: '18px 20px',
@@ -184,7 +304,7 @@ export function LinkagePage() {
         {t('Cross-Dataset Linkage', 'Pemautan Merentas Dataset')}
       </h1>
 
-      {/* ── Dataset picker ── */}
+      {/* ── 1. Dataset picker ── */}
       <div style={sectionCard}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
           {t('1 — Select datasets', '1 — Pilih dataset')}
@@ -199,8 +319,8 @@ export function LinkagePage() {
               <label key={ds.id} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 10,
                 padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                border: `1px solid ${sel ? 'var(--kkm-sky)' : 'var(--border)'}`,
-                background: sel ? 'rgba(46,74,122,0.06)' : 'var(--surface-2)',
+                border: `1px solid ${sel ? 'var(--status-good)' : 'var(--border)'}`,
+                background: sel ? 'var(--status-good-bg)' : 'var(--surface-2)',
                 transition: 'all var(--transition)',
               }}>
                 <input type="checkbox" checked={sel} onChange={() => toggleSelect(ds.id)} style={{ marginTop: 3 }} />
@@ -219,35 +339,72 @@ export function LinkagePage() {
         </div>
       </div>
 
-      {/* ── Settings + Run ── */}
+      {/* ── 2. Settings + Run ── */}
       <div style={sectionCard}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
           {t('2 — Matching settings', '2 — Tetapan padanan')}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 14 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input
               type="checkbox" checked={settings.fuzzy_ic}
               onChange={e => setSettings(s => ({ ...s, fuzzy_ic: e.target.checked }))}
             />
-            {t('Fuzzy IC match', 'Padanan IC kabur')}
-            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-              {t('(tolerates a single typo)', '(tolak satu salah taip)')}
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span>{t('Fuzzy IC match', 'Padanan IC kabur')}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                {t('(tolerates a single typo)', '(tolak satu salah taip)')}
+              </span>
             </span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input
-              type="checkbox" checked={settings.name_dob_boost}
-              onChange={e => setSettings(s => ({ ...s, name_dob_boost: e.target.checked }))}
+              type="checkbox" checked={settings.name_fuzzy}
+              onChange={e => setSettings(s => ({ ...s, name_fuzzy: e.target.checked }))}
             />
-            {t('Name + DOB boost', 'Tampin nama + tarikh lahir')}
-            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-              {t('(matches IC-less records)', '(pasangkan rekod tanpa IC)')}
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span>{t('Fuzzy name match', 'Padanan nama kabur')}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                {t('(strips BIN/BINTI, tolerates typos)', '(buang BIN/BINTI, tolak salah taip)')}
+              </span>
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input
+              type="checkbox" checked={settings.location_boost}
+              onChange={e => setSettings(s => ({ ...s, location_boost: e.target.checked }))}
+            />
+            <span style={{ display: 'flex', flexDirection: 'column' }}>
+              <span>{t('Location boost', 'Tampin lokasi')}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                {t('(+0.10 when negeri agrees)', '(+0.10 apabila negeri sama)')}
+              </span>
             </span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <span style={{ flex: 1 }}>{t('Name threshold:', 'Ambang nama:')}</span>
+            <input
+              type="range" min={0.5} max={0.95} step={0.01}
+              value={settings.name_fuzzy_threshold}
+              onChange={e => setSettings(s => ({ ...s, name_fuzzy_threshold: parseFloat(e.target.value) }))}
+              style={{ flex: 1, accentColor: 'var(--status-good)' }}
+            />
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, minWidth: 36, textAlign: 'right' }}>
+              {settings.name_fuzzy_threshold.toFixed(2)}
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <span style={{ flex: 1 }}>{t('DOB tolerance (days):', 'Toleransi tarikh lahir (hari):')}</span>
+            <input
+              type="number" min={0} max={7} step={1}
+              value={settings.dob_tolerance_days}
+              onChange={e => setSettings(s => ({ ...s, dob_tolerance_days: Math.max(0, Math.min(7, parseInt(e.target.value || '0', 10))) }))}
+              style={{ width: 50, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px', fontSize: 12, color: 'var(--text-primary)' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
             <Filter size={13} style={{ color: 'var(--text-muted)' }} />
-            {t('Min confidence:', 'Keyakinan min:')}
+            <span style={{ flex: 1 }}>{t('Min confidence:', 'Keyakinan min:')}</span>
             <select
               value={settings.min_confidence}
               onChange={e => setSettings(s => ({ ...s, min_confidence: parseFloat(e.target.value) }))}
@@ -261,7 +418,7 @@ export function LinkagePage() {
             </select>
           </label>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             onClick={runLinkage}
             disabled={!canRun || running}
@@ -291,6 +448,15 @@ export function LinkagePage() {
             <Download size={14} />
             {exporting ? t('Exporting…', 'Mengeksport…') : t('Export CSV', 'Eksport CSV')}
           </button>
+          <button
+            onClick={() => setSettings({ ...DEFAULT_SETTINGS })}
+            style={{
+              background: 'none', border: 'none', color: 'var(--text-muted)',
+              fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {t('Reset settings', 'Pulihkan tetapan')}
+          </button>
           {!canRun && (
             <span style={{ alignSelf: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
               {t('Select at least 2 datasets above.', 'Pilih sekurang-kurangnya 2 dataset di atas.')}
@@ -305,21 +471,31 @@ export function LinkagePage() {
         </div>
       )}
 
-      {/* ── Results ── */}
+      {/* ── 3. Results ── */}
       {result && (
         <div style={sectionCard}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('3 — Results', '3 — Hasil')}
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
-              <input
-                type="checkbox"
-                checked={showOnlyLinked}
-                onChange={e => setShowOnlyLinked(e.target.checked)}
-              />
-              {t('Show only cross-dataset matches', 'Tunjuk padanan merentas dataset sahaja')}
-            </label>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyLinked}
+                  onChange={e => setShowOnlyLinked(e.target.checked)}
+                />
+                {t('Cross-dataset only', 'Merentas dataset sahaja')}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyConflicts}
+                  onChange={e => setShowOnlyConflicts(e.target.checked)}
+                />
+                {t('Conflicts only', 'Konflik sahaja')}
+              </label>
+            </div>
           </div>
 
           {result.warning && (
@@ -332,8 +508,10 @@ export function LinkagePage() {
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16, fontSize: 13 }}>
             {[
               [t('Total groups', 'Jumlah kumpulan'),    result.total_groups],
-              [t('Cross-dataset matches', 'Padanan merentas dataset'),    result.linked_groups],
+              [t('Cross-dataset matches', 'Padanan merentas dataset'), result.linked_groups],
               [t('Single-source only', 'Sumber tunggal sahaja'), result.unlinked],
+              [t('Groups with conflicts', 'Kumpulan dengan konflik'),
+                result.profiles.filter(p => p.conflicts.length > 0).length],
               [t('Datasets compared', 'Dataset dibandingkan'), result.datasets.length],
             ].map(([l, v]) => (
               <div key={String(l)}>
@@ -343,8 +521,7 @@ export function LinkagePage() {
             ))}
           </div>
 
-          {/* Dataset legend — keeps the source pills below readable. */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             {result.datasets.map(d => (
               <span key={d.dataset_id} style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '3px 10px' }}>
                 {d.filename} · <span style={{ color: 'var(--text-muted)' }}>{d.records.toLocaleString()} {t('rows', 'baris')}</span>
@@ -352,10 +529,18 @@ export function LinkagePage() {
             ))}
           </div>
 
+          {/* Filter caption so an empty result reads as "filtered out", not "broken" */}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14 }}>
+            {t(
+              `Showing ${visibleProfiles.length} of ${result.profiles.length} group(s).`,
+              `Menunjukkan ${visibleProfiles.length} daripada ${result.profiles.length} kumpulan.`
+            )}
+          </div>
+
           {visibleProfiles.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
-              {showOnlyLinked
-                ? t('No cross-dataset matches at this confidence level.', 'Tiada padanan merentas dataset pada paras keyakinan ini.')
+              {showOnlyLinked || showOnlyConflicts
+                ? t('No groups match the current filters.', 'Tiada kumpulan padan dengan tapisan semasa.')
                 : t('No groups returned.', 'Tiada kumpulan dikembalikan.')}
             </div>
           ) : (
@@ -363,8 +548,12 @@ export function LinkagePage() {
               {visibleProfiles.map((p, i) => {
                 const key = `${p.ic}-${i}`;
                 const isOpen = expanded.has(key);
+                const tab = expandedTab[key] ?? 'sources';
+                const worst = conflictWorstSeverity(p.conflicts);
+                const canonical = p.profile?.canonical ?? {};
                 return (
                   <div key={key} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                    {/* ── Row header ── */}
                     <div
                       onClick={() => toggleExpand(key)}
                       style={{
@@ -378,12 +567,30 @@ export function LinkagePage() {
                         {p.ic || t('(no IC)', '(tiada IC)')}
                       </span>
                       <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                        {canonical.name || p.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </span>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {p.dob || ''}
+                        {canonical.dob || p.dob || ''}
                       </span>
-                      <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+
+                      {/* Conflict pill */}
+                      {worst && (
+                        <span title={p.conflicts.map(c => `${c.field} (${c.severity})`).join(', ')}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            fontSize: 10, fontWeight: 700,
+                            background: severityBg(worst), color: severityColor(worst),
+                            border: `1px solid ${severityColor(worst)}`,
+                            borderRadius: 999, padding: '2px 8px',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>
+                          <AlertCircle size={10} />
+                          {p.conflicts.length} {t('conflict', 'konflik')}
+                        </span>
+                      )}
+
+                      {/* Reason chips */}
+                      <span style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap' }}>
                         {p.match_reasons.map(r => (
                           <span key={r} style={{
                             fontSize: 10, fontWeight: 700,
@@ -407,27 +614,152 @@ export function LinkagePage() {
                       </span>
                     </div>
 
+                    {/* ── Expanded view: Identity strip + tabs ── */}
                     {isOpen && (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, background: 'var(--surface)' }}>
-                        <thead>
-                          <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-                            {[t('Source', 'Sumber'), 'IC', t('Name', 'Nama'), t('DOB', 'Tarikh lahir'), t('Dataset', 'Dataset')].map(h => (
-                              <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {p.sources.map((s, j) => (
-                            <tr key={j} style={{ borderTop: '1px solid var(--border)' }}>
-                              <td style={{ padding: '6px 10px', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase' }}>{s.source_type}</td>
-                              <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)' }}>{s.ic || '—'}</td>
-                              <td style={{ padding: '6px 10px', color: 'var(--text-primary)' }}>{s.name || '—'}</td>
-                              <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{s.dob || '—'}</td>
-                              <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--text-muted)' }}>{s.dataset_id.slice(0, 8)}…</td>
-                            </tr>
+                      <div style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
+                        {/* Identity strip — always visible */}
+                        <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                          {[
+                            ['IC',                                 canonical.ic       || p.ic],
+                            [t('Name', 'Nama'),                    canonical.name     || p.name],
+                            [t('DOB', 'Tarikh lahir'),             canonical.dob      || p.dob],
+                            [t('Gender', 'Jantina'),               canonical.gender],
+                            [t('State', 'Negeri'),                 canonical.state],
+                            [t('District', 'Daerah'),              canonical.district],
+                          ].map(([label, val]) => (
+                            <div key={String(label)}>
+                              <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {label}
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: val ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                {val || '—'}
+                              </div>
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
+                        </div>
+
+                        {/* Tab switcher */}
+                        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+                          {(['sources', 'timeline'] as const).map(name => {
+                            const active = tab === name;
+                            const label = name === 'sources'
+                              ? t('Sources', 'Sumber')
+                              : t('Timeline', 'Garis masa');
+                            const Icon  = name === 'sources' ? Info : History;
+                            return (
+                              <button
+                                key={name}
+                                onClick={() => setExpandedTab(s => ({ ...s, [key]: name }))}
+                                style={{
+                                  background: 'none', border: 'none',
+                                  borderBottom: `2px solid ${active ? 'var(--status-good)' : 'transparent'}`,
+                                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                                  fontWeight: active ? 600 : 500, fontSize: 12,
+                                  padding: '8px 14px', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: 6,
+                                }}
+                              >
+                                <Icon size={12} /> {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Sources tab */}
+                        {tab === 'sources' && (
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                            <thead>
+                              <tr style={{ background: 'var(--surface-2)' }}>
+                                {[t('Source', 'Sumber'), 'IC', t('Name', 'Nama'), t('DOB', 'Tarikh lahir'),
+                                  t('Gender', 'Jantina'), t('State', 'Negeri'), t('District', 'Daerah'),
+                                  t('Dataset', 'Dataset')].map(h => (
+                                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {p.sources.map((s, j) => {
+                                /* Highlight cells whose field is in conflicts. */
+                                const conflictBy: Record<string, ConflictEntry> = {};
+                                for (const c of p.conflicts) conflictBy[c.field] = c;
+                                const cellStyle = (field: string): React.CSSProperties => {
+                                  const c = conflictBy[field];
+                                  if (!c) return { padding: '6px 10px' };
+                                  return {
+                                    padding: '6px 10px',
+                                    background: severityBg(c.severity),
+                                    color: severityColor(c.severity),
+                                    fontWeight: 600,
+                                  };
+                                };
+                                return (
+                                  <tr key={j} style={{ borderTop: '1px solid var(--border)' }}>
+                                    <td style={{ padding: '6px 10px', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase' }}>{s.source_type}</td>
+                                    <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)' }}>{s.ic || '—'}</td>
+                                    <td style={cellStyle('name')}>{s.name || '—'}</td>
+                                    <td style={cellStyle('dob')}>{s.dob || '—'}</td>
+                                    <td style={cellStyle('gender')}>{s.gender || '—'}</td>
+                                    <td style={cellStyle('state')}>{s.state || '—'}</td>
+                                    <td style={cellStyle('district')}>{s.district || '—'}</td>
+                                    <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--text-muted)' }}>
+                                      {datasetLookup.get(s.dataset_id) ?? s.dataset_id.slice(0, 8) + '…'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+
+                        {/* Timeline tab */}
+                        {tab === 'timeline' && (
+                          (() => {
+                            const tl = p.profile?.timeline ?? [];
+                            if (!tl.length) {
+                              return (
+                                <div style={{ padding: 16, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                                  {t('No measurement dates found across sources.', 'Tiada tarikh pengukuran dijumpai merentas sumber.')}
+                                </div>
+                              );
+                            }
+                            return (
+                              <>
+                                <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+                                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                    {t('Z-score trajectory across all sources', 'Trajektori z-skor merentas semua sumber')}
+                                  </div>
+                                  <Sparkline timeline={tl} width={140} height={32} />
+                                </div>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                                  <thead>
+                                    <tr style={{ background: 'var(--surface-2)' }}>
+                                      {[t('Date', 'Tarikh'), t('Source', 'Sumber'),
+                                        t('Weight (kg)', 'Berat (kg)'), t('Height (cm)', 'Tinggi (cm)'),
+                                        'BMI', 'WAZ', 'HAZ', 'BAZ'].map(h => (
+                                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {tl.map((m, j) => (
+                                      <tr key={j} style={{ borderTop: '1px solid var(--border)' }}>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)' }}>{m.date}</td>
+                                        <td style={{ padding: '6px 10px', fontWeight: 600, textTransform: 'uppercase' }}>{m.source_type}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.weight_kg ?? '—'}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.height_cm ?? '—'}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.bmi ?? '—'}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.waz ?? '—'}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.haz ?? '—'}</td>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{m.baz ?? '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </>
+                            );
+                          })()
+                        )}
+                      </div>
                     )}
                   </div>
                 );

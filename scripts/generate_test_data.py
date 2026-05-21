@@ -296,6 +296,51 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         w.writerows(rows)
 
 
+def _inject_linkage_conflicts(klinik: list[dict], myvass_lookup: dict[str, dict]) -> dict:
+    """Mutate klinik rows that share an IC with MyVASS so the v2 linkage UI
+    has real contradictions to surface. Returns counts for logging."""
+    counts = {"gender": 0, "dob_drift": 0, "name_variant": 0, "district_drift": 0}
+    overlapping = [r for r in klinik if r["IC_NO_PASSPORT"] in myvass_lookup]
+    random.shuffle(overlapping)
+
+    # 15 hard gender mismatches (flip L↔P in klinik)
+    for r in overlapping[:15]:
+        r["jantina"] = "P" if r["jantina"] == "L" else "L"
+        counts["gender"] += 1
+
+    # 10 DOB drifts by ±1 day (still inside v2 tolerance default — these
+    # should still LINK and NOT raise a hard conflict; v2 only flags hard
+    # when drift > tolerance)
+    for r in overlapping[15:25]:
+        d = datetime.fromisoformat(r["Tarikh_Lahir"]).date()
+        r["Tarikh_Lahir"] = (d + timedelta(days=random.choice([-1, 1]))).isoformat()
+        counts["dob_drift"] += 1
+
+    # 10 name variants: insert/remove "bin"/"binti" particles (should be
+    # treated as soft conflict because fuzzy >= 0.85 but not exact)
+    for r in overlapping[25:35]:
+        parts = r["NAMA"].split()
+        if "bin" in parts or "binti" in parts:
+            r["NAMA"] = " ".join(p for p in parts if p.lower() not in ("bin", "binti"))
+        else:
+            # Insert "bin" between first and last token
+            if len(parts) >= 2:
+                parts.insert(1, "bin")
+                r["NAMA"] = " ".join(parts)
+        counts["name_variant"] += 1
+
+    # 8 district drifts within the same state (soft conflict)
+    for r in overlapping[35:43]:
+        state = r["negeri"]
+        if state in STATES:
+            districts = STATES[state][1]
+            other = [d for d in districts if d != r["daerah"]]
+            if other:
+                r["daerah"] = random.choice(other)
+                counts["district_drift"] += 1
+    return counts
+
+
 def main() -> None:
     here = Path(__file__).resolve().parent.parent
     out_dir = here / "data" / "test"
@@ -303,6 +348,7 @@ def main() -> None:
     # ── MyVASS: 1500 unique children ─────────────────────────────────────
     myvass = [build_myvass_row() for _ in range(1500)]
     myvass_ics = [r["IC_NO_PASSPORT"] for r in myvass]
+    myvass_lookup = {r["IC_NO_PASSPORT"]: r for r in myvass}
 
     # ── Klinik: 800 rows where ~30% share ICs with MyVASS for linkage ────
     overlap_n = 240   # 30% of 800
@@ -318,6 +364,10 @@ def main() -> None:
         + [build_klinik_row()           for _  in range(fresh_n)]
     )
 
+    # Inject linkage-specific conflicts BEFORE adding generic missing/dupe
+    # noise so the conflict-bearing rows are guaranteed present.
+    conflict_counts = _inject_linkage_conflicts(klinik, myvass_lookup)
+
     myvass = inject_issues(myvass, missing_rate=0.03, duplicate_rate=0.02)
     klinik = inject_issues(klinik, missing_rate=0.04, duplicate_rate=0.015)
 
@@ -329,8 +379,12 @@ def main() -> None:
     print(f"  {out_dir/'smartdqc_test_klinik.csv'}   {len(klinik):>5} rows × {len(klinik[0])} cols")
     print()
     print("Linkage expectations (v2):")
-    print(f"  exact-IC matches expected: ~{overlap_n}")
-    print(f"  fuzzy-IC matches expected: ~{fuzzy_n}")
+    print(f"  exact-IC matches:   ~{overlap_n}")
+    print(f"  fuzzy-IC matches:   ~{fuzzy_n}")
+    print(f"  gender conflicts:    {conflict_counts['gender']} (hard)")
+    print(f"  DOB drift ±1d:       {conflict_counts['dob_drift']} (matched, no conflict)")
+    print(f"  name variants:       {conflict_counts['name_variant']} (soft conflict)")
+    print(f"  district drifts:     {conflict_counts['district_drift']} (soft conflict)")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,24 @@
-"""Feature #14 — Entity Resolution (MVP: exact IC match).
+"""Feature #14 — Entity Resolution.
 
-link_records()    — groups records by normalised 12-digit IC
-persist_linkage() — writes groups to entity_linkage table
+v1 (back-compat):
+  link_records()      — exact 12-digit IC grouping
+  persist_linkage()   — writes groups to entity_linkage table
+
+v2 (current):
+  link_records_v2()   — probabilistic matching with:
+                          IC exact + IC fuzzy (Levenshtein)
+                        + name similarity (BIN/BINTI-stripped, token-aware)
+                        + DOB tolerance (±N days)
+                        + location boost (negeri match)
+                        + contradiction scanning (hard/soft/strong severities)
+                        + canonical identity + chronological timeline
 """
 from __future__ import annotations
 
 import re
 from collections import defaultdict
+from datetime import date, datetime
+from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -131,37 +143,341 @@ def _normalise_dob(raw: str) -> str:
     return s
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Name similarity — stdlib only. Strips Malay/Indian name particles so
+# "Ali bin Ahmad" ↔ "Ali Ahmad" doesn't tank the ratio. Returns max of
+# three signals so we catch typos AND token reordering AND partial overlap.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NAME_PARTICLES = {
+    "BIN", "BINTI", "BT", "BTE", "B",   # Malay
+    "A/L", "A/P", "AL", "AP",            # Indian Malaysian
+    "S/O", "D/O",                        # alternative South Asian
+}
+
+
+def _name_tokens(name: str) -> list[str]:
+    """Tokenise + uppercase + strip particles + drop pure punctuation."""
+    if not name:
+        return []
+    cleaned = re.sub(r"[.,]", " ", str(name).upper())
+    return [t for t in cleaned.split() if t and t not in _NAME_PARTICLES]
+
+
+def _name_similarity(a: str, b: str) -> float:
+    """Return a 0..1 similarity score that's robust to:
+      - typos (raw SequenceMatcher ratio on normalised strings)
+      - reordered/inserted name particles (sorted-token SequenceMatcher)
+      - long-name partial overlap (Jaccard on token sets)
+    Takes the maximum of the three. Stdlib only — no rapidfuzz/jellyfish."""
+    norm_a = _normalise_name(a)
+    norm_b = _normalise_name(b)
+    if not norm_a or not norm_b:
+        return 0.0
+    if norm_a == norm_b:
+        return 1.0
+
+    # (1) raw normalised-string ratio
+    raw_ratio = SequenceMatcher(None, norm_a, norm_b).ratio()
+
+    # (2) sorted-token ratio with particles stripped
+    toks_a = _name_tokens(a)
+    toks_b = _name_tokens(b)
+    sorted_ratio = 0.0
+    if toks_a and toks_b:
+        sorted_ratio = SequenceMatcher(
+            None, " ".join(sorted(toks_a)), " ".join(sorted(toks_b))
+        ).ratio()
+
+    # (3) Jaccard on token sets
+    jaccard = 0.0
+    if toks_a or toks_b:
+        set_a, set_b = set(toks_a), set(toks_b)
+        if set_a or set_b:
+            jaccard = len(set_a & set_b) / len(set_a | set_b)
+
+    return max(raw_ratio, sorted_ratio, jaccard)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOB parsing + tolerance — single source of truth for both matcher and
+# conflict scanner so they never disagree about whether two DOBs are "equal".
+# Mirrors the ISO-first, dayfirst-fallback pattern in backend/eda/cleaning.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _parse_dob(raw: Any) -> date | None:
+    """Best-effort coerce to a date. Accepts ISO (YYYY-MM-DD), dayfirst
+    (dd/mm/yyyy), and the same compact digits-only forms _normalise_dob
+    already handles. Returns None on failure (never raises)."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    s = str(raw).strip()
+    if not s or s.lower() in ("nan", "none", "nat"):
+        return None
+    # _normalise_dob converts digit-only forms (DDMMYYYY / YYYYMMDD) to
+    # ISO; if it succeeds the remaining branch is cheap.
+    norm = _normalise_dob(s)
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(norm, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _dob_equal(a: Any, b: Any, tol_days: int = 1) -> bool:
+    """Return True when both DOBs parse and differ by ≤ tol_days. False
+    when either is unparseable — callers decide if that's a conflict."""
+    pa, pb = _parse_dob(a), _parse_dob(b)
+    if pa is None or pb is None:
+        return False
+    return abs((pa - pb).days) <= tol_days
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Canonical identity + timeline + conflict scan — emitted per matched group
+# so the UI can render the "unified longitudinal profile" the spec demands.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Per-spec preference when canonical-identity ties on frequency + recency.
+_SOURCE_PRIORITY = ["MyVASS", "myvass", "KKM", "kkm", "NCDC", "ncdc"]
+
+
+def _source_priority(src: str | None) -> int:
+    """Lower = preferred. Unknown sources go last."""
+    if src is None:
+        return len(_SOURCE_PRIORITY) + 1
+    try:
+        return _SOURCE_PRIORITY.index(src)
+    except ValueError:
+        return len(_SOURCE_PRIORITY)
+
+
+def _canonicalise_group(
+    group: dict,
+    dataset_created_at_by_id: dict[str, datetime] | None = None,
+) -> dict:
+    """Return canonical identity: most-frequent non-null per field; tie
+    broken by newest dataset (created_at), then source priority. Returns
+    a dict with at minimum {ic, name, dob, gender, state, district}."""
+    dataset_created_at_by_id = dataset_created_at_by_id or {}
+    sources = group.get("sources", []) or []
+    canonical: dict[str, Any] = {}
+
+    def _pick(field: str) -> Any:
+        # Tally non-null values along with provenance.
+        tally: dict[Any, list[dict]] = defaultdict(list)
+        for s in sources:
+            v = s.get(field)
+            if v is None or v == "":
+                continue
+            tally[v].append(s)
+        if not tally:
+            return None
+        # Sort: highest count → newest dataset → best source priority.
+        def _rank(item):
+            value, srcs = item
+            count = len(srcs)
+            # Filter to actually-present datetimes before taking max.
+            datetimes = [
+                dataset_created_at_by_id.get(s.get("dataset_id"))
+                for s in srcs if s.get("dataset_id")
+            ]
+            datetimes = [d for d in datetimes if isinstance(d, datetime)]
+            newest_ts = max((d.timestamp() for d in datetimes), default=0.0)
+            best_prio = min(_source_priority(s.get("source_type")) for s in srcs)
+            return (-count, -newest_ts, best_prio)
+        ranked = sorted(tally.items(), key=_rank)
+        return ranked[0][0]
+
+    canonical["ic"]       = group.get("ic") or _pick("ic")
+    canonical["name"]     = _pick("name")
+    canonical["dob"]      = _pick("dob")
+    canonical["gender"]   = _pick("gender")
+    canonical["state"]    = _pick("state")
+    canonical["district"] = _pick("district")
+    return canonical
+
+
+def _build_timeline(group: dict) -> list[dict]:
+    """Chronological measurements across sources. Skips rows whose
+    measure_date can't be parsed. Output entries:
+      {date, source_type, weight_kg, height_cm, bmi, waz, haz, baz}
+    Date stored as ISO string for JSON-friendliness."""
+    out: list[dict] = []
+    for s in group.get("sources", []) or []:
+        d = _parse_dob(s.get("measure_date"))  # same parser; works for any date
+        if d is None:
+            continue
+        out.append({
+            "date":        d.isoformat(),
+            "source_type": s.get("source_type"),
+            "weight_kg":   s.get("weight_kg"),
+            "height_cm":   s.get("height_cm"),
+            "bmi":         s.get("bmi"),
+            "waz":         s.get("waz"),
+            "haz":         s.get("haz"),
+            "baz":         s.get("baz"),
+        })
+    out.sort(key=lambda r: r["date"])
+    return out
+
+
+def _scan_conflicts(
+    group: dict,
+    *,
+    name_fuzzy_threshold: float = 0.85,
+    dob_tolerance_days: int = 1,
+) -> list[dict]:
+    """Walk source pairs and emit conflicts. Each conflict:
+      {field, severity, values: [{source_type, value}]}
+    Severities:
+      hard   — exact-equality fields differ (jantina, negeri); DOB
+               differs by years; non-empty values disagree.
+      soft   — name fuzzy ≥ threshold but not exact; daerah differs
+               while negeri agrees.
+      strong — name fuzzy < 0.6.
+    """
+    sources = group.get("sources", []) or []
+    if len(sources) < 2:
+        return []
+
+    def _values_for(field: str) -> list[dict]:
+        """Distinct non-null values across sources with their provenance."""
+        seen: dict[Any, dict] = {}
+        for s in sources:
+            v = s.get(field)
+            if v is None or v == "":
+                continue
+            if v not in seen:
+                seen[v] = {"source_type": s.get("source_type"), "value": v}
+        return list(seen.values())
+
+    conflicts: list[dict] = []
+
+    # Gender — hard conflict on any disagreement
+    g_vals = _values_for("gender")
+    if len(g_vals) > 1:
+        conflicts.append({"field": "gender", "severity": "hard", "values": g_vals})
+
+    # State (negeri) — hard conflict
+    st_vals = _values_for("state")
+    if len(st_vals) > 1:
+        conflicts.append({"field": "state", "severity": "hard", "values": st_vals})
+
+    # District (daerah) — soft if state agrees, hard otherwise
+    d_vals = _values_for("district")
+    if len(d_vals) > 1:
+        sev = "soft" if len(st_vals) <= 1 else "hard"
+        conflicts.append({"field": "district", "severity": sev, "values": d_vals})
+
+    # DOB — hard if any pair differs beyond tolerance OR by years
+    dob_vals = _values_for("dob")
+    if len(dob_vals) > 1:
+        parsed = [(_parse_dob(v["value"]), v) for v in dob_vals]
+        parsed = [(p, v) for (p, v) in parsed if p is not None]
+        if len(parsed) >= 2:
+            years = {p.year for p, _ in parsed}
+            severe = len(years) > 1
+            ok = all(
+                _dob_equal(parsed[0][1]["value"], v["value"], dob_tolerance_days)
+                for (_, v) in parsed[1:]
+            )
+            if not ok or severe:
+                conflicts.append({
+                    "field": "dob",
+                    "severity": "hard",
+                    "values": [v for (_, v) in parsed],
+                })
+
+    # Name — fuzzy comparison decides severity
+    name_vals = _values_for("name")
+    if len(name_vals) > 1:
+        sims: list[float] = []
+        first = name_vals[0]["value"]
+        for v in name_vals[1:]:
+            sims.append(_name_similarity(first, v["value"]))
+        worst = min(sims) if sims else 1.0
+        # Skip when all pairs are exact equal (they wouldn't be in _values_for).
+        if worst < 0.6:
+            severity = "strong"
+        elif worst < name_fuzzy_threshold:
+            severity = "hard"
+        else:
+            severity = "soft"
+        conflicts.append({
+            "field": "name",
+            "severity": severity,
+            "values": name_vals,
+        })
+
+    return conflicts
+
+
 def link_records_v2(
     records: list[dict[str, Any]],
     *,
     fuzzy_ic: bool = True,
     fuzzy_ic_max_distance: int = 1,
     name_dob_boost: bool = True,
+    name_fuzzy: bool = True,
+    name_fuzzy_threshold: float = 0.85,
+    dob_tolerance_days: int = 1,
+    location_boost: bool = True,
     min_confidence: float = 0.6,
+    dataset_created_at_by_id: dict[str, datetime] | None = None,
 ) -> list[dict[str, Any]]:
-    """Group records across datasets with richer matching than v1.
+    """Group records across datasets with probabilistic multi-signal matching.
 
-    Pipeline:
-      1. Exact IC match (confidence 1.0, reason="exact_ic").
-      2. If `fuzzy_ic` is on, merge any remaining records whose IC differs
-         from an existing group's IC by ≤ `fuzzy_ic_max_distance` edits
-         (confidence 0.85, reason="fuzzy_ic±N").
-      3. If `name_dob_boost` is on, additionally merge IC-less records that
-         match an existing group on normalised (name, dob) (confidence 0.7,
-         reason="name+dob").
-      4. Anything still unmatched becomes a single-source group with
-         confidence 0.0 (reason="unmatched").
+    Pipeline (each pass only sees records still unmatched at that point):
+      1. Exact IC                    → confidence 1.00, reason "exact_ic"
+      2. Fuzzy IC (Levenshtein ≤N)   → confidence 0.85, reason "fuzzy_ic±N"
+      3. Name+DOB exact               → confidence 0.70, reason "name+dob"
+      4. Name fuzzy + DOB tolerance   → confidence 0.70, reason "name_fuzzy" /
+         (only IC-less records, scoped to     "dob±Nd"
+         a year-month DOB bucket for O(N) bound)
+      5. Anything still unmatched     → confidence 0.00, reason "unmatched"
 
-    Records below `min_confidence` after matching are still returned so the
-    UI can choose to filter them — the threshold gates the *match attempt*,
-    not the result list.
+    Optional location boost: when a matched group's sources agree on
+    `state`, raise the group's confidence by +0.10 (capped at 1.0) and
+    append a `same_state` reason chip. Applied only after ≥2 sources are
+    in the group, so it can never lift an unmatched single.
 
-    Input records: {ic, source_type, dataset_id, name, dob, [extra keys passed through]}
-    Output groups: {ic, sources[], confidence, match_reasons[], name, dob}
+    Each returned group additionally carries:
+      profile.canonical  — {ic, name, dob, gender, state, district}
+                            (most-frequent non-null per field; ties → newest
+                             Dataset.created_at → source_type priority)
+      profile.timeline   — chronological measurements across all sources
+      conflicts          — [{field, severity, values: [...]}]
+                            severity ∈ {hard, soft, strong}
+
+    Input records: {ic, source_type, dataset_id, name, dob, [gender, state,
+                    district, measure_date, weight_kg, height_cm, bmi, waz,
+                    haz, baz — all optional, passed through]}
     """
     groups: list[dict] = []                          # list of group dicts
     by_ic: dict[str, dict] = {}                      # normalised IC → group
-    by_name_dob: dict[tuple[str, str], dict] = {}    # (name, dob) → group
+    by_name_dob_exact: dict[tuple[str, str], dict] = {}  # (name, dob)  → group
+    # bucketed index for fuzzy-name pass: (dob_year_month) → list[group]
+    by_dob_window: dict[tuple[int, int], list[dict]] = defaultdict(list)
+
+    def _dob_window_key(rec_dob: Any) -> tuple[int, int] | None:
+        d = _parse_dob(rec_dob)
+        return (d.year, d.month) if d else None
+
+    def _index_group(g: dict, rec: dict) -> None:
+        """Register group in name+dob and dob-window indexes."""
+        nd = (_normalise_name(rec.get("name", "")), _normalise_dob(rec.get("dob", "")))
+        if nd[0] and nd[1]:
+            by_name_dob_exact.setdefault(nd, g)
+        win = _dob_window_key(rec.get("dob"))
+        if win and g not in by_dob_window[win]:
+            by_dob_window[win].append(g)
 
     def _new_group(rec: dict, ic_norm: str, confidence: float, reasons: list[str]) -> dict:
         g = {
@@ -173,19 +489,26 @@ def link_records_v2(
             "dob": rec.get("dob") or None,
         }
         groups.append(g)
+        _index_group(g, rec)
         return g
 
-    def _attach(g: dict, rec: dict, *, drop_confidence_floor: float | None = None,
-                add_reason: str | None = None) -> None:
+    def _attach(
+        g: dict, rec: dict, *,
+        drop_confidence_floor: float | None = None,
+        boost: float = 0.0,
+        add_reason: str | None = None,
+    ) -> None:
         g["sources"].append(rec)
         if drop_confidence_floor is not None:
             g["confidence"] = min(g["confidence"], drop_confidence_floor)
+        if boost:
+            g["confidence"] = min(1.0, g["confidence"] + boost)
         if add_reason and add_reason not in g["match_reasons"]:
             g["match_reasons"].append(add_reason)
-        if not g.get("name") and rec.get("name"):
-            g["name"] = rec["name"]
-        if not g.get("dob") and rec.get("dob"):
-            g["dob"] = rec["dob"]
+        for fld in ("name", "dob"):
+            if not g.get(fld) and rec.get(fld):
+                g[fld] = rec[fld]
+        _index_group(g, rec)
 
     # ── Pass 1: exact IC ────────────────────────────────────────────────────
     for rec in records:
@@ -196,44 +519,50 @@ def link_records_v2(
         if g is None:
             g = _new_group(rec, ic_norm, confidence=1.0, reasons=["exact_ic"])
             by_ic[ic_norm] = g
-            # Also index by name+dob if both present, for pass 3.
-            nd = (_normalise_name(rec.get("name", "")), _normalise_dob(rec.get("dob", "")))
-            if nd[0] and nd[1]:
-                by_name_dob[nd] = g
         else:
             _attach(g, rec)
 
     # ── Pass 2: fuzzy IC ────────────────────────────────────────────────────
-    fuzzy_unmatched: list[dict] = []
-    if fuzzy_ic:
+    # Pass 1 created a separate group for every distinct IC, so by_ic now
+    # contains both sides of any fuzzy-near pair. Walk all currently-known
+    # ICs, find pairs within fuzzy_ic_max_distance, and merge the later
+    # group into the earlier one. Bounded O(N²) on group count — fine for
+    # the typical 100-1000 group sizes we see in practice.
+    fuzzy_unmatched: list[dict] = [
+        r for r in records if not _normalise_ic(r.get("ic", ""))
+    ]
+    if fuzzy_ic and len(by_ic) > 1:
+        merged_targets: dict[int, dict] = {}  # id(losing_group) → winner
         ic_keys = list(by_ic.keys())
-        for rec in records:
-            ic_norm = _normalise_ic(rec.get("ic", ""))
-            if ic_norm and ic_norm in by_ic:
-                continue  # already attached in pass 1
-            if not ic_norm:
-                fuzzy_unmatched.append(rec)
+        for i in range(len(ic_keys)):
+            key_i = ic_keys[i]
+            g_i = by_ic[key_i]
+            if id(g_i) in merged_targets:
                 continue
-            # Find nearest known IC by Levenshtein distance.
-            best_key, best_d = None, fuzzy_ic_max_distance + 1
-            for key in ic_keys:
-                d = _levenshtein(ic_norm, key)
-                if d < best_d:
-                    best_key, best_d = key, d
-                    if d == 1:
-                        break
-            if best_key is not None and best_d <= fuzzy_ic_max_distance:
-                _attach(
-                    by_ic[best_key], rec,
-                    drop_confidence_floor=0.85,
-                    add_reason=f"fuzzy_ic±{best_d}",
-                )
-            else:
-                fuzzy_unmatched.append(rec)
-    else:
-        fuzzy_unmatched = [r for r in records if _normalise_ic(r.get("ic", "")) not in by_ic]
+            for j in range(i + 1, len(ic_keys)):
+                key_j = ic_keys[j]
+                g_j = by_ic[key_j]
+                if id(g_j) in merged_targets:
+                    continue
+                d = _levenshtein(key_i, key_j)
+                if 0 < d <= fuzzy_ic_max_distance:
+                    # Merge g_j INTO g_i. Re-use _attach so reason chips +
+                    # confidence floor stay consistent with everywhere else.
+                    for src in list(g_j["sources"]):
+                        _attach(
+                            g_i, src,
+                            drop_confidence_floor=0.85,
+                            add_reason=f"fuzzy_ic±{d}",
+                        )
+                    merged_targets[id(g_j)] = g_i
+        if merged_targets:
+            groups[:] = [g for g in groups if id(g) not in merged_targets]
+            # Rebuild by_ic so subsequent passes lookup the surviving group.
+            survivors = {g["ic"]: g for g in groups if g.get("ic")}
+            by_ic.clear()
+            by_ic.update(survivors)
 
-    # ── Pass 3: name + DOB boost (only for records still unmatched) ─────────
+    # ── Pass 3: name + DOB exact ────────────────────────────────────────────
     still_unmatched: list[dict] = []
     if name_dob_boost:
         for rec in fuzzy_unmatched:
@@ -242,7 +571,7 @@ def link_records_v2(
             if not name_n or not dob_n:
                 still_unmatched.append(rec)
                 continue
-            g = by_name_dob.get((name_n, dob_n))
+            g = by_name_dob_exact.get((name_n, dob_n))
             if g is None:
                 still_unmatched.append(rec)
             else:
@@ -250,12 +579,92 @@ def link_records_v2(
     else:
         still_unmatched = fuzzy_unmatched
 
-    # ── Pass 4: orphans become their own single-source groups ───────────────
-    for rec in still_unmatched:
+    # ── Pass 4: fuzzy name + DOB tolerance ─────────────────────────────────
+    # Only IC-less records reach here. Scoped to the dob-year-month bucket
+    # ± nearby buckets so we never run SequenceMatcher across the whole
+    # cross product. Self-bootstrapping: when no candidate matches, the
+    # record becomes its own group, making it findable for subsequent
+    # records in the same pass.
+    truly_unmatched: list[dict] = []
+    if name_fuzzy:
+        for rec in still_unmatched:
+            rec_dob = _parse_dob(rec.get("dob"))
+            rec_name = rec.get("name") or ""
+            if rec_dob is None or not rec_name:
+                truly_unmatched.append(rec)
+                continue
+            # Consider buckets within ±1 month either side — covers any
+            # tolerance ≤ 31 days; for larger windows the gate below
+            # rejects out-of-range pairs anyway.
+            base = (rec_dob.year, rec_dob.month)
+            candidates: list[dict] = []
+            for dy, dm in ((0, -1), (0, 0), (0, 1)):
+                y, m = base[0] + dy, base[1] + dm
+                if   m == 0:  y, m = y - 1, 12
+                elif m == 13: y, m = y + 1, 1
+                candidates.extend(by_dob_window.get((y, m), []))
+            best_g, best_sim = None, name_fuzzy_threshold
+            for g in candidates:
+                if not g.get("name"):
+                    continue
+                gdob = g.get("dob")
+                if gdob is None or not _dob_equal(rec.get("dob"), gdob, dob_tolerance_days):
+                    continue
+                sim = _name_similarity(rec_name, g["name"])
+                if sim >= best_sim:
+                    best_g, best_sim = g, sim
+            if best_g is not None:
+                _attach(
+                    best_g, rec,
+                    drop_confidence_floor=0.7,
+                    add_reason=(
+                        f"name_fuzzy:{best_sim:.2f}" if dob_tolerance_days == 0
+                        else f"name_fuzzy:{best_sim:.2f}+dob±{dob_tolerance_days}d"
+                    ),
+                )
+            else:
+                # No candidate yet — create a new group so the NEXT
+                # IC-less record with a fuzzy-similar name can find this
+                # one. Pass 5 will skip records that already landed here.
+                _new_group(
+                    rec, _normalise_ic(rec.get("ic", "")),
+                    confidence=0.0, reasons=["unmatched"],
+                )
+    else:
+        truly_unmatched = still_unmatched
+
+    # ── Pass 5: orphans become their own single-source groups ──────────────
+    # Only records that couldn't even reach Pass 4 (missing name or DOB)
+    # arrive here. Pass-4-created groups are already in `groups`.
+    for rec in truly_unmatched:
         ic_norm = _normalise_ic(rec.get("ic", ""))
         g = _new_group(rec, ic_norm, confidence=0.0, reasons=["unmatched"])
         if ic_norm and ic_norm not in by_ic:
             by_ic[ic_norm] = g
+
+    # ── Location boost: same `state` across ≥2 sources ─────────────────────
+    if location_boost:
+        for g in groups:
+            srcs = g.get("sources", [])
+            if len(srcs) < 2:
+                continue
+            states = {s.get("state") for s in srcs if s.get("state")}
+            if len(states) == 1:
+                g["confidence"] = min(1.0, g["confidence"] + 0.10)
+                if "same_state" not in g["match_reasons"]:
+                    g["match_reasons"].append("same_state")
+
+    # ── Attach unified profile + conflict scan to every group ──────────────
+    for g in groups:
+        g["profile"] = {
+            "canonical": _canonicalise_group(g, dataset_created_at_by_id),
+            "timeline":  _build_timeline(g),
+        }
+        g["conflicts"] = _scan_conflicts(
+            g,
+            name_fuzzy_threshold=name_fuzzy_threshold,
+            dob_tolerance_days=dob_tolerance_days,
+        )
 
     # Filter to >= min_confidence at *match-attempt* level (every group with
     # at least one matched pair has confidence ≥ 0.7 in our pipeline; the

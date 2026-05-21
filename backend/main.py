@@ -3486,13 +3486,27 @@ class EntityLinkV2Request(BaseModel):
     fuzzy_ic: bool = True
     fuzzy_ic_max_distance: int = 1
     name_dob_boost: bool = True
+    # New in v2.1 — close the gap to spec (probabilistic name + DOB +
+    # location signals + contradiction surfacing). All default-on; toggle
+    # off to recover v2-original behaviour.
+    name_fuzzy: bool = True
+    name_fuzzy_threshold: float = 0.85
+    dob_tolerance_days: int = 1
+    location_boost: bool = True
     min_confidence: float = 0.0       # 0.0 = include unmatched singles
     max_groups: int = 500             # cap response size — UI paginates
 
 
-_IC_COL_CANDIDATES   = ("IC_NO_PASSPORT", "IC", "NRIC", "MyKID", "ic_no", "no_kp", "no_ic")
-_NAME_COL_CANDIDATES = ("NAMA", "name", "NAMA_PESERTA", "FULL_NAME", "nama_kanak_kanak")
-_DOB_COL_CANDIDATES  = ("Tarikh_Lahir", "DOB", "TARIKH_LAHIR", "dob", "date_of_birth")
+_IC_COL_CANDIDATES       = ("IC_NO_PASSPORT", "IC", "NRIC", "MyKID", "ic_no", "no_kp", "no_ic")
+_NAME_COL_CANDIDATES     = ("NAMA", "name", "NAMA_PESERTA", "FULL_NAME", "nama_kanak_kanak")
+_DOB_COL_CANDIDATES      = ("Tarikh_Lahir", "DOB", "TARIKH_LAHIR", "dob", "date_of_birth")
+_GENDER_COL_CANDIDATES   = ("jantina", "JANTINA", "gender", "GENDER", "sex")
+_STATE_COL_CANDIDATES    = ("negeri", "NEGERI", "state", "STATE")
+_DISTRICT_COL_CANDIDATES = ("daerah", "DAERAH", "district", "DISTRICT", "kawasan")
+_MEASURE_DATE_CANDIDATES = ("Tarikh_Pengukuran", "TARIKH_PENGUKURAN",
+                            "tarikh_ukur_dt", "tarikh_ukur", "measure_date")
+# Anthropometrics + z-scores — coerced via pd.to_numeric for the timeline.
+_NUMERIC_TIMELINE_COLS = ("berat_kg", "tinggi_cm", "bmi", "waz", "haz", "baz")
 
 
 def _pick_col(df_cols: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -3505,9 +3519,17 @@ def _pick_col(df_cols: list[str], candidates: tuple[str, ...]) -> str | None:
     return None
 
 
-def _records_from_cached(cache_id: str, dataset_id: str, source_type: str) -> list[dict]:
-    """Pull (ic, name, dob) rows out of a cached DataFrame so v2 linkage
-    sees real child-level data instead of one summary row per dataset."""
+def _records_from_cached(
+    cache_id: str,
+    dataset_id: str,
+    source_type: str,
+    dataset_created_at: "datetime | None" = None,
+) -> list[dict]:
+    """Pull child-level records from a cached DataFrame so v2 linkage can
+    do name / DOB / location / contradiction work without re-querying the
+    DB. Carries through IC + name + DOB + gender + state + district +
+    measurement date + anthropometrics + z-scores. None survives end-to-end
+    — no `astype(str)` → 'nan' false-conflict surface."""
     entry = _cache_get(cache_id)
     if entry is None:
         return []
@@ -3515,24 +3537,80 @@ def _records_from_cached(cache_id: str, dataset_id: str, source_type: str) -> li
     if df is None or df.empty:
         return []
     cols = list(df.columns)
-    ic_c   = _pick_col(cols, _IC_COL_CANDIDATES)
-    name_c = _pick_col(cols, _NAME_COL_CANDIDATES)
-    dob_c  = _pick_col(cols, _DOB_COL_CANDIDATES)
+    ic_c       = _pick_col(cols, _IC_COL_CANDIDATES)
+    name_c     = _pick_col(cols, _NAME_COL_CANDIDATES)
+    dob_c      = _pick_col(cols, _DOB_COL_CANDIDATES)
+    gender_c   = _pick_col(cols, _GENDER_COL_CANDIDATES)
+    state_c    = _pick_col(cols, _STATE_COL_CANDIDATES)
+    district_c = _pick_col(cols, _DISTRICT_COL_CANDIDATES)
+    measure_c  = _pick_col(cols, _MEASURE_DATE_CANDIDATES)
+    has_year   = "tahun_ukur" in cols
+    has_month  = "bulan_ukur" in cols
     if ic_c is None:
         return []
+
+    def _str_or_none(v) -> str | None:
+        """NaN/None/'nan'/'none' → None; otherwise stripped str."""
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return None
+        s = str(v).strip()
+        if not s or s.lower() in ("nan", "none", "nat"):
+            return None
+        return s
+
+    def _measure_date_for(idx: int) -> str | None:
+        """Prefer the explicit column; fall back to tahun_ukur+bulan_ukur."""
+        if measure_c is not None:
+            v = df.iloc[idx][measure_c]
+            s = _str_or_none(v)
+            if s:
+                return s
+        if has_year and has_month:
+            y = df.iloc[idx]["tahun_ukur"]
+            m = df.iloc[idx]["bulan_ukur"]
+            try:
+                yi, mi = int(float(y)), int(float(m))
+                if 1900 <= yi <= 2100 and 1 <= mi <= 12:
+                    return f"{yi:04d}-{mi:02d}-01"
+            except (TypeError, ValueError):
+                return None
+        return None
+
     out: list[dict] = []
-    for ic_val, name_val, dob_val in zip(
-        df[ic_c].astype(str).tolist(),
-        df[name_c].astype(str).tolist() if name_c else [""] * len(df),
-        df[dob_c].astype(str).tolist() if dob_c else [""] * len(df),
-    ):
-        out.append({
-            "ic": ic_val,
-            "source_type": source_type or "unknown",
-            "dataset_id": dataset_id,
-            "name": "" if name_val.lower() in ("nan", "none") else name_val,
-            "dob":  "" if dob_val.lower()  in ("nan", "none") else dob_val,
-        })
+    n = len(df)
+    for i in range(n):
+        rec: dict = {
+            "ic":           _str_or_none(df.iloc[i][ic_c]) or "",
+            "source_type":  source_type or "unknown",
+            "dataset_id":   dataset_id,
+            "name":         _str_or_none(df.iloc[i][name_c])     if name_c     else None,
+            "dob":          _str_or_none(df.iloc[i][dob_c])      if dob_c      else None,
+            "gender":       _str_or_none(df.iloc[i][gender_c])   if gender_c   else None,
+            "state":        _str_or_none(df.iloc[i][state_c])    if state_c    else None,
+            "district":     _str_or_none(df.iloc[i][district_c]) if district_c else None,
+            "measure_date": _measure_date_for(i),
+        }
+        # Numerics — coerce per-cell so NaN becomes None rather than 'nan'.
+        for c in _NUMERIC_TIMELINE_COLS:
+            if c not in cols:
+                rec[c] = None
+                continue
+            v = df.iloc[i][c]
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                rec[c] = None
+                continue
+            try:
+                rec[c] = float(v)
+            except (TypeError, ValueError):
+                rec[c] = None
+        out.append(rec)
+    # Numeric keys we surface to the timeline use UI-friendlier names.
+    for r in out:
+        r["weight_kg"] = r.pop("berat_kg", None)
+        r["height_cm"] = r.pop("tinggi_cm", None)
+        # bmi/waz/haz/baz keep their names.
+        if dataset_created_at is not None:
+            r["_dataset_created_at"] = dataset_created_at
     return out
 
 
@@ -3600,17 +3678,25 @@ def _run_v2_linkage(req: EntityLinkV2Request) -> dict:
 
     all_records: list[dict] = []
     dataset_meta: list[dict] = []
+    dataset_created_at_by_id: dict[str, datetime] = {}
     with SessionLocal() as db:
         for ds_id in req.dataset_ids:
             ds = db.get(Dataset, ds_id)
             if ds is None:
                 continue
-            recs = _records_from_cached(ds_id, ds_id, ds.source_type or "unknown")
+            recs = _records_from_cached(
+                ds_id, ds_id, ds.source_type or "unknown",
+                dataset_created_at=ds.created_at,
+            )
+            if ds.created_at is not None:
+                dataset_created_at_by_id[ds_id] = ds.created_at
             dataset_meta.append({
                 "dataset_id":  ds_id,
                 "filename":    ds.filename,
                 "source_type": ds.source_type,
                 "records":     len(recs),
+                # ISO string so the UI can render "latest from X" labels.
+                "created_at":  ds.created_at.isoformat() if ds.created_at else None,
             })
             all_records.extend(recs)
 
@@ -3626,7 +3712,12 @@ def _run_v2_linkage(req: EntityLinkV2Request) -> dict:
         fuzzy_ic=req.fuzzy_ic,
         fuzzy_ic_max_distance=req.fuzzy_ic_max_distance,
         name_dob_boost=req.name_dob_boost,
+        name_fuzzy=req.name_fuzzy,
+        name_fuzzy_threshold=req.name_fuzzy_threshold,
+        dob_tolerance_days=req.dob_tolerance_days,
+        location_boost=req.location_boost,
         min_confidence=req.min_confidence,
+        dataset_created_at_by_id=dataset_created_at_by_id,
     )
 
     # Sort: linked-by-confidence-desc first, unlinked at the bottom.
@@ -3652,7 +3743,13 @@ async def entity_link_v2(req: EntityLinkV2Request):
     result = _run_v2_linkage(req)
     _log_audit(
         action="entity.link.v2",
-        detail=f"{len(req.dataset_ids)} datasets, {result['linked_groups']} matched",
+        detail=(
+            f"{len(req.dataset_ids)} datasets, "
+            f"{result['linked_groups']} matched, "
+            f"name_fuzzy={req.name_fuzzy}({req.name_fuzzy_threshold}), "
+            f"dob_tol={req.dob_tolerance_days}d, "
+            f"loc_boost={req.location_boost}"
+        ),
     )
     return result
 
@@ -3668,23 +3765,37 @@ async def entity_link_v2_export(req: EntityLinkV2Request):
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow([
-        "group_ic", "name", "dob", "confidence", "match_reasons",
+        "group_ic", "canonical_name", "canonical_dob", "canonical_gender",
+        "canonical_state", "canonical_district",
+        "confidence", "match_reasons", "conflict_fields",
         "source_type", "dataset_id", "source_name", "source_dob", "source_ic",
+        "source_gender", "source_state", "source_district",
     ])
     for g in result["profiles"]:
         reasons = ";".join(g.get("match_reasons", []))
+        canonical = (g.get("profile") or {}).get("canonical") or {}
+        conflict_fields = ";".join(
+            f"{c['field']}({c['severity']})" for c in g.get("conflicts", [])
+        )
         for src in g["sources"]:
             w.writerow([
                 g.get("ic", ""),
-                g.get("name") or "",
-                g.get("dob") or "",
+                canonical.get("name") or "",
+                canonical.get("dob") or "",
+                canonical.get("gender") or "",
+                canonical.get("state") or "",
+                canonical.get("district") or "",
                 f"{g.get('confidence', 0.0):.2f}",
                 reasons,
+                conflict_fields,
                 src.get("source_type", ""),
                 src.get("dataset_id", ""),
                 src.get("name", ""),
                 src.get("dob", ""),
                 src.get("ic", ""),
+                src.get("gender", "") or "",
+                src.get("state", "") or "",
+                src.get("district", "") or "",
             ])
 
     _log_audit(
