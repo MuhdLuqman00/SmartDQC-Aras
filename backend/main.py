@@ -2183,11 +2183,17 @@ async def ml_suggest_endpoint(
 
 
 def _parse_charts(charts: str | None) -> set[str] | None:
-    """Parse a comma-separated charts query into a set of keys, or None
-    when the caller wants the default (all recommended) chart set."""
+    """Parse a comma-separated charts query into a set of keys.
+
+    - param absent/empty  → None  (caller wants the default recommended set)
+    - "none" sentinel     → empty set (caller explicitly wants no charts)
+    - otherwise           → the explicit set of keys
+    """
     if not charts:
         return None
-    return {c.strip() for c in charts.split(",") if c.strip()}
+    keys = {c.strip() for c in charts.split(",") if c.strip()}
+    keys.discard("none")
+    return keys
 
 
 @app.get("/report/pptx")

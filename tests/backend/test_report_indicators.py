@@ -293,6 +293,13 @@ def test_pdf_with_kpi_embeds_charts():
     assert len(data_with_kpi) > len(data_no_kpi)
 
 
+def test_pdf_explicit_no_charts_is_smaller_than_default():
+    """An explicit empty chart set embeds no charts; default (None) embeds all."""
+    full = build_pdf_bytes(_eda(), _narrative(), kpi_result=_kpi(), charts=None)
+    none = build_pdf_bytes(_eda(), _narrative(), kpi_result=_kpi(), charts=set())
+    assert len(none) < len(full)
+
+
 def test_pptx_quality_slide_with_chart_is_larger():
     """Quality chart image adds bytes to the PPTX."""
     data = build_pptx_bytes(_eda(), _narrative())

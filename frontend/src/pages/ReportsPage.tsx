@@ -22,6 +22,11 @@ const CHART_CATALOG: ChartChoice[] = [
 ];
 const DEFAULT_SELECTED = new Set(CHART_CATALOG.filter(c => c.recommended).map(c => c.key));
 
+/* Charts derived from KPI data — they can only render when "Include KPI data"
+   is on. When it's off they're disabled in the picker and excluded from the
+   request, so a chosen chart never silently goes missing. */
+const CHART_REQUIRES_KPI = new Set(['nutritional_rates', 'kpi_vs_target']);
+
 interface ReportCard {
   id: string;
   icon: React.ReactNode;
@@ -47,10 +52,12 @@ export function ReportsPage() {
   });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const isAllRecommendedSelected = (cardId: string): boolean => {
-    const sel = chartSelection[cardId] || new Set();
-    return DEFAULT_SELECTED.size === sel.size &&
-      [...DEFAULT_SELECTED].every(k => sel.has(k));
+  /* The charts that will actually render: the user's selection minus any
+     KPI-derived charts when "Include KPI data" is off for this card. */
+  const effectiveCharts = (cardId: string): string[] => {
+    const kpiOn = kpiToggles[cardId] ?? true;
+    const sel = chartSelection[cardId] || new Set<string>();
+    return [...sel].filter(k => kpiOn || !CHART_REQUIRES_KPI.has(k));
   };
 
   const toggleChart = (cardId: string, key: string) => {
@@ -64,12 +71,11 @@ export function ReportsPage() {
   };
 
   const buildChartsParam = (cardId: string): string => {
-    // If the user kept the recommended defaults, omit the param so the
-    // backend uses its own defaults (forward-compatible if we add charts
-    // later). Otherwise send the explicit comma-separated list.
-    if (isAllRecommendedSelected(cardId)) return '';
-    const sel = chartSelection[cardId];
-    return sel ? Array.from(sel).join(',') : '';
+    // Always send an explicit list so the backend renders exactly what's
+    // selected. An empty selection sends the "none" sentinel (→ no charts)
+    // instead of an empty string, which the backend would read as "default".
+    const eff = effectiveCharts(cardId);
+    return eff.length === 0 ? 'none' : eff.join(',');
   };
 
   const triggerDownload = async (url: string, filename: string) => {
@@ -179,6 +185,8 @@ export function ReportsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
         {cards.map(card => {
           const sel = chartSelection[card.id] || new Set<string>();
+          const kpiOn = kpiToggles[card.id] ?? true;
+          const effCount = effectiveCharts(card.id).length;
           const isExpanded = !!expanded[card.id];
           return (
             <div key={card.id} style={{
@@ -231,7 +239,7 @@ export function ReportsPage() {
                     {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     {t('Customize charts', 'Sesuaikan carta')}
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                      ({sel.size}/{CHART_CATALOG.length})
+                      ({effCount}/{CHART_CATALOG.length})
                     </span>
                   </button>
                   {isExpanded && (
@@ -241,16 +249,22 @@ export function ReportsPage() {
                       borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6,
                     }}>
                       {CHART_CATALOG.map(c => {
-                        const checked = sel.has(c.key);
+                        const needsKpiOff = CHART_REQUIRES_KPI.has(c.key) && !kpiOn;
+                        const checked = sel.has(c.key) && !needsKpiOff;
                         return (
-                          <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                          <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: needsKpiOff ? 'not-allowed' : 'pointer', color: needsKpiOff ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleChart(card.id, c.key)}
-                              disabled={!cacheId}
+                              disabled={!cacheId || needsKpiOff}
                             />
                             <span style={{ flex: 1 }}>{lang === 'en' ? c.labelEn : c.labelBm}</span>
+                            {needsKpiOff && (
+                              <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                {t('needs KPI', 'perlu KPI')}
+                              </span>
+                            )}
                             {c.recommended && (
                               <span style={{
                                 fontSize: 9, fontWeight: 700,
