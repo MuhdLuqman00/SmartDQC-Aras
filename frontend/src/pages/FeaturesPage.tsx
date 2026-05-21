@@ -39,8 +39,8 @@ const FEATURES: Feat[] = [
     descEn: 'Choropleth map, KPI charts, column distributions.', descBm: 'Peta koropleth, carta KPI, taburan lajur.',
     to: '/geo', api: 'charts · ChoroplethMap' },
   { n: 8,  icon: <Download size={18} />,   en: 'Export & Integration', bm: 'Eksport & Integrasi',
-    descEn: 'Cleaned CSV/XLSX, Tableau, cached downloads.', descBm: 'CSV/XLSX bersih, Tableau, muat turun cache.',
-    to: '/reports', api: '/clean/download-cached' },
+    descEn: 'Cleaned CSV/XLSX, Tableau aggregation, data dictionary.', descBm: 'CSV/XLSX bersih, agregasi Tableau, kamus data.',
+    to: '/reports', api: '/clean/download-cached · /export/aggregated-cached · /data-dictionary' },
   { n: 9,  icon: <Sparkles size={18} />,   en: 'AI Insight Generation', bm: 'Penjanaan Cerapan AI',
     descEn: 'Bilingual 5W1H executive narrative from the data.', descBm: 'Naratif eksekutif 5W1H dwibahasa daripada data.',
     to: '/ai', api: '/ai/narrative' },
@@ -63,8 +63,8 @@ const FEATURES: Feat[] = [
     descEn: 'KKM-branded PDF & PPTX with charts.', descBm: 'PDF & PPTX berjenama KKM dengan carta.',
     to: '/reports', api: '/report/pdf · /report/pptx' },
   { n: 16, icon: <Target size={18} />,     en: 'Benchmarking & Targets', bm: 'Penanda Aras & Sasaran',
-    descEn: 'RAG vs NPAN/WHO targets + trajectory narrative.', descBm: 'RAG vs sasaran NPAN/WHO + naratif trajektori.',
-    to: '/', api: '/kpi/dashboard · /kpi/trajectory' },
+    descEn: 'RAG vs NPAN/WHO targets + per-district 2027 trajectory.', descBm: 'RAG vs sasaran NPAN/WHO + trajektori 2027 setiap daerah.',
+    to: '/geo', api: '/kpi/dashboard · /kpi/trajectory/auto' },
 ];
 
 export function FeaturesPage() {

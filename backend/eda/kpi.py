@@ -209,6 +209,50 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
     }
 
 
+_TAHUN_COLS = ["tahun_ukur", "Tahun_Ukur", "TAHUN_UKUR", "tahun", "year"]
+
+
+def compute_district_period_snapshots(df: pd.DataFrame) -> list[dict]:
+    """Derive per-district, per-period indicator-rate snapshots from a cleaned
+    dataset's measurement-year column, in the shape compute_trajectory_narratives
+    consumes: [{district, period, stunting_rate, wasting_rate, ...}].
+
+    Returns [] when there is no year column or no district column — trajectory
+    needs >=2 periods per district, which only multi-year datasets provide.
+    """
+    if df is None or df.empty:
+        return []
+
+    year_col = next((c for c in _TAHUN_COLS if c in df.columns), None)
+    district_col = (
+        next((c for c in _DAERAH_COLS if c in df.columns), None)
+        or next((c for c in _DISTRICT_COLS if c in df.columns), None)
+    )
+    if year_col is None or district_col is None:
+        return []
+
+    flag_cols = {
+        kpi_key: _resolve_flag_col(df, flag)
+        for flag, kpi_key in _FLAG_TO_KPI.items()
+    }
+    flag_cols = {k: c for k, c in flag_cols.items() if c is not None}
+    if not flag_cols:
+        return []
+
+    snapshots: list[dict] = []
+    for (district, period), grp in df.groupby([district_col, year_col]):
+        if pd.isna(period) or pd.isna(district):
+            continue
+        n = len(grp)
+        if n == 0:
+            continue
+        row = {"district": str(district), "period": str(period)}
+        for kpi_key, col in flag_cols.items():
+            row[kpi_key] = round(grp[col].fillna(0).astype(bool).sum() / n * 100, 2)
+        snapshots.append(row)
+    return snapshots
+
+
 def compute_trajectory_narratives(
     historical_snapshots: list[dict],
     current_breakdown: list[dict],

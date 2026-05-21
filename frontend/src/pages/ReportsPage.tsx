@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, BarChart3, Table, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, BarChart3, Table, Lock, ChevronDown, ChevronUp, Database, BookOpen } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
@@ -137,6 +137,28 @@ export function ReportsPage() {
       format: 'XLSX', hasKpiToggle: false, hasChartPicker: false,
       action: (cacheId) => {
         window.open(`${BASE}/clean/download-report/${cacheId}`, '_blank');
+      },
+    },
+    {
+      id: 'tableau',
+      icon: <Database size={28} style={{ color: 'var(--kkm-blue)' }} />,
+      titleEn: 'Tableau Aggregation', titleBm: 'Agregasi Tableau',
+      descEn: 'Flat aggregated table (geo × age group × indicator × year) for Tableau / BI tools.',
+      descBm: 'Jadual agregat rata (geo × kumpulan umur × indikator × tahun) untuk Tableau / alat BI.',
+      format: 'CSV', hasKpiToggle: false, hasChartPicker: false,
+      action: (cacheId) => {
+        window.open(`${BASE}/export/aggregated-cached/${cacheId}?fmt=csv`, '_blank');
+      },
+    },
+    {
+      id: 'dictionary',
+      icon: <BookOpen size={28} style={{ color: 'var(--kkm-teal)' }} />,
+      titleEn: 'Data Dictionary', titleBm: 'Kamus Data',
+      descEn: 'Definitions of all derived fields — WHO z-scores, KKM indicators, age bands.',
+      descBm: 'Definisi semua medan terbitan — z-skor WHO, indikator KKM, jaluran umur.',
+      format: 'JSON', hasKpiToggle: false, hasChartPicker: false,
+      action: () => {
+        window.open(`${BASE}/data-dictionary`, '_blank');
       },
     },
   ];

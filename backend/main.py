@@ -57,7 +57,11 @@ from .ai.nlq import answer_query
 from .ml.corrections import flag_anomalies
 from .ml.risk_score import compute_risk_scores
 from .export.report import build_pptx_bytes, build_pdf_bytes
-from .eda.kpi import compute_kpi_dashboard, compute_trajectory_narratives
+from .eda.kpi import (
+    compute_kpi_dashboard,
+    compute_trajectory_narratives,
+    compute_district_period_snapshots,
+)
 
 from datetime import datetime
 from sqlalchemy.orm import Session as SASession
@@ -743,6 +747,42 @@ async def export_aggregated(
                 "Content-Disposition": f'attachment; filename="tableau_{base}.csv"'
             },
         )
+
+
+@app.get("/export/aggregated-cached/{cache_id}")
+async def export_aggregated_cached(
+    cache_id: str,
+    fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
+):
+    """Tableau-ready aggregated table for an already-uploaded dataset (cache_id),
+    so the v2 wizard can export without re-uploading the file."""
+    entry = _cache_get(cache_id)
+    if entry is None:
+        raise HTTPException(
+            404, "cache_id not found — run /clean/run first or check the UUID"
+        )
+    src = (entry.get("stats") or {}).get("source_type") or "myvass"
+    report = run_eda_auto(entry["df"], src)
+    agg_rows = report.get("_aggregated_full", build_aggregated_table(report))
+    if not agg_rows:
+        raise HTTPException(
+            422, "Tiada data indikator — pastikan status / berat / tinggi dipetakan."
+        )
+
+    base = ((entry.get("stats") or {}).get("filename") or "dataset").rsplit(".", 1)[0]
+    if fmt == "xlsx":
+        data = tbl_excel(agg_rows, base)
+        return StreamingResponse(
+            iter([data]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="tableau_{base}.xlsx"'},
+        )
+    data = tbl_csv(agg_rows)
+    return StreamingResponse(
+        iter([data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="tableau_{base}.csv"'},
+    )
 
 
 # ─── MYVASS WIDE-TO-LONG PREVIEW ─────────────────────────────────────────────
@@ -2303,6 +2343,28 @@ async def kpi_trajectory(req: TrajectoryRequest):
     return compute_trajectory_narratives(
         req.historical_snapshots, req.current_breakdown
     )
+
+
+@app.post("/kpi/trajectory/auto")
+async def kpi_trajectory_auto(
+    cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
+):
+    """Per-district trajectory narratives derived from the cached dataset's own
+    multi-year (tahun_ukur) data. Returns an empty narrative list for single-year
+    datasets — trajectory needs >=2 measurement periods per district."""
+    entry = _cache_get(cache_id)
+    if entry is None:
+        raise HTTPException(
+            404, "cache_id not found — run /clean/run first or check the UUID"
+        )
+    snapshots = compute_district_period_snapshots(entry["df"])
+    narratives = compute_trajectory_narratives(snapshots, [])
+    periods = sorted({s["period"] for s in snapshots})
+    return JSONResponse(content=json_safe({
+        "narratives":    narratives,
+        "periods":       periods,
+        "has_multiyear": len(periods) >= 2,
+    }))
 
 
 # ── Data Quality Report (5-tab Excel) ────────────────────────────────────────

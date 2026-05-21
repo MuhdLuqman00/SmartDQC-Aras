@@ -57,6 +57,23 @@ interface RiskResult {
   district_summary: RiskDistrict[] | null;
 }
 
+// ── Trajectory types (Feature 16 — benchmarking & target tracking) ──────────────
+interface TrajectoryItem {
+  district: string;
+  kpi_key: string;
+  current_rate: number;
+  target: number;
+  forecast_2027: number;
+  trajectory_status: string;       // "On Track" | "At Risk" | "Off Track"
+  trajectory_status_bm: string;
+  narrative: { en: string; bm: string };
+}
+interface TrajectoryResp {
+  narratives: TrajectoryItem[];
+  periods: string[];
+  has_multiyear: boolean;
+}
+
 // ── Chart blocks types ───────────────────────────────────────────────────────
 // Shape guards (isHistogramBlock / isScatterBlock / etc) live in the
 // shared lib/chartCatalog so QualityPage and DashboardPage can reuse them.
@@ -105,6 +122,28 @@ function tierToStatus(tier: string): Status {
   if (v.includes('low') || v.includes('rendah')) return 'good';
   return 'neutral';
 }
+
+// Trajectory status → RAG colour + sort rank (worst first)
+function trajToStatus(status: string): Status {
+  const v = status.toLowerCase();
+  if (v.includes('off')) return 'critical';
+  if (v.includes('risk')) return 'watch';
+  if (v.includes('track')) return 'good';   // "On Track"
+  return 'neutral';
+}
+function trajRank(status: string): number {
+  const v = status.toLowerCase();
+  if (v.includes('off')) return 3;
+  if (v.includes('risk')) return 2;
+  if (v.includes('track')) return 1;
+  return 0;
+}
+const KPI_LABEL: Record<string, string> = {
+  stunting_rate:    'Stunting',
+  wasting_rate:     'Wasting',
+  underweight_rate: 'Underweight',
+  overweight_rate:  'Overweight',
+};
 
 // ── Small atoms ───────────────────────────────────────────────────────────────
 
@@ -269,6 +308,8 @@ export function GeoPage() {
   const [blocksLoading, setBlocksLoading] = useState(false);
   const [showAllDist, setShowAllDist] = useState(false);
 
+  const [traj, setTraj] = useState<TrajectoryResp | null>(null);
+
   useEffect(() => {
     if (!cacheId) return;
     setKpiLoading(true);
@@ -285,6 +326,13 @@ export function GeoPage() {
       .then(r => setBlocks(r.data))
       .catch(() => setBlocks(null))
       .finally(() => setBlocksLoading(false));
+  }, [cacheId]);
+
+  useEffect(() => {
+    if (!cacheId) return;
+    api.post<TrajectoryResp>(`/kpi/trajectory/auto?cache_id=${cacheId}`)
+      .then(r => setTraj(r.data))
+      .catch(() => setTraj(null));
   }, [cacheId]);
 
   const runRisk = async () => {
@@ -471,6 +519,48 @@ export function GeoPage() {
             </>
           )}
         </div>
+
+        {/* Target trajectory (Feature 16 — 2027 benchmarking) */}
+        {traj && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)', marginTop: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t('Target Trajectory (2027)', 'Trajektori Sasaran (2027)')}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, marginBottom: 14 }}>
+              {t('Projected vs NPAN target per district, based on historical years.',
+                 'Unjuran berbanding sasaran NPAN setiap daerah, berdasarkan tahun sejarah.')}
+            </div>
+            {traj.narratives.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
+                {t('Requires multi-year data (≥2 measurement years per district) to project a trajectory.',
+                   'Memerlukan data berbilang tahun (≥2 tahun pengukuran setiap daerah) untuk unjuran trajektori.')}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
+                {[...traj.narratives]
+                  .sort((a, b) => trajRank(b.trajectory_status) - trajRank(a.trajectory_status))
+                  .map((n, i) => {
+                    const st = trajToStatus(n.trajectory_status);
+                    return (
+                      <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '10px 12px', background: 'var(--surface-2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{n.district}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{KPI_LABEL[n.kpi_key] ?? n.kpi_key}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: STATUS_BG[st], color: STATUS_VAR[st] }}>
+                            {lang === 'en' ? n.trajectory_status : n.trajectory_status_bm}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginLeft: 'auto' }}>
+                            {n.current_rate}% → {n.forecast_2027}% ({t('target', 'sasaran')} {n.target}%)
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                          {lang === 'en' ? n.narrative.en : n.narrative.bm}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Distributions & relationships — 12 charts (7 histograms + 5 scatters)
             sourced from chartCatalog. The "Show all" toggle is kept for parity
