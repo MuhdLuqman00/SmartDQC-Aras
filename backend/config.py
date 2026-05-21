@@ -200,6 +200,39 @@ AUTO_MAPPING_HINTS = {
         "tahun_ukur":     ["tahun ukur", "tahun pengukuran"],
         "sumber":         ["sumber", "agensi"],
     },
+    # NCDC (TASKA) currently uses the same year-prefixed wide TASKA layout as
+    # MyVASS, so these hints mirror it. Kept as an independent set (not a shared
+    # reference) so NCDC can diverge without affecting MyVASS, and vice versa.
+    # The NCDC-specific *cleaning* lives in clean_ncdc(); only mapping hints here.
+    "ncdc": {
+        "id":             ["no. mykid", "no mykid", "mykid", "no.mykid", "id kanak-kanak"],
+        "nama":           ["nama anak", "nama kanak-kanak", "nama"],
+        "jantina":        ["jantina"],
+        "tarikh_lahir":   ["tarikh lahir", "dob", "date of birth"],
+        "negeri":         ["negeri"],
+        "daerah":         ["daerah"],
+        "taska":          ["nama taska", "taska", "pusat jagaan"],
+        "pendapatan":     ["pendapatan keluarga", "pendapatan", "kumpulan pendapatan"],
+        "kumpulan_umur":  ["kumpulan umur"],
+        "berat_kg":       ["2026 berat (kg)", "2025 berat (kg)", "2024 berat (kg)",
+                           "2023 berat (kg)", "berat (kg)", "berat_kg", "berat"],
+        "tinggi_cm":      ["2026 tinggi (cm)", "2025 tinggi (cm)", "2024 tinggi (cm)",
+                           "2023 tinggi (cm)", "tinggi (cm)", "tinggi_cm", "tinggi",
+                           "2026 panjang (cm)", "2025 panjang (cm)", "2024 panjang (cm)",
+                           "2023 panjang (cm)", "panjang (cm)"],
+        "bmi":            ["2026 bmi", "2025 bmi", "2024 bmi", "2023 bmi", "bmi"],
+        "status_berat":   ["2026 status berat", "2025 status berat", "2024 status berat",
+                           "2023 status berat", "status berat", "status_berat"],
+        "status_tinggi":  ["2026 status tinggi", "2025 status tinggi", "2024 status tinggi",
+                           "2023 status tinggi", "status tinggi", "status_tinggi"],
+        "status_bmi":     ["2026 status bmi", "2025 status bmi", "2024 status bmi",
+                           "2023 status bmi", "status bmi", "status_bmi"],
+        "tarikh_ukur":    ["2026 tarikh pengukuran", "2025 tarikh pengukuran",
+                           "2024 tarikh pengukuran", "2023 tarikh pengukuran",
+                           "tarikh pengukuran", "tarikh ukur"],
+        "tahun_ukur":     ["tahun ukur", "tahun pengukuran"],
+        "sumber":         ["sumber", "agensi"],
+    },
     # KPM (school-age) — distinct student/school schema. Note WHO infant
     # z-scores don't apply; the KPM cleaner uses school-age BMI categories.
     "kpm": {
@@ -219,11 +252,6 @@ AUTO_MAPPING_HINTS = {
         "tahun_ukur":     ["thn_ting", "tahun", "year", "tahun ukur"],
     },
 }
-
-# NCDC (TASKA) shares MyVASS's wide TASKA schema — column-identical, so it reuses
-# the MyVASS hints. The two are not separable by column names; NCDC is chosen via
-# the manual source-type selector when needed.
-AUTO_MAPPING_HINTS["ncdc"] = AUTO_MAPPING_HINTS["myvass"]
 
 # ─── SOURCE TYPE DETECTION ────────────────────────────────────────────────────
 

@@ -35,7 +35,17 @@ def test_kpm_mapping_resolves_school_columns():
     assert m["jantina"] == "Jantina"
 
 
-def test_ncdc_reuses_myvass_hints():
-    # NCDC is column-identical to MyVASS; mapping must behave the same.
+def test_ncdc_maps_taska_columns():
+    # NCDC has its own independent hint set that currently mirrors MyVASS's TASKA
+    # layout, so the two map shared columns equivalently (NCDC-specific cleaning
+    # lives in clean_ncdc, not in these hints).
     cols = ["No. MyKID", "Nama TASKA", "Jantina", "2025 Berat (kg)"]
-    assert auto_suggest_mapping(cols, "ncdc") == auto_suggest_mapping(cols, "myvass")
+    m = auto_suggest_mapping(cols, "ncdc")
+    assert m["id"] == "No. MyKID"
+    assert m["taska"] == "Nama TASKA"
+    assert m == auto_suggest_mapping(cols, "myvass")
+
+
+def test_ncdc_and_myvass_hints_are_independent_objects():
+    # Decoupled: editing one source's hints must not mutate the other.
+    assert AUTO_MAPPING_HINTS["ncdc"] is not AUTO_MAPPING_HINTS["myvass"]
