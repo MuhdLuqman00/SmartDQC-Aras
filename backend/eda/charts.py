@@ -111,7 +111,7 @@ def build_chart_blocks(df: pd.DataFrame) -> dict:
         vc = df["pendapatan"].value_counts()
         charts["income_split"] = [{"label": k, "count": int(v)} for k, v in vc.items()]
 
-    # ── Vaccine distribution (klinik data) ───────────────────────────────────
+    # ── Vaccine distribution (only if a vaccine column is present) ────────────
     if "vaccine_name" in df.columns:
         vc = df["vaccine_name"].value_counts().head(12)
         charts["vaccine_distribution"] = [

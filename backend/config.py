@@ -200,61 +200,58 @@ AUTO_MAPPING_HINTS = {
         "tahun_ukur":     ["tahun ukur", "tahun pengukuran"],
         "sumber":         ["sumber", "agensi"],
     },
-    "klinik": {
-        # "id" first in priority — "ID" column (child MyKid) beats "BIRTH_IC" (parent MyKad)
-        "id":             ["id", "no. mykid", "no mykid", "mykid", "birth_ic", "no_ic",
-                           "ic", "no. ic", "nric", "child_id", "child id"],
-        "nama":           ["nama", "patient name", "nama pesakit", "nama anak"],
+    # KPM (school-age) — distinct student/school schema. Note WHO infant
+    # z-scores don't apply; the KPM cleaner uses school-age BMI categories.
+    "kpm": {
+        "id":             ["id_murid", "no. mykid", "no mykid", "mykid", "id",
+                           "no_ic", "ic", "no. ic", "nric"],
+        "nama":           ["nama murid", "nama", "name", "nama pelajar"],
         "jantina":        ["jantina", "gender", "sex"],
         "tarikh_lahir":   ["tarikh lahir", "date of birth", "dob", "birthdate"],
         "negeri":         ["negeri", "state"],
-        "daerah":         ["daerah", "district"],
-        "taska":          ["nama klinik", "klinik", "clinic", "hospital", "nama hospital"],
-        "berat_kg":       ["berat lahir (kg)", "berat lahir", "berat (kg)", "weight",
-                           "berat", "birth weight", "berat_lahir_kg"],
-        "tinggi_cm":      ["panjang lahir (cm)", "panjang lahir (kg)", "panjang lahir",
-                           "tinggi (cm)", "tinggi", "panjang", "height", "length",
-                           "birth length", "panjang_lahir_cm"],
-        "tarikh_ukur":    ["tarikh antropometri", "assessment date", "tarikh assessment",
-                           "tarikh pemeriksaan", "visit date", "tarikh_antropometri"],
-        "vaccine_name":   ["vaccine_name", "vaccine name", "vaksin", "nama vaksin",
-                           "vaccine", "imunisasi"],
-        "status_assessment": ["assessment_status", "assessment status", "status assessment",
-                               "assessment", "completion status", "status_completion"],
-        "pendapatan":     ["pendapatan", "income", "income group"],
-        "tahun_ukur":     ["tahun", "year"],
+        "daerah":         ["daerah", "district", "ppd"],
+        "taska":          ["nama sekolah", "sekolah", "school"],
+        "berat_kg":       ["berat (kg)", "berat", "weight", "berat_kg"],
+        "tinggi_cm":      ["tinggi (cm)", "tinggi", "height", "tinggi_cm"],
+        "bmi":            ["bmi"],
+        "status_bmi":     ["status bmi", "kategori bmi", "bmi category", "status_bmi"],
+        "tarikh_ukur":    ["tarikh pengukuran", "tarikh ukur", "measurement date"],
+        "tahun_ukur":     ["thn_ting", "tahun", "year", "tahun ukur"],
     },
 }
+
+# NCDC (TASKA) shares MyVASS's wide TASKA schema — column-identical, so it reuses
+# the MyVASS hints. The two are not separable by column names; NCDC is chosen via
+# the manual source-type selector when needed.
+AUTO_MAPPING_HINTS["ncdc"] = AUTO_MAPPING_HINTS["myvass"]
 
 # ─── SOURCE TYPE DETECTION ────────────────────────────────────────────────────
 
 def detect_source_type(columns: list) -> str:
-    """Detect data source from column names (case-insensitive)."""
+    """Detect data source from column names (case-insensitive).
+
+    Returns one of: "kpm" (school), "myvass" (TASKA wide format), or "unknown".
+    NCDC is column-identical to MyVASS (same TASKA wide schema) and is therefore
+    not auto-distinguishable — it is chosen via the manual source-type selector.
+    Unknown routes to the merge-all-schemas best-match mapper.
+    """
     cols_lower = {c.lower().strip() for c in columns}
     # Normalize underscores → spaces so signals match both "nama taska" and "nama_taska"
     cols_normalized = {c.replace('_', ' ') for c in cols_lower}
     joined = " ".join(cols_normalized)
 
-    # NCDC/TASKA signals (year-prefixed columns + TASKA name)
-    ncdc_signals = ["nama taska", "no. mykid", "pendapatan keluarga", "kumpulan umur",
-                    "2023 berat", "2024 berat", "2025 berat", "2026 berat",
-                    "2023 status berat", "agensi"]
-    
-    # Clinic/vaccine signals
-    klinik_signals = ["birth_ic", "vaccine_name", "tarikh antropometri",
-                      "assessment_status", "panjang lahir", "berat lahir",
-                      "nama klinik", "assessment status",
-                      "ic_no_passport", "dose_date", "facility_name"]
+    # KPM / school signals — distinctive student & school columns
+    kpm_signals = ["id murid", "nama sekolah", "sekolah", "thn ting", "ting murid"]
+    if any(s in joined or s in cols_normalized for s in kpm_signals):
+        return "kpm"
 
-    ncdc_score = sum(1 for s in ncdc_signals if s in joined or s in cols_normalized)
-    klinik_score = sum(1 for s in klinik_signals if s in joined or s in cols_normalized)
-
-    # If NCDC signals dominate, classify as myvass (TASKA/NCDC format)
-    # Otherwise check klinik
-    if ncdc_score >= 2:
+    # TASKA wide-format signals (shared by MyVASS and NCDC)
+    taska_signals = ["nama taska", "no. mykid", "pendapatan keluarga", "kumpulan umur",
+                     "2023 berat", "2024 berat", "2025 berat", "2026 berat",
+                     "2023 status berat", "agensi"]
+    if sum(1 for s in taska_signals if s in joined or s in cols_normalized) >= 2:
         return "myvass"
-    elif klinik_score > 0:
-        return "klinik"
+
     return "unknown"
 
 
@@ -264,10 +261,11 @@ def auto_suggest_mapping(columns: list, source_type: str) -> dict:
     mapping = {k: None for k in STANDARD_SCHEMA.keys()}
     hints = AUTO_MAPPING_HINTS.get(source_type, {})
 
-    # For unknown/klinik (or any source with no hint set) reuse the column-
-    # name knowledge from ALL supported schemas, so a near-known/unsupported
-    # dataset gets deterministic hints instead of depending 100% on the LLM.
-    generic = (not hints) or source_type in ("unknown", "klinik")
+    # For unknown (or any source with no hint set) reuse the column-name
+    # knowledge from ALL supported schemas (myvass/ncdc/kpm), so a near-known or
+    # unsupported dataset gets deterministic per-field best-match hints instead
+    # of depending 100% on the LLM.
+    generic = (not hints) or source_type == "unknown"
     if generic:
         merged: dict = {}
         for hintset in AUTO_MAPPING_HINTS.values():

@@ -97,6 +97,7 @@ export function UploadPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [multiMode, setMultiMode] = useState(false);
   const [cacheId, setCacheId] = useState('');
+  const [chosenType, setChosenType] = useState('auto');
   const [detectedType, setDetectedType] = useState('');
   const [rowCount, setRowCount] = useState(0);
   const [wideFormat, setWideFormat] = useState(false);
@@ -143,6 +144,7 @@ export function UploadPage() {
           })()
         : await (async () => {
             fd.append('file', files[0]);
+            if (chosenType !== 'auto') fd.append('source_type', chosenType);
             const r = await api.post('/upload/preview', fd);
             setCacheId(r.data.cache_id);
             setDetectedType(r.data.detected_source_type || r.data.source_type || 'unknown');
@@ -270,6 +272,35 @@ export function UploadPage() {
             <input type="checkbox" checked={multiMode} onChange={e => setMultiMode(e.target.checked)} />
             {t('Merge multiple MyVASS files', 'Gabungkan beberapa fail MyVASS')}
           </label>
+
+          {/* Source-type selector (single-file mode; merge is MyVASS-only) */}
+          {!multiMode && (
+            <div style={{ marginBottom: 20 }}>
+              <label htmlFor="src-type" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                {t('Data source schema', 'Skema sumber data')}
+              </label>
+              <select
+                id="src-type"
+                value={chosenType}
+                onChange={e => setChosenType(e.target.value)}
+                style={{
+                  width: '100%', maxWidth: 320, background: 'var(--surface-2)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)',
+                  padding: '8px 12px', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer',
+                }}
+              >
+                <option value="auto">{t('Auto-detect (recommended)', 'Auto-kesan (disyorkan)')}</option>
+                <option value="myvass">{t('MyVASS (TASKA)', 'MyVASS (TASKA)')}</option>
+                <option value="ncdc">{t('NCDC (TASKA)', 'NCDC (TASKA)')}</option>
+                <option value="kpm">{t('KPM (School)', 'KPM (Sekolah)')}</option>
+                <option value="unknown">{t('Other / Unknown', 'Lain-lain / Tidak Diketahui')}</option>
+              </select>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                {t('Leave on Auto-detect unless detection picks the wrong schema. "Other" maps columns by best match across all schemas.',
+                   'Biarkan pada Auto-kesan melainkan pengesanan salah. "Lain-lain" memetakan lajur mengikut padanan terbaik merentas semua skema.')}
+              </p>
+            </div>
+          )}
 
           {/* Dropzone */}
           <div

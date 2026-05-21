@@ -150,7 +150,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
             "MyVASS data is wide-format. Must pivot so each row is one measurement year.", "critical")
     else:
         tfm("Wide → Long Pivot", "—", "not_required",
-            "Klinik data is already long-format.", "info")
+            "Data is already in long format.", "info")
 
     # Date parsing
     date_cols = [c for c in ["tarikh_lahir", "tarikh_ukur", "tarikh_antropometri"] if has(c)]
@@ -225,13 +225,6 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
             "For Tableau drill-down: Negeri → Kawasan/Bahagian → Daerah hierarchy.",
             "recommended")
 
-    # Vaccine grouping (klinik only)
-    if source_type == "klinik" and has("vaccine_name"):
-        n_vaccines = int(df["vaccine_name"].nunique())
-        tfm("Vaccine Name Grouping", "vaccine_name", "needed" if n_vaccines > 10 else "optional",
-            f"{n_vaccines} distinct vaccine names. Group into categories for Tableau filter.",
-            "recommended")
-
     # ── Calculated Fields Tableau Will Need ───────────────────────────────
     calc_fields = [
         {"field": "Age Band",
@@ -253,22 +246,15 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
          "formula": "DATETRUNC('quarter', [tarikh_ukur])",
          "notes": "For quarterly trend charts"},
     ]
-    if source_type == "klinik" and has("vaccine_name"):
-        calc_fields.append({
-            "field": "Has Measurement (flag)",
-            "formula": "IF [berat_kg] > 0 AND [tinggi_cm] > 0 THEN 1 ELSE 0 END",
-            "notes": "Filter out vaccination-only visits with no anthropometric data",
-        })
-
     # ── Potential Join Keys (multi-source) ────────────────────────────────
     join_keys = []
     if id_col:
         n_valid_ic = int(df.get("is_valid_ic", pd.Series(dtype=bool)).sum()) if has("is_valid_ic") else None
         join_keys.append({
             "field": "id_cleaned",
-            "description": "12-digit IC/MyKid — primary key for joining MyVASS + Klinik",
+            "description": "12-digit IC/MyKid — primary key for joining across sources (MyVASS / NCDC / KPM)",
             "valid_count": n_valid_ic,
-            "note": "Both sources must have IC column to join. 26% null in BIRTH_IC (Klinik) may limit join coverage.",
+            "note": "All sources must share an IC/MyKid column to join. Null or invalid IDs limit join coverage.",
         })
 
     # ── Summary stats ─────────────────────────────────────────────────────

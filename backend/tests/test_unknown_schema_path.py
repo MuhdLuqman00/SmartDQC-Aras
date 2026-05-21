@@ -1,7 +1,8 @@
 """Phase G: unknown / near-known schemas must be mapped + cleaned honestly.
 
 Covers: union-hints for unknown, generic cleaner never wipes rows,
-unknown/klinik routing, and kpi.py surfacing unavailable indicators.
+unknown routing to the generic cleaner, and kpi.py surfacing unavailable
+indicators.
 """
 import numpy as np
 import pandas as pd
@@ -72,9 +73,9 @@ def test_clean_generic_preserves_rows_with_underscore_named_columns():
     assert stats["coverage"]["jantina"] and stats["coverage"]["tarikh_lahir"]
 
 
-def test_clean_data_routes_unknown_and_klinik_to_generic():
+def test_clean_data_routes_unknown_to_generic():
     df = pd.DataFrame({"a": [1], "b": [2]})
-    for st in ("unknown", "klinik", "something_new"):
+    for st in ("unknown", "something_new", "legacy_type"):
         out, stats = clean_data(df, st)  # must NOT raise ValueError
         assert stats["data_type"] == "generic"
         assert len(out) == 1

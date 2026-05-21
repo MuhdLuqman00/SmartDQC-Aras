@@ -913,9 +913,8 @@ def clean_data(df: pd.DataFrame, data_type: str) -> tuple[pd.DataFrame, dict]:
     
     Args:
         df: Raw DataFrame
-        data_type: 'kpm', 'myvass', 'ncdc', or anything else (incl.
-            'unknown'/'klinik') which routes to the conservative generic
-            cleaner. klinik is a test dataset, NOT a supported schema.
+        data_type: 'kpm', 'myvass', 'ncdc', or 'unknown' (any unsupported schema)
+            which routes to the conservative generic cleaner.
 
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
@@ -926,8 +925,8 @@ def clean_data(df: pd.DataFrame, data_type: str) -> tuple[pd.DataFrame, dict]:
         return clean_myvass(df)
     elif data_type == "ncdc":
         return clean_ncdc(df)
-    # unknown / klinik / any unsupported schema → generic (never ValueError,
-    # never silently mis-routed to clean_myvass).
+    # unknown / any unsupported schema → generic (never ValueError, never
+    # silently mis-routed to clean_myvass).
     return clean_generic(df)
 
 
