@@ -5,6 +5,7 @@ import pdfplumber
 import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_FILL
 
 from backend.export.report import build_pptx_bytes, build_pdf_bytes
 from backend.export.report_template_spec import (
@@ -134,24 +135,31 @@ def test_pptx_cover_slide_has_text():
     assert "Petaling" in cover_text
 
 
-def test_pptx_section_bars_are_teal():
-    """Every non-cover slide should have at least one teal-filled textbox."""
+def test_pptx_section_bars_use_brand_color():
+    """Every non-cover slide should carry at least one section bar filled with
+    the KKM brand color (navy after the v3 reskin; tracked via KKM_TEAL)."""
     data = build_pptx_bytes(_eda(), _narrative(), kpi_result=_kpi())
     prs  = Presentation(BytesIO(data))
-    teal = RGBColor(0x00, 0x69, 0x7A)
+    brand = RGBColor.from_string(KKM_TEAL.lstrip("#"))
+
+    def _solid_rgb(sh):
+        """fore_color.rgb for solid-filled shapes only; None otherwise."""
+        try:
+            if sh.fill.type == MSO_FILL.SOLID:
+                return sh.fill.fore_color.rgb
+        except (TypeError, AttributeError):
+            pass
+        return None
 
     for idx, slide in enumerate(prs.slides):
-        if idx == 0:          # cover slide has dark bg, not teal bar
+        if idx == 0:          # cover slide has dark bg, not a section bar
             continue
-        filled_tbs = [
-            sh for sh in slide.shapes
-            if sh.has_text_frame and sh.fill.type is not None
-        ]
-        teal_found = any(
-            sh.fill.fore_color.rgb == teal
-            for sh in filled_tbs
+        brand_found = any(
+            _solid_rgb(sh) == brand
+            for sh in slide.shapes
+            if sh.has_text_frame
         )
-        assert teal_found, f"No teal section bar found on slide index {idx}"
+        assert brand_found, f"No brand-color section bar found on slide index {idx}"
 
 
 def test_pptx_exec_summary_bilingual():

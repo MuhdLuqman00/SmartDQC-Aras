@@ -139,6 +139,7 @@ def compute_kpi_dashboard(df: pd.DataFrame) -> dict:
             "who_target":   who,
             "gap":          round(actual - npan, 2),
             "rag":          _rag(actual, npan),
+            "who_status":   _rag(actual, who) if who is not None else None,
         })
 
     # by_state — group on the first available state column

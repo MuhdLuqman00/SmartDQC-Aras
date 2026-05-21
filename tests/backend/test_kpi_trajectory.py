@@ -10,7 +10,7 @@ def test_who_target_present_in_kpi_output():
         "overweight":  [0] * 10,
     })
     result = compute_kpi_dashboard(df)
-    stunting_kpi = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
+    stunting_kpi = next(k for k in result["indicators"] if k["key"] == "stunting")
     assert "who_target" in stunting_kpi
     assert stunting_kpi["who_target"] == 20.0
     assert "who_status" in stunting_kpi
@@ -20,14 +20,14 @@ def test_who_status_red_when_far_above_who_target():
     # 50% stunting vs WHO target 20% -> Red
     df = pd.DataFrame({"stunting": [1, 0] * 5})
     result = compute_kpi_dashboard(df)
-    stunting_kpi = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
+    stunting_kpi = next(k for k in result["indicators"] if k["key"] == "stunting")
     assert stunting_kpi["who_status"] == "Red"
 
 
 def test_who_status_green_when_below_who_target():
     df = pd.DataFrame({"stunting": [0] * 10})
     result = compute_kpi_dashboard(df)
-    stunting_kpi = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
+    stunting_kpi = next(k for k in result["indicators"] if k["key"] == "stunting")
     assert stunting_kpi["who_status"] == "Green"
 
 

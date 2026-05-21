@@ -26,9 +26,9 @@ def red_df():
 
 def test_returns_required_keys(green_df):
     result = compute_kpi_dashboard(green_df)
-    assert "kpis" in result
+    assert "indicators" in result
     assert "overall_status" in result
-    assert "district_breakdown" in result
+    assert "by_state" in result
 
 def test_green_overall_status(green_df):
     result = compute_kpi_dashboard(green_df)
@@ -40,47 +40,47 @@ def test_red_overall_status(red_df):
 
 def test_kpi_entries_have_required_keys(green_df):
     result = compute_kpi_dashboard(green_df)
-    for kpi in result["kpis"]:
-        for key in ["kpi", "target", "actual", "actual_count", "total", "status", "gap"]:
+    for kpi in result["indicators"]:
+        for key in ["key", "npan_target", "actual", "actual_count", "total", "rag", "gap"]:
             assert key in kpi
 
 def test_stunting_green_when_below_target(green_df):
     result = compute_kpi_dashboard(green_df)
-    stunting = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
-    assert stunting["status"] == "Green"
+    stunting = next(k for k in result["indicators"] if k["key"] == "stunting")
+    assert stunting["rag"] == "Green"
 
 def test_stunting_red_when_far_above_target(red_df):
     result = compute_kpi_dashboard(red_df)
-    stunting = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
-    assert stunting["status"] == "Red"
+    stunting = next(k for k in result["indicators"] if k["key"] == "stunting")
+    assert stunting["rag"] == "Red"
 
 def test_district_breakdown_present_when_negeri_col(green_df):
     result = compute_kpi_dashboard(green_df)
-    assert result["district_breakdown"] is not None
-    names = [r["district"] for r in result["district_breakdown"]]
+    assert result["by_state"]
+    names = [r["state"] for r in result["by_state"]]
     assert "Selangor" in names and "Johor" in names
 
 def test_no_district_breakdown_without_negeri_col():
     df = pd.DataFrame({"stunting": [0, 1, 0] * 10, "wasting": [0, 0, 1] * 10})
     result = compute_kpi_dashboard(df)
-    assert result["district_breakdown"] is None
+    assert result["by_state"] == []
 
 def test_gap_equals_actual_minus_target(green_df):
     result = compute_kpi_dashboard(green_df)
-    for kpi in result["kpis"]:
-        assert abs(kpi["gap"] - round(kpi["actual"] - kpi["target"], 2)) < 0.01
+    for kpi in result["indicators"]:
+        assert abs(kpi["gap"] - round(kpi["actual"] - kpi["npan_target"], 2)) < 0.01
 
 def test_empty_df_returns_empty_kpis():
     df = pd.DataFrame({"stunting": pd.Series([], dtype=int)})
     result = compute_kpi_dashboard(df)
-    assert result["kpis"] == []
+    assert result["indicators"] == []
     assert result["overall_status"] == "Green"
 
 def test_amber_boundary():
     # 17% stunting — above 15% target but below 15% * 1.20 = 18% ceiling → Amber
     df = pd.DataFrame({"stunting": [1] * 17 + [0] * 83})
     result = compute_kpi_dashboard(df)
-    stunting = next(k for k in result["kpis"] if k["kpi"] == "stunting_rate")
-    assert stunting["status"] == "Amber", (
-        f"Expected Amber for 17% stunting (target 15%, ceiling 18%), got {stunting['status']}"
+    stunting = next(k for k in result["indicators"] if k["key"] == "stunting")
+    assert stunting["rag"] == "Amber", (
+        f"Expected Amber for 17% stunting (target 15%, ceiling 18%), got {stunting['rag']}"
     )
