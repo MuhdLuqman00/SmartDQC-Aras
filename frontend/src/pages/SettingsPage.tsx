@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Save, RotateCcw, Info } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 /* Threshold keys MUST match backend _DEFAULT_THRESHOLDS in main.py.
    Prior shape (missing_warn / duplicate_warn / outlier_zscore) didn't
@@ -24,6 +25,29 @@ const DEFAULT_THRESHOLDS: Thresholds = {
 };
 
 interface Rule { id: string; description: string; enabled: boolean; }
+
+/* KPI benchmark targets. Both NPAN (national policy) and WHO (clinical
+   standard) targets are editable, admin-only. Labels live here; the backend
+   stores only the numeric rates so a save can't corrupt them. */
+type TargetSet = Record<string, number>;
+interface KpiTargets {
+  current: { npan: TargetSet; who: TargetSet };
+  defaults: { npan: TargetSet; who: TargetSet };
+  source: { npan: string; who: string };
+}
+
+const KPI_LABELS: { key: string; en: string; bm: string }[] = [
+  { key: 'stunting_rate',    en: 'Stunting Rate',    bm: 'Kadar Stunting' },
+  { key: 'wasting_rate',     en: 'Wasting Rate',     bm: 'Kadar Wasting' },
+  { key: 'underweight_rate', en: 'Underweight Rate', bm: 'Kadar Kekurangan Berat' },
+  { key: 'overweight_rate',  en: 'Overweight Rate',  bm: 'Kadar Berlebihan Berat' },
+];
+
+const SOURCE_LABELS: Record<string, { en: string; bm: string }> = {
+  npan_2021_2025: { en: 'NPAN 2021–2025 (official)', bm: 'NPAN 2021–2025 (rasmi)' },
+  who_2025:       { en: 'WHO Global Targets 2025 (official)', bm: 'Sasaran Global WHO 2025 (rasmi)' },
+  custom:         { en: 'Custom override', bm: 'Tetapan tersuai' },
+};
 
 /* Rule metadata — backend defaults don't ship descriptions, so we
    surface them here. Grouped so the rules tab reads as a checklist
@@ -87,14 +111,20 @@ const RULE_META: Record<string, { groupEn: string; groupBm: string; nameEn: stri
 
 export function SettingsPage() {
   const { t } = useLang();
-  const [tab, setTab] = useState<'thresholds' | 'rules'>('thresholds');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [tab, setTab] = useState<'thresholds' | 'rules' | 'kpi'>('thresholds');
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [rules, setRules] = useState<Rule[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [kpi, setKpi] = useState<KpiTargets | null>(null);
+  const [kpiSaving, setKpiSaving] = useState(false);
+  const [kpiSaved, setKpiSaved] = useState(false);
 
   useEffect(() => {
     api.get<Thresholds>('/settings/thresholds').then(r => setThresholds(r.data)).catch(console.error);
+    api.get<KpiTargets>('/settings/kpi-targets').then(r => setKpi(r.data)).catch(console.error);
     api.get('/settings/rules').then(r => {
       /* Backend returns a dict keyed by rule-id: { duplicate_check: { enabled }, … }.
          Normalise to Rule[] so an object can never reach rules.map() (was blanking
@@ -122,6 +152,33 @@ export function SettingsPage() {
 
   const restoreDefaults = () => {
     setThresholds(DEFAULT_THRESHOLDS);
+  };
+
+  const setKpiValue = (grp: 'npan' | 'who', key: string, value: number) => {
+    setKpi(prev => prev && ({
+      ...prev,
+      current: { ...prev.current, [grp]: { ...prev.current[grp], [key]: value } },
+    }));
+  };
+
+  const resetKpiSet = (grp: 'npan' | 'who') => {
+    setKpi(prev => prev && ({
+      ...prev,
+      current: { ...prev.current, [grp]: { ...prev.defaults[grp] } },
+    }));
+  };
+
+  const saveKpiTargets = async () => {
+    if (!kpi) return;
+    setKpiSaving(true);
+    try {
+      const r = await api.post<KpiTargets>('/settings/kpi-targets', {
+        npan: kpi.current.npan,
+        who: kpi.current.who,
+      });
+      setKpi(r.data);
+      setKpiSaved(true); setTimeout(() => setKpiSaved(false), 2000);
+    } finally { setKpiSaving(false); }
   };
 
   const toggleRule = async (id: string) => {
@@ -188,7 +245,11 @@ export function SettingsPage() {
     <div style={{ maxWidth: 700 }}>
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)' }}>
-        {([['thresholds', t('Thresholds', 'Ambang')], ['rules', t('Cleaning Rules', 'Peraturan Pembersihan')]] as const).map(([id, label]) => (
+        {([
+          ['thresholds', t('Thresholds', 'Ambang')],
+          ['rules', t('Cleaning Rules', 'Peraturan Pembersihan')],
+          ...(isAdmin ? [['kpi', t('KPI Targets', 'Sasaran KPI')] as const] : []),
+        ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id as typeof tab)}
             style={{ background: 'none', border: 'none', borderBottom: tab === id ? '2px solid var(--kkm-blue)' : '2px solid transparent', padding: '10px 20px', fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--kkm-blue)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, marginBottom: -1 }}>
             {label}
@@ -321,6 +382,78 @@ export function SettingsPage() {
             ));
           })()}
         </div>
+      )}
+
+      {/* KPI Targets tab — admin only */}
+      {tab === 'kpi' && isAdmin && (
+        kpi === null ? (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
+            {t('Loading targets…', 'Memuatkan sasaran…')}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {(['npan', 'who'] as const).map(grp => {
+              const isCustom = kpi.source[grp] === 'custom';
+              const officialKey = grp === 'npan' ? 'npan_2021_2025' : 'who_2025';
+              const provenance = isCustom ? SOURCE_LABELS.custom : SOURCE_LABELS[officialKey];
+              return (
+                <div key={grp} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                      {grp === 'npan' ? t('NPAN National Targets', 'Sasaran Kebangsaan NPAN') : t('WHO Global Targets', 'Sasaran Global WHO')}
+                    </span>
+                    <span style={{ fontSize: 10, fontWeight: 600, borderRadius: 999, padding: '2px 8px', background: isCustom ? 'var(--warning-bg, #fef3c7)' : 'var(--success-bg)', color: isCustom ? 'var(--warning, #b45309)' : 'var(--success)' }}>
+                      {t(provenance.en, provenance.bm)}
+                    </span>
+                  </div>
+                  <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {KPI_LABELS.map(ind => {
+                      const val = kpi.current[grp][ind.key];
+                      const def = kpi.defaults[grp][ind.key];
+                      return (
+                        <div key={ind.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t(ind.en, ind.bm)}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {t('Official', 'Rasmi')}: {def}%
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              type="number" min={0} max={100} step={0.1}
+                              value={val ?? ''}
+                              onChange={e => setKpiValue(grp, ind.key, parseFloat(e.target.value))}
+                              style={{ width: 80, textAlign: 'right', padding: '6px 8px', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--kkm-blue)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}
+                            />
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => resetKpiSet(grp)} type="button"
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, marginTop: 2, color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <RotateCcw size={12} />
+                      {grp === 'npan' ? t('Reset to NPAN 2021–2025', 'Set semula ke NPAN 2021–2025') : t('Reset to WHO 2025', 'Set semula ke WHO 2025')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <div>
+              <button onClick={saveKpiTargets} disabled={kpiSaving}
+                style={{ background: kpiSaved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Save size={15} />
+                {kpiSaving ? t('Saving…', 'Menyimpan…') : kpiSaved ? t('Saved!', 'Disimpan!') : t('Save targets', 'Simpan sasaran')}
+              </button>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>
+                {t(
+                  'Changes apply immediately to the dashboard RAG status, district trajectory, and reports. Edits are recorded in the Audit Log.',
+                  'Perubahan terpakai serta-merta pada status RAG papan pemuka, trajektori daerah, dan laporan. Suntingan direkodkan dalam Log Audit.',
+                )}
+              </div>
+            </div>
+          </div>
+        )
       )}
     </div>
   );

@@ -36,6 +36,9 @@ interface ReportCard {
   hasKpiToggle: boolean;
   hasChartPicker: boolean;
   action: (cacheId: string, includeKpi: boolean, charts: Set<string>) => Promise<void> | void;
+  /** When set, the card renders this row of buttons instead of one Generate
+      button (e.g. Data Dictionary offers Excel + PDF). */
+  actions?: { labelEn: string; labelBm: string; run: () => void | Promise<void> }[];
 }
 
 export function ReportsPage() {
@@ -149,8 +152,8 @@ export function ReportsPage() {
       id: 'tableau',
       icon: <Database size={28} style={{ color: 'var(--kkm-blue)' }} />,
       titleEn: 'Tableau Aggregation', titleBm: 'Agregasi Tableau',
-      descEn: 'Flat aggregated table (geo × age group × indicator × year) for Tableau / BI tools.',
-      descBm: 'Jadual agregat rata (geo × kumpulan umur × indikator × tahun) untuk Tableau / alat BI.',
+      descEn: 'Tidy long table — one row per indicator × breakdown (pecahan/kategori) — ready for Tableau / BI tools.',
+      descBm: 'Jadual panjang kemas — satu baris bagi setiap indikator × pecahan (pecahan/kategori) — sedia untuk Tableau / alat BI.',
       format: 'CSV', hasKpiToggle: false, hasChartPicker: false,
       action: (cacheId) => {
         window.open(`${BASE}/export/aggregated-cached/${cacheId}?fmt=csv`, '_blank');
@@ -160,12 +163,14 @@ export function ReportsPage() {
       id: 'dictionary',
       icon: <BookOpen size={28} style={{ color: 'var(--kkm-teal)' }} />,
       titleEn: 'Data Dictionary', titleBm: 'Kamus Data',
-      descEn: 'Definitions of all derived fields — WHO z-scores, KKM indicators, age bands.',
-      descBm: 'Definisi semua medan terbitan — z-skor WHO, indikator KKM, jaluran umur.',
-      format: 'JSON', hasKpiToggle: false, hasChartPicker: false,
-      action: () => {
-        window.open(`${BASE}/data-dictionary`, '_blank');
-      },
+      descEn: 'Readable definitions of all fields — WHO z-scores, KKM indicators, age bands. For non-technical users.',
+      descBm: 'Definisi semua medan yang mudah dibaca — z-skor WHO, indikator KKM, jaluran umur. Untuk pengguna bukan teknikal.',
+      format: 'XLSX · PDF', hasKpiToggle: false, hasChartPicker: false,
+      action: () => {},
+      actions: [
+        { labelEn: 'Excel', labelBm: 'Excel', run: () => triggerDownload('/data-dictionary?fmt=excel', 'SmartDQC_Kamus_Data.xlsx') },
+        { labelEn: 'PDF',   labelBm: 'PDF',   run: () => triggerDownload('/data-dictionary?fmt=pdf',   'SmartDQC_Kamus_Data.pdf') },
+      ],
     },
   ];
 
@@ -283,25 +288,48 @@ export function ReportsPage() {
                 </div>
               )}
 
-              <button
-                disabled={!cacheId || !!progress[card.id]}
-                onClick={() => cacheId && card.action(cacheId, kpiToggles[card.id] ?? true, sel)}
-                style={{
-                  background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
-                  color: cacheId ? '#fff' : 'var(--text-muted)',
-                  border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
-                  fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
-                  opacity: progress[card.id] ? 0.6 : 1,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                {!cacheId && <Lock size={14} />}
-                {progress[card.id]
-                  ? t('Generating…', 'Sedang menjana…')
-                  : cacheId
-                    ? t('Generate', 'Jana')
-                    : t('No active session', 'Tiada sesi aktif')}
-              </button>
+              {card.actions ? (
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {card.actions.map(a => (
+                    <button
+                      key={a.labelEn}
+                      disabled={!cacheId}
+                      onClick={() => cacheId && a.run()}
+                      style={{
+                        flex: 1,
+                        background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+                        color: cacheId ? '#fff' : 'var(--text-muted)',
+                        border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
+                        fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      {!cacheId && <Lock size={14} />}
+                      {lang === 'en' ? a.labelEn : a.labelBm}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <button
+                  disabled={!cacheId || !!progress[card.id]}
+                  onClick={() => cacheId && card.action(cacheId, kpiToggles[card.id] ?? true, sel)}
+                  style={{
+                    background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+                    color: cacheId ? '#fff' : 'var(--text-muted)',
+                    border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
+                    fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
+                    opacity: progress[card.id] ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  {!cacheId && <Lock size={14} />}
+                  {progress[card.id]
+                    ? t('Generating…', 'Sedang menjana…')
+                    : cacheId
+                      ? t('Generate', 'Jana')
+                      : t('No active session', 'Tiada sesi aktif')}
+                </button>
+              )}
             </div>
           );
         })}

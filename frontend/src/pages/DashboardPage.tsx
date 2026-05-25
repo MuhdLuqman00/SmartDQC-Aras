@@ -530,11 +530,28 @@ export function DashboardPage() {
         )}
       </div>
 
+      {/* ── Indicator trend by year (standalone, full-width) ────────────────
+          Pulled out of the population-breakdown grid so it gets the full row
+          width its time axis needs. Always visible when blocks are present. */}
+      {blocks && (() => {
+        const trendEntry = catalogByHome('dashboard').find(e => e.shape === 'trend_records');
+        const b = trendEntry ? blocks[trendEntry.key] : undefined;
+        if (!trendEntry || !isTrendRecordsBlock(b)) return null;
+        return (
+          <TrendLineCard
+            title={lang === 'en' ? trendEntry.titleEn : trendEntry.titleBm}
+            data={b}
+            lang={lang}
+          />
+        );
+      })()}
+
       {/* ── Population breakdown (collapsed by default) ─────────────────────
-          Trend line + cohort splits (gender / state / income / vaccine)
-          driven by /charts/blocks via the shared chart catalog. Hidden
-          entirely when the dataset emits none of these blocks. */}
-      {blocks && catalogByHome('dashboard').some(e => e.key in blocks) && (
+          Cohort splits (gender / state / income / vaccine) driven by
+          /charts/blocks via the shared chart catalog. The trend chart is
+          rendered separately above. Hidden entirely when the dataset emits
+          none of these blocks. */}
+      {blocks && catalogByHome('dashboard').some(e => e.shape !== 'trend_records' && e.key in blocks) && (
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
@@ -551,18 +568,15 @@ export function DashboardPage() {
             {popOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
             {t('Population breakdown', 'Pecahan populasi')}
             <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: 12 }}>
-              ({catalogByHome('dashboard').filter(e => e.key in blocks).length})
+              ({catalogByHome('dashboard').filter(e => e.shape !== 'trend_records' && e.key in blocks).length})
             </span>
           </button>
           {popOpen && (
             <div style={{ padding: '0 20px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-              {catalogByHome('dashboard').map(entry => {
+              {catalogByHome('dashboard').filter(e => e.shape !== 'trend_records').map(entry => {
                 const b = blocks[entry.key];
                 if (!b) return null;
                 const title = lang === 'en' ? entry.titleEn : entry.titleBm;
-                if (entry.shape === 'trend_records' && isTrendRecordsBlock(b)) {
-                  return <TrendLineCard key={entry.key} title={title} data={b} lang={lang} />;
-                }
                 if (entry.shape === 'pie_array' && isPieArrayBlock(b)) {
                   return <DonutCard key={entry.key} title={title} data={b} />;
                 }

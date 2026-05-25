@@ -8,6 +8,7 @@ import { ChoroplethMap, computeAggregates } from '../components/ChoroplethMap';
 import type { District } from '../components/ChoroplethMap';
 import { SessionGuard } from '../components/SessionGuard';
 import { ChartTooltip } from '../components/ChartTooltip';
+import { RankBars, RankRow } from '../components/RankBars';
 import { useSession } from '../context/SessionContext';
 import { useLang } from '../context/LanguageContext';
 import {
@@ -213,44 +214,22 @@ function toDistricts(k: KpiDashboard | null, ind: IndicatorKey): District[] {
   });
 }
 
-// ── Breakdown chart ───────────────────────────────────────────────────────────
+// ── Breakdown → RankBars mapping ────────────────────────────────────────────
+// Standardized horizontal ranked-bar list (shared with the Dashboard) replaces
+// the cramped vertical recharts bars whose x-axis labels overlapped once a
+// dataset had many states/daerah. Values are already 0-100 percentages.
 
-const labelKeyForRow = (row: KpiGroupRow, groupKey: string): string =>
-  String((row as Record<string, unknown>)[groupKey] ?? '');
-
-function BreakdownChart({
-  title, rows, groupKey, indicator,
-}: {
-  title: string; rows: KpiGroupRow[]; groupKey: 'state' | 'district' | 'gender' | 'income' | 'group'; indicator: IndicatorKey;
-}) {
-  const { lang } = useLang();
-  const data = useMemo(() => rows.map(r => {
+function toRankRows(rows: KpiGroupRow[], groupKey: string, indicator: IndicatorKey): RankRow[] {
+  return (rows || []).map(r => {
     const rates = (r.rates as Record<string, number>) ?? {};
     const status = (r.status as Record<string, string>) ?? {};
     return {
-      label: labelKeyForRow(r, groupKey),
+      label: String((r as Record<string, unknown>)[groupKey] ?? '—'),
       value: Number(rates[indicator] ?? 0),
       status: ragToStatus(status[indicator]),
       n: Number(r.n ?? 0),
     };
-  }), [rows, groupKey, indicator]);
-  void lang;
-  if (!data.length) return null;
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '16px 18px', boxShadow: 'var(--shadow-card)' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{title}</div>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-          <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval={0} />
-          <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} unit="%" domain={[0, 'auto']} />
-          <Tooltip content={<ChartTooltip valueFormatter={v => typeof v === 'number' ? `${v.toFixed(1)}%` : String(v)} />} cursor={{ fill: 'var(--surface-2)' }} />
-          <Bar dataKey="value">
-            {data.map((d, i) => <Cell key={i} fill={STATUS_VAR[d.status]} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  });
 }
 
 // ── Distribution panels (driven by /charts/blocks via chartCatalog) ─────────
@@ -347,7 +326,22 @@ export function GeoPage() {
   };
 
   const districts = toDistricts(kpi, selectedIndicator);
-  const agg = computeAggregates(districts);
+  // NPAN targets come from the KPI response in percent; convert to fractions so
+  // the National Average cards grade against the SAME target-relative rule the
+  // map and backend use (kpi.py::_rag), instead of fixed absolute thresholds.
+  const aggTargets = useMemo(() => {
+    const targetFor = (key: string) => {
+      const ind = kpi?.indicators.find(i => i.key === key);
+      return ind ? Number(ind.npan_target) / 100 : undefined;
+    };
+    return {
+      stunting: targetFor('stunting'),
+      wasting: targetFor('wasting'),
+      underweight: targetFor('underweight'),
+      overweight: targetFor('overweight'),
+    };
+  }, [kpi]);
+  const agg = computeAggregates(districts, aggTargets);
 
   // ── Selected indicator label for chart headers ────────────────────────────
   const indMeta = kpi?.indicators.find(i => i.key === selectedIndicator);
@@ -432,27 +426,27 @@ export function GeoPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
                 <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} unit="%" />
                 <Tooltip content={<ChartTooltip valueFormatter={v => typeof v === 'number' ? `${v.toFixed(1)}%` : String(v)} />} cursor={{ fill: 'var(--surface-2)' }} />
-                <Bar dataKey="actual" name={t('Actual', 'Sebenar')}>
+                <Bar dataKey="actual" name={t('Actual', 'Sebenar')} maxBarSize={44} radius={[6, 6, 0, 0]}>
                   {kpi.indicators.map((i, idx) => <Cell key={idx} fill={STATUS_VAR[ragToStatus(i.rag)]} />)}
                 </Bar>
-                <Bar dataKey="target" name={t('Target', 'Sasaran')} fill="var(--text-muted)" />
+                <Bar dataKey="target" name={t('Target', 'Sasaran')} fill="var(--text-muted)" maxBarSize={44} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* Breakdown charts — filtered by the global indicator selector */}
+        {/* Breakdown ranked bars — filtered by the global indicator selector */}
         {kpi && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 16 }}>
-            <BreakdownChart title={`${t('By State', 'Mengikut Negeri')} — ${indLabel}`}   rows={kpi.by_state}  groupKey="state"  indicator={selectedIndicator} />
+            <RankBars title={`${t('By State', 'Mengikut Negeri')} — ${indLabel}`}   rows={toRankRows(kpi.by_state, 'state', selectedIndicator)}      lang={lang} />
             {(kpi.by_daerah?.length ?? 0) > 0 && (
-              <BreakdownChart title={`${t('By Daerah', 'Mengikut Daerah')} — ${indLabel}`} rows={kpi.by_daerah!} groupKey="district" indicator={selectedIndicator} />
+              <RankBars title={`${t('By Daerah', 'Mengikut Daerah')} — ${indLabel}`} rows={toRankRows(kpi.by_daerah!, 'district', selectedIndicator)} lang={lang} />
             )}
-            <BreakdownChart title={`${t('By Gender', 'Mengikut Jantina')} — ${indLabel}`} rows={kpi.by_gender} groupKey="gender" indicator={selectedIndicator} />
+            <RankBars title={`${t('By Gender', 'Mengikut Jantina')} — ${indLabel}`} rows={toRankRows(kpi.by_gender, 'gender', selectedIndicator)}    lang={lang} />
             {(kpi.by_income?.length ?? 0) > 0 && (
-              <BreakdownChart title={`${t('By Income', 'Mengikut Pendapatan')} — ${indLabel}`} rows={kpi.by_income!} groupKey="income" indicator={selectedIndicator} />
+              <RankBars title={`${t('By Income', 'Mengikut Pendapatan')} — ${indLabel}`} rows={toRankRows(kpi.by_income!, 'income', selectedIndicator)} lang={lang} />
             )}
-            <BreakdownChart title={`${t('By Age', 'Mengikut Umur')} — ${indLabel}`}       rows={kpi.by_age}    groupKey="group"  indicator={selectedIndicator} />
+            <RankBars title={`${t('By Age', 'Mengikut Umur')} — ${indLabel}`}       rows={toRankRows(kpi.by_age, 'group', selectedIndicator)}        lang={lang} />
           </div>
         )}
 
@@ -495,7 +489,7 @@ export function GeoPage() {
                   <XAxis dataKey="tier" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
                   <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
-                  <Bar dataKey="count">
+                  <Bar dataKey="count" maxBarSize={44} radius={[6, 6, 0, 0]}>
                     {distributionData.map((d, i) => <Cell key={i} fill={STATUS_VAR[d.status]} />)}
                   </Bar>
                 </BarChart>

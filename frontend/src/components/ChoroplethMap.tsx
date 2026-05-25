@@ -40,13 +40,27 @@ export function buildDistrictLookup(districts: District[]): Map<string, District
   return map;
 }
 
-function rateToRag(rate: number): 'green' | 'amber' | 'red' {
-  if (rate > 0.15) return 'red';
-  if (rate > 0.08) return 'amber';
-  return 'green';
+/* Single RAG rule, mirrored from backend kpi.py::_rag so the map fill, the
+   National Average cards, and the backend status all classify the same way:
+   target-relative — Green at/below target, Amber up to 20% over, else Red.
+   `actual` and `target` must share units (here: fractions 0-1). When no target
+   is known the metric can't be graded against one, so it stays Green. */
+export function ragVsTarget(actual: number, target: number | undefined): 'green' | 'amber' | 'red' {
+  if (target == null || target <= 0 || actual <= target) return 'green';
+  if (actual <= target * 1.2) return 'amber';
+  return 'red';
 }
 
-export function computeAggregates(districts: District[]): Aggregates {
+/** Per-indicator NPAN targets as fractions (0-1), keyed to match the District
+    rate fields. Pass from the KPI response so aggregates grade vs the target. */
+export interface AggregateTargets {
+  stunting?: number;
+  wasting?: number;
+  underweight?: number;
+  overweight?: number;
+}
+
+export function computeAggregates(districts: District[], targets: AggregateTargets = {}): Aggregates {
   if (!districts.length) {
     return {
       stunting: 0, wasting: 0, underweight: 0, overweight: 0,
@@ -60,10 +74,10 @@ export function computeAggregates(districts: District[]): Aggregates {
   const overweight  = districts.reduce((s, d) => s + d.overweight_rate, 0) / n;
   return {
     stunting, wasting, underweight, overweight,
-    stuntingRag:    rateToRag(stunting),
-    wastingRag:     rateToRag(wasting),
-    underweightRag: rateToRag(underweight),
-    overweightRag: rateToRag(overweight),
+    stuntingRag:    ragVsTarget(stunting, targets.stunting),
+    wastingRag:     ragVsTarget(wasting, targets.wasting),
+    underweightRag: ragVsTarget(underweight, targets.underweight),
+    overweightRag:  ragVsTarget(overweight, targets.overweight),
   };
 }
 
