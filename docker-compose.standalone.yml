@@ -1,0 +1,54 @@
+# SmartDQC — standalone all-in-one image (Postgres + Ollama + API + frontend
+# in one container). Mirrors the working manual run:
+#
+#   docker run -d -p 8000:8000 -p 8080:80 --name smartdqc \
+#       luqmanzulkefli/smartdqc-standalone:v3.2-qwen35
+#
+# but lets you change the LLM model without editing this file — just edit the
+# .env next to it (copy from .env.standalone.example) or pass it inline:
+#
+#   OLLAMA_MODEL=qwen3.5:4b-q4_K_M docker compose -f docker-compose.standalone.yml up -d
+#
+# Whatever model you set is pulled by Ollama on startup, so it must be a valid
+# Ollama tag (https://ollama.com/library) and the machine needs internet the
+# first time that model is pulled.
+
+services:
+  smartdqc:
+    image: luqmanzulkefli/smartdqc-standalone:v3.2-qwen35
+    container_name: smartdqc
+    ports:
+      - "8000:8000"   # backend API
+      - "8080:80"     # web UI  ->  open http://localhost:8080
+    environment:
+      # ── The knob you wanted: change the model here (or in .env) ──────────
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:4b-q4_K_M}
+      # Keep the model resident between requests so the AI insight button
+      # doesn't cold-start (and 500) after an idle period. "-1" = forever.
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+      # Cap the context window. Gemma 4 defaults to a huge (128K+) context, so
+      # Ollama preallocates a multi-GB KV cache that dwarfs the 2GB model and
+      # pushes VRAM to ~9GB. SmartDQC prompts are small, so 8192 is plenty and
+      # frees enough VRAM to fit a larger model (e.g. e4b) on an 8GB card.
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-8192}
+    volumes:
+      # Persist pulled models + the database across `down`/`up` so switching
+      # back to an already-pulled model is instant and data survives restarts.
+      # NOTE: the named ollama volume masks any model baked into the image —
+      # on first boot the model in OLLAMA_MODEL is pulled fresh into it.
+      - ollama_models:/root/.ollama
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+    # ── NVIDIA GPU acceleration enabled ─────────────────────────────────────
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama_models:
+  postgres_data:
