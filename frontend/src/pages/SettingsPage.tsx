@@ -43,6 +43,10 @@ const KPI_LABELS: { key: string; en: string; bm: string }[] = [
   { key: 'overweight_rate',  en: 'Overweight Rate',  bm: 'Kadar Berlebihan Berat' },
 ];
 
+/* A KPI target is a percentage rate: must be a finite number in [0, 100].
+   Empty input → parseFloat('') → NaN → invalid (flagged, save blocked). */
+const isValidTarget = (v: number) => Number.isFinite(v) && v >= 0 && v <= 100;
+
 const SOURCE_LABELS: Record<string, { en: string; bm: string }> = {
   npan_2021_2025: { en: 'NPAN 2021–2025 (official)', bm: 'NPAN 2021–2025 (rasmi)' },
   who_2025:       { en: 'WHO Global Targets 2025 (official)', bm: 'Sasaran Global WHO 2025 (rasmi)' },
@@ -168,8 +172,13 @@ export function SettingsPage() {
     }));
   };
 
+  /* True when any current target is out of range / blank — drives the inline
+     error and blocks the save so a nonsensical target can't be persisted. */
+  const kpiHasError = !!kpi && (['npan', 'who'] as const).some(grp =>
+    KPI_LABELS.some(ind => !isValidTarget(kpi.current[grp][ind.key])));
+
   const saveKpiTargets = async () => {
-    if (!kpi) return;
+    if (!kpi || kpiHasError) return;
     setKpiSaving(true);
     try {
       const r = await api.post<KpiTargets>('/settings/kpi-targets', {
@@ -410,22 +419,31 @@ export function SettingsPage() {
                     {KPI_LABELS.map(ind => {
                       const val = kpi.current[grp][ind.key];
                       const def = kpi.defaults[grp][ind.key];
+                      const invalid = !isValidTarget(val);
                       return (
-                        <div key={ind.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <div key={ind.key} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                           <div>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t(ind.en, ind.bm)}</div>
                             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                               {t('Official', 'Rasmi')}: {def}%
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <input
-                              type="number" min={0} max={100} step={0.1}
-                              value={val ?? ''}
-                              onChange={e => setKpiValue(grp, ind.key, parseFloat(e.target.value))}
-                              style={{ width: 80, textAlign: 'right', padding: '6px 8px', fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--kkm-blue)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}
-                            />
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>%</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <input
+                                type="number" min={0} max={100} step={0.1}
+                                aria-invalid={invalid}
+                                value={Number.isFinite(val) ? val : ''}
+                                onChange={e => setKpiValue(grp, ind.key, parseFloat(e.target.value))}
+                                style={{ width: 80, textAlign: 'right', padding: '6px 8px', fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--kkm-blue)', background: 'var(--surface)', border: `1px solid ${invalid ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 6 }}
+                              />
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>%</span>
+                            </div>
+                            {invalid && (
+                              <span role="alert" style={{ fontSize: 10, fontWeight: 600, color: 'var(--danger)' }}>
+                                {t('Enter 0–100', 'Masukkan 0–100')}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -440,11 +458,16 @@ export function SettingsPage() {
               );
             })}
             <div>
-              <button onClick={saveKpiTargets} disabled={kpiSaving}
-                style={{ background: kpiSaved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={saveKpiTargets} disabled={kpiSaving || kpiHasError}
+                style={{ background: kpiSaved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: kpiHasError ? 'not-allowed' : 'pointer', opacity: kpiHasError ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Save size={15} />
                 {kpiSaving ? t('Saving…', 'Menyimpan…') : kpiSaved ? t('Saved!', 'Disimpan!') : t('Save targets', 'Simpan sasaran')}
               </button>
+              {kpiHasError && (
+                <div role="alert" style={{ fontSize: 11, fontWeight: 600, color: 'var(--danger)', marginTop: 8 }}>
+                  {t('Fix the highlighted targets (0–100) before saving.', 'Betulkan sasaran yang ditandakan (0–100) sebelum menyimpan.')}
+                </div>
+              )}
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>
                 {t(
                   'Changes apply immediately to the dashboard RAG status, district trajectory, and reports. Edits are recorded in the Audit Log.',

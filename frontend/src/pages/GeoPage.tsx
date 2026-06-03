@@ -555,22 +555,35 @@ export function GeoPage() {
         </div>
 
         {/* Target trajectory (Feature 16 — 2027 benchmarking) */}
-        {traj && (
+        {traj && (() => {
+          /* Sort worst-first, then count "off track" from the SAME rendered
+             list so the header summary always matches what's on screen (it
+             reflects any future filter applied to `rows`, not the raw set). */
+          const rows = [...traj.narratives]
+            .sort((a, b) => trajRank(b.trajectory_status) - trajRank(a.trajectory_status));
+          const offTrack = rows.filter(n => trajToStatus(n.trajectory_status) === 'critical').length;
+          return (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)', marginTop: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{t('Target Trajectory (2027)', 'Trajektori Sasaran (2027)')}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t('Target Trajectory (2027)', 'Trajektori Sasaran (2027)')}</div>
+              {offTrack > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: STATUS_BG.critical, color: STATUS_VAR.critical }}>
+                  {offTrack} {t('off track', 'tidak menuju sasaran')}
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, marginBottom: 14 }}>
               {t('Projected vs NPAN target per district, based on historical years.',
                  'Unjuran berbanding sasaran NPAN setiap daerah, berdasarkan tahun sejarah.')}
             </div>
-            {traj.narratives.length === 0 ? (
+            {rows.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
                 {t('Requires multi-year data (≥2 measurement years per district) to project a trajectory.',
                    'Memerlukan data berbilang tahun (≥2 tahun pengukuran setiap daerah) untuk unjuran trajektori.')}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
-                {[...traj.narratives]
-                  .sort((a, b) => trajRank(b.trajectory_status) - trajRank(a.trajectory_status))
+                {rows
                   .map((n, i) => {
                     const st = trajToStatus(n.trajectory_status);
                     return (
@@ -594,7 +607,8 @@ export function GeoPage() {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
         {!traj && trajError && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', marginTop: 20 }}>
             <ErrorRetry compact message={t('Could not load target trajectory.', 'Tidak dapat memuatkan trajektori sasaran.')} onRetry={loadTraj} />

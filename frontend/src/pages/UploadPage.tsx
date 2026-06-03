@@ -464,16 +464,33 @@ export function UploadPage() {
                       </select>
                     </td>
                     <td style={{ padding: '10px 14px' }}>
-                      <div style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontSize: 12, fontWeight: 600, color: confidenceColor(row.confidence),
-                      }}>
+                      {row.standard_field === '' ? (
+                        /* Deliberately ignored column ("— Ignore —"): a neutral
+                           state, not an error. Keyed on the empty field — NOT on
+                           confidence — so a genuine low-confidence *mapping*
+                           (non-empty field below) still reads red/amber. */
                         <div style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: confidenceColor(row.confidence),
-                        }} />
-                        {(Number(row.confidence) * 100).toFixed(0)}%
-                      </div>
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)',
+                        }}>
+                          <div style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: 'var(--status-neutral)',
+                          }} />
+                          {t('Ignored', 'Diabaikan')}
+                        </div>
+                      ) : (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontSize: 12, fontWeight: 600, color: confidenceColor(row.confidence),
+                        }}>
+                          <div style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: confidenceColor(row.confidence),
+                          }} />
+                          {(Number(row.confidence) * 100).toFixed(0)}%
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

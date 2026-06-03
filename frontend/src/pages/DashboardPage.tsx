@@ -395,6 +395,14 @@ export function DashboardPage() {
           const sel = ind.key === selectedIndicator;
           const ragColor = ind.rag === 'Green' ? 'var(--success)'
             : ind.rag === 'Amber' ? 'var(--warning)' : 'var(--danger)';
+          /* Delta COLOUR encodes good/bad, not up/down. All four indicators
+             (stunting/wasting/underweight/overweight) are prevalence rates
+             where lower-is-better, and gap = actual − npan_target (backend
+             eda/kpi.py:192). So gap > 0 (above target) is bad → red. The arrow
+             still shows raw direction. If a higher-is-better indicator is ever
+             added, gate `isBad` on its direction instead of the raw sign. */
+          const lowerIsBetter = true;
+          const isBad = lowerIsBetter ? ind.gap > 0 : ind.gap < 0;
           return (
             <div key={ind.key}
               onClick={() => setSelectedIndicator(ind.key)}
@@ -419,7 +427,7 @@ export function DashboardPage() {
                 {t('Target', 'Sasaran')} {Number(ind.npan_target).toFixed(0)}%
                 {ind.who_target != null ? ` · WHO ${Number(ind.who_target).toFixed(0)}%` : ''}
                 {' · '}
-                <span style={{ color: ind.gap > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                <span style={{ color: isBad ? 'var(--danger)' : 'var(--success)' }}>
                   {ind.gap > 0 ? '▲' : '▼'} {Math.abs(Number(ind.gap)).toFixed(2)}
                 </span>
               </div>

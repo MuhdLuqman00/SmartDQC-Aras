@@ -69,7 +69,7 @@ export function LoginPage() {
             boxShadow: '0 8px 22px rgba(200,150,46,0.4)',
           }}>S</div>
           <div>
-            <div style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', marginBottom: 3 }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', marginBottom: 3 }}>
               {t('Ministry of Health Malaysia', 'Kementerian Kesihatan Malaysia')}
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17 }}>
@@ -86,7 +86,7 @@ export function LoginPage() {
             {t('Data Quality &', 'Kualiti Data &')}<br />
             {t('Clinical Analytics', 'Analitik Klinikal')}
           </h1>
-          <p style={{ fontSize: 14.5, lineHeight: 1.75, color: 'rgba(255,255,255,0.68)', maxWidth: 440, marginBottom: 28 }}>
+          <p style={{ fontSize: 14.5, lineHeight: 1.75, color: 'rgba(255,255,255,0.82)', maxWidth: 440, marginBottom: 28 }}>
             {t('Secure data validation, automated cleaning, and district-level nutrition reporting for the Ministry of Health Malaysia.',
                'Pengesahan data selamat, pembersihan automatik, dan pelaporan pemakanan peringkat daerah untuk Kementerian Kesihatan Malaysia.')}
           </p>
@@ -98,14 +98,14 @@ export function LoginPage() {
             ].map(s => (
               <div key={s.l}>
                 <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, color: 'var(--accent-soft)' }}>{s.v}</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)' }}>{s.l}</div>
+                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.78)' }}>{s.l}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div style={{
-          fontSize: 11, color: 'rgba(255,255,255,0.4)', position: 'relative',
+          fontSize: 11, color: 'rgba(255,255,255,0.65)', position: 'relative',
           borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20,
           display: 'flex', justifyContent: 'space-between',
         }}>
@@ -158,7 +158,9 @@ export function LoginPage() {
 
           <div style={{
             marginTop: 26, paddingTop: 18, borderTop: '1px solid var(--border)',
-            fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', letterSpacing: '0.02em',
+            /* --text-secondary (not --text-muted): muted-grey on the white card
+               fails 4.5:1. Local fix only; the token-wide question is WS7. */
+            fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', letterSpacing: '0.02em',
           }}>
             {t('Authorised users only.', 'Pengguna yang sah sahaja.')}
           </div>
