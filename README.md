@@ -71,14 +71,3 @@ SmartDQC/
 └── Docs/             # Reference documentation
 ```
 
-## Documentation
-
-| File | Purpose |
-|------|---------|
-| [`Docs/SmartDQC_Master.md`](Docs/SmartDQC_Master.md) | Single source of truth — features, decisions, timeline, open items |
-| [`Docs/architecture.md`](Docs/architecture.md) | System components, repo structure, persistence schema, API surface |
-| [`Docs/decisions.md`](Docs/decisions.md) | Architecture Decision Records — why we built it this way |
-| [`Docs/known_issues.md`](Docs/known_issues.md) | Open items, risk register, audit findings, post-v1 scope gaps |
-| [`Docs/workflows.md`](Docs/workflows.md) | End-to-end workflows: schema mapping, cleaning, AI narrative, multi-dataset |
-| [`Docs/SmartDQC_Tool_Flow.md`](Docs/SmartDQC_Tool_Flow.md) | Per-dataset step-by-step processing (MyVASS, NCDC, KPM, KKM) |
-| [`Docs/SmartDQC_UI_Spec.md`](Docs/SmartDQC_UI_Spec.md) | UI layout, navigation, and component specifications |
