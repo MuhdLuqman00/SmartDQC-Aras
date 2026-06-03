@@ -2,12 +2,13 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, ArrowRight, Download, FileSpreadsheet,
-  Table2, FileSearch, ArrowDownUp,
+  Table2, FileSearch, ArrowDownUp, ListChecks,
 } from 'lucide-react';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
+import { InlineEmpty } from '../components/InlineEmpty';
 import { translateIssue } from '../lib/issueCatalog';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000';
@@ -127,6 +128,14 @@ export function CleaningPage() {
             <span>{t('Retained', 'Dikekalkan')}: <strong className="mono">{after.toLocaleString()}</strong></span>
             <span>{t('Removed', 'Dibuang')}: <strong className="mono" style={{ color: 'var(--danger)' }}>{removed.toLocaleString()}</strong></span>
           </div>
+          {removed === 0 && before > 0 && (
+            // Identical before/after is a valid outcome, not a bug — say so.
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--success)' }}>
+              <CheckCircle2 size={14} />
+              {t('No rows were removed — every record passed validation.',
+                 'Tiada baris dibuang — setiap rekod lulus pengesahan.')}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -134,7 +143,7 @@ export function CleaningPage() {
           <div style={{ ...card, padding: 24 }}>
             <div style={sectionHead}>{t('Cleaning Rules Applied', 'Peraturan Pembersihan')}</div>
             {rules.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('No rules recorded.', 'Tiada peraturan direkodkan.')}</div>
+              <InlineEmpty icon={<ListChecks size={26} />} text={t('No cleaning rules were triggered for this dataset.', 'Tiada peraturan pembersihan dicetuskan untuk dataset ini.')} />
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {rules.map((r, i) => (
@@ -153,7 +162,7 @@ export function CleaningPage() {
           <div style={{ ...card, padding: 24 }}>
             <div style={sectionHead}>{t('Top Issues Addressed', 'Isu Utama Ditangani')}</div>
             {issues.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('No issues recorded.', 'Tiada isu direkodkan.')}</div>
+              <InlineEmpty icon={<CheckCircle2 size={26} />} text={t('No data-quality issues found — clean dataset.', 'Tiada isu kualiti data ditemui — dataset bersih.')} />
             ) : issues.slice(0, 6).map((iss, i) => (
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',

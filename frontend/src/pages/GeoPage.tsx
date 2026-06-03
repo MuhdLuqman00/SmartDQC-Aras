@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   ScatterChart, Scatter, ZAxis,
@@ -9,6 +9,7 @@ import type { District } from '../components/ChoroplethMap';
 import { SessionGuard } from '../components/SessionGuard';
 import { ChartTooltip } from '../components/ChartTooltip';
 import { RankBars, RankRow } from '../components/RankBars';
+import { ErrorRetry } from '../components/ErrorRetry';
 import { useSession } from '../context/SessionContext';
 import { useLang } from '../context/LanguageContext';
 import {
@@ -297,50 +298,60 @@ export function GeoPage() {
 
   const [kpi, setKpi] = useState<KpiDashboard | null>(null);
   const [kpiLoading, setKpiLoading] = useState(false);
+  const [kpiError, setKpiError] = useState(false);
 
   const [risk, setRisk] = useState<RiskResult | null>(null);
   const [riskLoading, setRiskLoading] = useState(false);
+  const [riskError, setRiskError] = useState(false);
 
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorKey>('stunting');
 
   const [blocks, setBlocks] = useState<ChartBlocks | null>(null);
   const [blocksLoading, setBlocksLoading] = useState(false);
+  const [blocksError, setBlocksError] = useState(false);
   const [showAllDist, setShowAllDist] = useState(false);
 
   const [traj, setTraj] = useState<TrajectoryResp | null>(null);
+  const [trajError, setTrajError] = useState(false);
 
-  useEffect(() => {
+  // Loaders are useCallbacks so the ErrorRetry buttons can re-run the exact
+  // fetch that failed (instead of silently leaving a blank panel).
+  const loadKpi = useCallback(() => {
     if (!cacheId) return;
-    setKpiLoading(true);
+    setKpiLoading(true); setKpiError(false);
     api.post<KpiDashboard>(`/kpi/dashboard?cache_id=${cacheId}`)
       .then(r => setKpi(r.data))
-      .catch(() => setKpi(null))
+      .catch(() => { setKpi(null); setKpiError(true); })
       .finally(() => setKpiLoading(false));
   }, [cacheId]);
+  useEffect(() => { loadKpi(); }, [loadKpi]);
 
-  useEffect(() => {
+  const loadBlocks = useCallback(() => {
     if (!cacheId) return;
-    setBlocksLoading(true);
+    setBlocksLoading(true); setBlocksError(false);
     api.get<ChartBlocks>(`/charts/blocks?cache_id=${cacheId}`)
       .then(r => setBlocks(r.data))
-      .catch(() => setBlocks(null))
+      .catch(() => { setBlocks(null); setBlocksError(true); })
       .finally(() => setBlocksLoading(false));
   }, [cacheId]);
+  useEffect(() => { loadBlocks(); }, [loadBlocks]);
 
-  useEffect(() => {
+  const loadTraj = useCallback(() => {
     if (!cacheId) return;
+    setTrajError(false);
     api.post<TrajectoryResp>(`/kpi/trajectory/auto?cache_id=${cacheId}`)
       .then(r => setTraj(r.data))
-      .catch(() => setTraj(null));
+      .catch(() => { setTraj(null); setTrajError(true); });
   }, [cacheId]);
+  useEffect(() => { loadTraj(); }, [loadTraj]);
 
   const runRisk = async () => {
     if (!cacheId) return;
-    setRiskLoading(true);
+    setRiskLoading(true); setRiskError(false);
     try {
       const r = await api.post<RiskResult>(`/risk/score?cache_id=${cacheId}`);
       setRisk(r.data);
-    } catch { setRisk(null); }
+    } catch { setRisk(null); setRiskError(true); }
     finally { setRiskLoading(false); }
   };
 
@@ -411,7 +422,9 @@ export function GeoPage() {
             border: '0.5px solid var(--border)', borderRadius: 12,
             padding: 12, boxSizing: 'border-box',
           }}>
-            {districts.length === 0
+            {kpiError
+              ? <ErrorRetry message={t('Could not load KPI data.', 'Tidak dapat memuatkan data KPI.')} onRetry={loadKpi} />
+              : districts.length === 0
               ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                   {t('No KPI data — run cleaning first.', 'Tiada data KPI — jalankan pembersihan dahulu.')}
                 </div>
@@ -487,6 +500,10 @@ export function GeoPage() {
               )}
             </div>
           </div>
+
+          {riskError && !risk && (
+            <ErrorRetry compact message={t('Risk scoring failed.', 'Pemarkahan risiko gagal.')} onRetry={runRisk} />
+          )}
 
           {risk && (
             <>
@@ -578,12 +595,17 @@ export function GeoPage() {
             )}
           </div>
         )}
+        {!traj && trajError && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', marginTop: 20 }}>
+            <ErrorRetry compact message={t('Could not load target trajectory.', 'Tidak dapat memuatkan trajektori sasaran.')} onRetry={loadTraj} />
+          </div>
+        )}
 
         {/* Distributions & relationships — 12 charts (7 histograms + 5 scatters)
             sourced from chartCatalog. The "Show all" toggle is kept for parity
             with prior UX but recommended already covers the full catalog for
             this page. */}
-        {(blocks || blocksLoading) && (
+        {(blocks || blocksLoading || blocksError) && (
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -600,6 +622,8 @@ export function GeoPage() {
             </div>
             {blocksLoading ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('Loading distributions…', 'Memuatkan taburan…')}</div>
+            ) : blocksError ? (
+              <ErrorRetry compact message={t('Could not load distributions.', 'Tidak dapat memuatkan taburan.')} onRetry={loadBlocks} />
             ) : blocks ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
                 {(() => {

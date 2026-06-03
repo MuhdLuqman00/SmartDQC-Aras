@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Search } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { ColumnHistogram } from '../components/ColumnHistogram';
+import { ErrorRetry } from '../components/ErrorRetry';
 
 const PAGE_SIZE = 50;
 
@@ -19,25 +20,27 @@ export function ExplorerPage() {
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [localRows, setLocalRows] = useState<Record<string, unknown>[] | null>(null);
+  const [fetchError, setFetchError] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(false);
 
   const ctxRows = (preview as Record<string, unknown>[] | null) ?? [];
 
   /* In-memory session.preview is only set by the clean wizard's last step.
      On reopen / refresh / direct nav it's empty — fetch durably by cacheId. */
-  useEffect(() => {
+  const loadPreview = useCallback(() => {
     if (ctxRows.length > 0 || !cacheId) return;
-    let cancelled = false;
+    setFetchLoading(true); setFetchError(false);
     api.get(`/clean/preview-cached/${cacheId}`)
       .then(r => {
-        if (cancelled) return;
         setFetched(Array.isArray(r.data?.rows) ? r.data.rows : []);
         setServerRowCount(
           typeof r.data?.row_count === 'number' ? r.data.row_count : null,
         );
       })
-      .catch(() => { if (!cancelled) setFetched([]); });
-    return () => { cancelled = true; };
+      .catch(() => { setFetched(null); setFetchError(true); })
+      .finally(() => setFetchLoading(false));
   }, [cacheId, ctxRows.length]);
+  useEffect(() => { loadPreview(); }, [loadPreview]);
 
   const baseRows = ctxRows.length > 0 ? ctxRows : (fetched ?? []);
   const rows = localRows ?? baseRows;
@@ -148,7 +151,13 @@ export function ExplorerPage() {
 
         {/* Table */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'auto', boxShadow: 'var(--shadow-card)' }}>
-          {columns.length === 0 ? (
+          {fetchError ? (
+            <ErrorRetry message={t('Could not load the data preview.', 'Tidak dapat memuatkan pratonton data.')} onRetry={loadPreview} />
+          ) : fetchLoading && columns.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+              {t('Loading…', 'Memuatkan…')}
+            </div>
+          ) : columns.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
               {t('No preview data available.', 'Tiada data pratonton.')}
             </div>
@@ -233,11 +242,11 @@ export function ExplorerPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>←</button>
+            <button aria-label={t('Previous page', 'Halaman sebelumnya')} disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>←</button>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               {t('Page', 'Halaman')} {page + 1} / {totalPages}
             </span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalPages - 1 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>→</button>
+            <button aria-label={t('Next page', 'Halaman seterusnya')} disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalPages - 1 ? 0.4 : 1, color: 'var(--text-primary)', fontSize: 13 }}>→</button>
           </div>
         )}
       </div>

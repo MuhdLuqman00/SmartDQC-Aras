@@ -311,9 +311,18 @@ export function DashboardPage() {
         <div style={{
           background: 'var(--warning-bg)', border: '1px solid var(--warning)',
           borderRadius: 'var(--radius-card)', padding: '12px 16px', fontSize: 13,
-          color: 'var(--text-primary)',
+          color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
-          {t('No analysed dataset — run cleaning first.', 'Tiada dataset dianalisis — jalankan pembersihan dahulu.')}
+          <span style={{ flex: 1, minWidth: 200 }}>
+            {t('No analysed dataset, or the dashboard data could not be loaded.',
+               'Tiada dataset dianalisis, atau data papan pemuka tidak dapat dimuatkan.')}
+          </span>
+          <button
+            onClick={() => fetchKpi(selectedStateCode)}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '6px 14px', fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', flexShrink: 0 }}
+          >
+            {t('Retry', 'Cuba semula')}
+          </button>
         </div>
       )}
 

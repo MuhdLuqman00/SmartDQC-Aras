@@ -112,6 +112,7 @@ export function TopBar() {
       <button
         onClick={toggleTheme}
         title={theme === 'dark' ? t('Light mode', 'Mod terang') : t('Dark mode', 'Mod gelap')}
+        aria-label={theme === 'dark' ? t('Switch to light mode', 'Tukar ke mod terang') : t('Switch to dark mode', 'Tukar ke mod gelap')}
         style={iconBtn}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary-light)'; e.currentTarget.style.color = 'var(--primary-light)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.transform = 'scale(1)'; }}
@@ -151,6 +152,7 @@ export function TopBar() {
       <button
         onClick={logout}
         title={t('Logout', 'Log Keluar')}
+        aria-label={t('Logout', 'Log Keluar')}
         style={iconBtn}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--danger)'; e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.transform = 'scale(1)'; }}

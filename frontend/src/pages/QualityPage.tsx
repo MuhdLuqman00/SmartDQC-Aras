@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, AlertTriangle, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Info, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
@@ -9,6 +9,8 @@ import { ColumnHistogram } from '../components/ColumnHistogram';
 import { DonutCard } from '../components/DonutCard';
 import { catalogByHome, isPieArrayBlock, isDonutObjectBlock } from '../lib/chartCatalog';
 import { translateIssue } from '../lib/issueCatalog';
+import { ErrorRetry } from '../components/ErrorRetry';
+import { InlineEmpty } from '../components/InlineEmpty';
 
 interface Issue { code?: string; description: string; severity: 'critical' | 'warning' | 'info'; count: number; samples?: string[]; field?: string; pct?: number; }
 interface Rule { code?: string; description: string; }
@@ -40,6 +42,7 @@ export function QualityPage() {
   const { cacheId, qualityScore, cleanStats } = useSession();
   const [anomalies, setAnomalies] = useState<AnomalyRow[] | null>(null);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [anomalyError, setAnomalyError] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const score = qualityScore ?? 0;
@@ -85,11 +88,11 @@ export function QualityPage() {
 
   const runAnomalyDetection = async () => {
     if (!cacheId) return;
-    setAnomalyLoading(true);
+    setAnomalyLoading(true); setAnomalyError(false);
     try {
       const r = await api.post<{ anomalies: AnomalyRow[] }>(`/ml/suggest?cache_id=${cacheId}`);
       setAnomalies(r.data.anomalies ?? []);
-    } catch { setAnomalies([]); }
+    } catch { setAnomalies(null); setAnomalyError(true); }
     finally { setAnomalyLoading(false); }
   };
 
@@ -139,9 +142,7 @@ export function QualityPage() {
               {t('Issues Detected', 'Isu Dikesan')}
             </div>
             {issues.length === 0 ? (
-              <div style={{ padding: '24px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-                {t('No issues detected.', 'Tiada isu dikesan.')}
-              </div>
+              <InlineEmpty icon={<ShieldCheck size={26} />} text={t('No issues detected — this dataset looks clean.', 'Tiada isu dikesan — dataset ini kelihatan bersih.')} />
             ) : issues.map((issue, i) => (
               <div key={i} style={{ borderBottom: i < issues.length - 1 ? '1px solid var(--border)' : 'none' }}>
                 <div
@@ -199,6 +200,10 @@ export function QualityPage() {
                 </button>
               )}
             </div>
+
+            {anomalyError && (
+              <ErrorRetry compact message={t('Anomaly detection failed.', 'Pengesanan anomali gagal.')} onRetry={runAnomalyDetection} />
+            )}
 
             {anomalies !== null && (
               anomalies.length === 0 ? (
