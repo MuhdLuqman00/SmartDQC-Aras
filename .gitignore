@@ -21,7 +21,7 @@ data/
 *.sqlite3
 
 # Docs — data analysis reference files (large Excel/binary, not source)
-Docs/data analysis_files/
+Docs/
 
 # Frontend
 node_modules/
