@@ -90,7 +90,7 @@ def _seed_admin():
             db.add(
                 User(
                     username="admin",
-                    password_hash=hash_password("ADMIN_SEED_PASSWORD_PLACEHOLDER"),
+                    password_hash=hash_password(os.environ.get("ADMIN_SEED_PASSWORD", "ADMIN_SEED_PASSWORD_PLACEHOLDER")),
                     role="admin",
                 )
             )
