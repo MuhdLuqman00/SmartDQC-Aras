@@ -1,0 +1,5 @@
+# Shell scripts must use LF so their shebang resolves inside Linux containers,
+# regardless of the build host's core.autocrlf setting. Without this, a Windows
+# checkout (CRLF) bakes a broken `#!/bin/bash\r` into the image and the
+# container exits with: exec /entrypoint-all.sh: no such file or directory.
+*.sh text eol=lf

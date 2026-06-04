@@ -50,7 +50,9 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/smartdqc.conf
 
 # entrypoint
 COPY docker/entrypoint-all.sh /entrypoint-all.sh
-RUN chmod +x /entrypoint-all.sh
+# Strip any CRLF so the shebang resolves even when the repo is checked out with
+# Windows line endings (build host may have core.autocrlf=true). See .gitattributes.
+RUN sed -i 's/\r$//' /entrypoint-all.sh && chmod +x /entrypoint-all.sh
 
 ENV WHO_ZSCORE_DIR=/app/data/zscore
 # Make postgres binaries available at runtime (version-agnostic)
