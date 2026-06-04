@@ -174,12 +174,212 @@ export function ReportsPage() {
     },
   ];
 
+  /* Two report classes get two visual weights (audit 12 · AI-TELL): the
+     PPTX/PDF generators are the featured ministerial deliverables (full
+     controls); the direct downloads are compact export rows. */
+  const generators = cards.filter(c => c.hasChartPicker);
+  const exportItems = cards.filter(c => !c.hasChartPicker);
+
+  /* Featured generator card — the full report builder (KPI toggle + chart
+     picker + Generate). */
+  const renderGenerator = (card: ReportCard) => {
+    const sel = chartSelection[card.id] || new Set<string>();
+    const kpiOn = kpiToggles[card.id] ?? true;
+    const effCount = effectiveCharts(card.id).length;
+    const isExpanded = !!expanded[card.id];
+    return (
+      <div key={card.id} style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-card)', padding: '24px',
+        boxShadow: 'var(--shadow-card)',
+        borderTop: '2px solid var(--accent-strong)',
+        opacity: cacheId ? 1 : 0.6,
+        display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {card.icon}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: 'var(--font-display)' }}>
+              {lang === 'en' ? card.titleEn : card.titleBm}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+              {card.format}
+            </div>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, flex: 1 }}>
+          {lang === 'en' ? card.descEn : card.descBm}
+        </p>
+
+        {card.hasKpiToggle && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={kpiToggles[card.id] ?? true}
+              onChange={e => setKpiToggles(prev => ({ ...prev, [card.id]: e.target.checked }))}
+              disabled={!cacheId}
+            />
+            {t('Include KPI data', 'Sertakan data KPI')}
+          </label>
+        )}
+
+        {card.hasChartPicker && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setExpanded(prev => ({ ...prev, [card.id]: !isExpanded }))}
+              disabled={!cacheId}
+              style={{
+                background: 'none', border: 'none', padding: 0, cursor: cacheId ? 'pointer' : 'not-allowed',
+                color: 'var(--kkm-sky)', fontSize: 12, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {t('Customize charts', 'Sesuaikan carta')}
+              <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+                ({effCount}/{CHART_CATALOG.length})
+              </span>
+            </button>
+            {isExpanded && (
+              <div style={{
+                marginTop: 8, padding: '10px 12px',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                {CHART_CATALOG.map(c => {
+                  const needsKpiOff = CHART_REQUIRES_KPI.has(c.key) && !kpiOn;
+                  const checked = sel.has(c.key) && !needsKpiOff;
+                  return (
+                    <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: needsKpiOff ? 'not-allowed' : 'pointer', color: needsKpiOff ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleChart(card.id, c.key)}
+                        disabled={!cacheId || needsKpiOff}
+                      />
+                      <span style={{ flex: 1 }}>{lang === 'en' ? c.labelEn : c.labelBm}</span>
+                      {needsKpiOff && (
+                        <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          {t('needs KPI', 'perlu KPI')}
+                        </span>
+                      )}
+                      {c.recommended && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700,
+                          background: 'var(--gradient-gold)', color: '#0F1B2F',
+                          borderRadius: 999, padding: '1px 7px',
+                          letterSpacing: '0.04em', textTransform: 'uppercase',
+                        }}>
+                          {t('Rec.', 'Disyor.')}
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          disabled={!cacheId || !!progress[card.id]}
+          onClick={() => cacheId && card.action(cacheId, kpiToggles[card.id] ?? true, sel)}
+          style={{
+            background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+            color: cacheId ? '#fff' : 'var(--text-muted)',
+            border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
+            fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
+            opacity: progress[card.id] ? 0.6 : 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}
+        >
+          {!cacheId && <Lock size={14} />}
+          {progress[card.id]
+            ? t('Generating…', 'Sedang menjana…')
+            : cacheId
+              ? t('Generate', 'Jana')
+              : t('No active session', 'Tiada sesi aktif')}
+        </button>
+      </div>
+    );
+  };
+
+  /* Compact export row — a direct download (no chart builder). The Data
+     Dictionary's two buttons now sit naturally in the row's action slot,
+     fixing the old grid-rhythm break (audit 12 · P3). */
+  const renderExportRow = (card: ReportCard) => (
+    <div key={card.id} style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)',
+      padding: '14px 18px', opacity: cacheId ? 1 : 0.6, flexWrap: 'wrap',
+    }}>
+      <div style={{ flexShrink: 0, display: 'flex' }}>{card.icon}</div>
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 14, fontFamily: 'var(--font-display)' }}>
+            {lang === 'en' ? card.titleEn : card.titleBm}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+            {card.format}
+          </span>
+        </div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2 }}>
+          {lang === 'en' ? card.descEn : card.descBm}
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        {card.actions ? (
+          card.actions.map(a => (
+            <button
+              key={a.labelEn}
+              disabled={!cacheId}
+              onClick={() => cacheId && a.run()}
+              style={{
+                background: cacheId ? 'var(--surface-2)' : 'var(--border)',
+                color: cacheId ? 'var(--text-primary)' : 'var(--text-muted)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '8px 16px',
+                fontWeight: 600, fontSize: 13, cursor: cacheId ? 'pointer' : 'not-allowed',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {lang === 'en' ? a.labelEn : a.labelBm}
+            </button>
+          ))
+        ) : (
+          <button
+            disabled={!cacheId}
+            onClick={() => cacheId && card.action(cacheId, true, new Set())}
+            style={{
+              background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+              color: cacheId ? '#fff' : 'var(--text-muted)',
+              border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 18px',
+              fontWeight: 600, fontSize: 13, cursor: cacheId ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            {!cacheId && <Lock size={13} />}
+            {cacheId ? t('Download', 'Muat turun') : t('Locked', 'Dikunci')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const sectionHeader = (en: string, bm: string) => (
+    <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
+      {t(en, bm)}
+    </div>
+  );
+
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       {!cacheId && (
         <div style={{
           background: 'var(--warning-bg)', border: '1px solid var(--warning)',
-          borderRadius: 10, padding: '14px 18px', marginBottom: 24,
+          borderRadius: 10, padding: '14px 18px',
           display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
         }}>
           <Lock size={15} style={{ color: 'var(--warning)' }} />
@@ -187,153 +387,19 @@ export function ReportsPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-        {cards.map(card => {
-          const sel = chartSelection[card.id] || new Set<string>();
-          const kpiOn = kpiToggles[card.id] ?? true;
-          const effCount = effectiveCharts(card.id).length;
-          const isExpanded = !!expanded[card.id];
-          return (
-            <div key={card.id} style={{
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)', padding: '24px',
-              boxShadow: 'var(--shadow-card)',
-              opacity: cacheId ? 1 : 0.6,
-              display: 'flex', flexDirection: 'column', gap: 14,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {card.icon}
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, fontFamily: 'var(--font-display)' }}>
-                    {lang === 'en' ? card.titleEn : card.titleBm}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-                    {card.format}
-                  </div>
-                </div>
-              </div>
+      <section>
+        {sectionHeader('Ministerial Reports', 'Laporan Kementerian')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 20 }}>
+          {generators.map(renderGenerator)}
+        </div>
+      </section>
 
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, flex: 1 }}>
-                {lang === 'en' ? card.descEn : card.descBm}
-              </p>
-
-              {card.hasKpiToggle && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                  <input
-                    type="checkbox"
-                    checked={kpiToggles[card.id] ?? true}
-                    onChange={e => setKpiToggles(prev => ({ ...prev, [card.id]: e.target.checked }))}
-                    disabled={!cacheId}
-                  />
-                  {t('Include KPI data', 'Sertakan data KPI')}
-                </label>
-              )}
-
-              {card.hasChartPicker && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(prev => ({ ...prev, [card.id]: !isExpanded }))}
-                    disabled={!cacheId}
-                    style={{
-                      background: 'none', border: 'none', padding: 0, cursor: cacheId ? 'pointer' : 'not-allowed',
-                      color: 'var(--kkm-sky)', fontSize: 12, fontWeight: 600,
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}
-                  >
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    {t('Customize charts', 'Sesuaikan carta')}
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                      ({effCount}/{CHART_CATALOG.length})
-                    </span>
-                  </button>
-                  {isExpanded && (
-                    <div style={{
-                      marginTop: 8, padding: '10px 12px',
-                      background: 'var(--surface-2)', border: '1px solid var(--border)',
-                      borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6,
-                    }}>
-                      {CHART_CATALOG.map(c => {
-                        const needsKpiOff = CHART_REQUIRES_KPI.has(c.key) && !kpiOn;
-                        const checked = sel.has(c.key) && !needsKpiOff;
-                        return (
-                          <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: needsKpiOff ? 'not-allowed' : 'pointer', color: needsKpiOff ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleChart(card.id, c.key)}
-                              disabled={!cacheId || needsKpiOff}
-                            />
-                            <span style={{ flex: 1 }}>{lang === 'en' ? c.labelEn : c.labelBm}</span>
-                            {needsKpiOff && (
-                              <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                {t('needs KPI', 'perlu KPI')}
-                              </span>
-                            )}
-                            {c.recommended && (
-                              <span style={{
-                                fontSize: 9, fontWeight: 700,
-                                background: 'var(--gradient-gold)', color: '#0F1B2F',
-                                borderRadius: 999, padding: '1px 7px',
-                                letterSpacing: '0.04em', textTransform: 'uppercase',
-                              }}>
-                                {t('Rec.', 'Disyor.')}
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {card.actions ? (
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {card.actions.map(a => (
-                    <button
-                      key={a.labelEn}
-                      disabled={!cacheId}
-                      onClick={() => cacheId && a.run()}
-                      style={{
-                        flex: 1,
-                        background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
-                        color: cacheId ? '#fff' : 'var(--text-muted)',
-                        border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
-                        fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      }}
-                    >
-                      {!cacheId && <Lock size={14} />}
-                      {lang === 'en' ? a.labelEn : a.labelBm}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <button
-                  disabled={!cacheId || !!progress[card.id]}
-                  onClick={() => cacheId && card.action(cacheId, kpiToggles[card.id] ?? true, sel)}
-                  style={{
-                    background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
-                    color: cacheId ? '#fff' : 'var(--text-muted)',
-                    border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
-                    fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
-                    opacity: progress[card.id] ? 0.6 : 1,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  {!cacheId && <Lock size={14} />}
-                  {progress[card.id]
-                    ? t('Generating…', 'Sedang menjana…')
-                    : cacheId
-                      ? t('Generate', 'Jana')
-                      : t('No active session', 'Tiada sesi aktif')}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <section>
+        {sectionHeader('Data Exports', 'Eksport Data')}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {exportItems.map(renderExportRow)}
+        </div>
+      </section>
     </div>
   );
 }

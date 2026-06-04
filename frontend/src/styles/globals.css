@@ -202,6 +202,17 @@ input, select, textarea { font-family: inherit; }
 .explorer-cell.editable:hover .edit-icon,
 .explorer-cell.editable:focus-visible .edit-icon { opacity: 0.65; }
 
+/* ── Dashboard indicator status board ───────────────────────────────────────
+   Segments of the "dossier" KPI panel are real buttons (keyboard-selectable);
+   give them a visible focus ring and a subtle hover so the selection
+   affordance reads in both themes. */
+.kpi-seg { transition: background var(--transition); }
+.kpi-seg:hover { background: var(--surface-2); }
+.kpi-seg:focus-visible {
+  outline: 2px solid var(--kkm-sky);
+  outline-offset: -2px;
+}
+
 /* ── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

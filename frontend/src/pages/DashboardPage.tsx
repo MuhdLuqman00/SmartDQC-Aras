@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { ChoroplethMap, District } from '../components/ChoroplethMap';
+import { RagBadge, type Rag as RagLevel } from '../components/RagBadge';
 import { DonutCard } from '../components/DonutCard';
 import { MiniBarCard } from '../components/MiniBarCard';
 import { TrendLineCard } from '../components/TrendLineCard';
@@ -389,54 +390,106 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Indicator cards ─────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        {indicators.map(ind => {
-          const sel = ind.key === selectedIndicator;
-          const ragColor = ind.rag === 'Green' ? 'var(--success)'
-            : ind.rag === 'Amber' ? 'var(--warning)' : 'var(--danger)';
-          /* Delta COLOUR encodes good/bad, not up/down. All four indicators
-             (stunting/wasting/underweight/overweight) are prevalence rates
-             where lower-is-better, and gap = actual − npan_target (backend
-             eda/kpi.py:192). So gap > 0 (above target) is bad → red. The arrow
-             still shows raw direction. If a higher-is-better indicator is ever
-             added, gate `isBad` on its direction instead of the raw sign. */
-          const lowerIsBetter = true;
-          const isBad = lowerIsBetter ? ind.gap > 0 : ind.gap < 0;
-          return (
-            <div key={ind.key}
-              onClick={() => setSelectedIndicator(ind.key)}
-              style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                outline: sel ? '2px solid var(--kkm-blue)' : 'none',
-                borderRadius: 'var(--radius-card)', padding: '16px 18px',
-                boxShadow: 'var(--shadow-card)', cursor: 'pointer',
-              }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                  {lang === 'en' ? ind.label_en : ind.label_bm}
-                </span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: ragColor, borderRadius: 999, padding: '2px 8px' }}>
-                  {ind.rag}
-                </span>
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
-                {Number(ind.actual).toFixed(2)}%
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                {t('Target', 'Sasaran')} {Number(ind.npan_target).toFixed(0)}%
-                {ind.who_target != null ? ` · WHO ${Number(ind.who_target).toFixed(0)}%` : ''}
-                {' · '}
-                <span style={{ color: isBad ? 'var(--danger)' : 'var(--success)' }}>
-                  {ind.gap > 0 ? '▲' : '▼'} {Math.abs(Number(ind.gap)).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-        {indicators.length === 0 && (
-          <div style={{ gridColumn: '1 / -1', color: 'var(--text-muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>
+      {/* ── Indicator status board (dossier panel) ──────────────────────────
+          One framed panel under a Songket-Gold keyline, not four loose cards.
+          All indicators stay equal-width with a value-vs-target bar (target
+          tick fixed at 70% → fill past the tick = above target), so an analyst
+          compares all four at a glance. The SELECTED indicator elevates by
+          emphasis only — gold inset rule, faint fill, larger serif numeral —
+          never by hiding the others. Segments are real buttons (keyboard-
+          selectable, visible focus). */}
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '14px 18px 2px' }}>
+          <span className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+            {t('Indicators vs Target', 'Penunjuk vs Sasaran')}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {t('Select an indicator to update the map below', 'Pilih penunjuk untuk kemas kini peta di bawah')}
+          </span>
+        </div>
+
+        {indicators.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '20px', textAlign: 'center' }}>
             {t('No indicator data — run cleaning first.', 'Tiada data penunjuk — jalankan pembersihan dahulu.')}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${indicators.length}, minmax(0, 1fr))` }}>
+            {indicators.map((ind, i) => {
+              const sel = ind.key === selectedIndicator;
+              const ragColor = ind.rag === 'Green' ? 'var(--success)'
+                : ind.rag === 'Amber' ? 'var(--warning)' : 'var(--danger)';
+              /* Map the dashboard's Green/Amber/Red enum to the app-wide
+                 RagBadge level so the status reads bilingually (GOOD/BAIK,
+                 MODERATE/SEDERHANA, CRITICAL/KRITIKAL) — never a raw "Green". */
+              const ragLevel: RagLevel = ind.rag === 'Green' ? 'good'
+                : ind.rag === 'Amber' ? 'warning' : 'critical';
+              /* Delta COLOUR encodes good/bad, not up/down. All four indicators
+                 (stunting/wasting/underweight/overweight) are prevalence rates
+                 where lower-is-better, and gap = actual − npan_target (backend
+                 eda/kpi.py:192). So gap > 0 (above target) is bad → red. The
+                 arrow still shows raw direction. If a higher-is-better indicator
+                 is ever added, gate `isBad` on its direction, not the raw sign. */
+              const lowerIsBetter = true;
+              const isBad = lowerIsBetter ? ind.gap > 0 : ind.gap < 0;
+              const target = Number(ind.npan_target) || 0;
+              const value = Number(ind.actual) || 0;
+              const TICK = 70; // target sits at 70% of the track
+              const fillPct = target > 0 ? Math.min(100, (value / target) * TICK) : 0;
+              return (
+                <button
+                  key={ind.key}
+                  type="button"
+                  className="kpi-seg"
+                  onClick={() => setSelectedIndicator(ind.key)}
+                  aria-pressed={sel}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', color: 'inherit',
+                    /* Leave unselected background unset so the .kpi-seg:hover
+                       class can own hover feedback (inline would outrank it). */
+                    background: sel ? 'var(--surface-2)' : undefined,
+                    border: 'none',
+                    borderLeft: i === 0 ? 'none' : '1px solid var(--border)',
+                    boxShadow: sel ? 'inset 3px 0 0 var(--accent-strong)' : 'none',
+                    padding: '12px 18px 16px',
+                    display: 'flex', flexDirection: 'column', gap: 7,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? ind.label_en : ind.label_bm}
+                    </span>
+                    <RagBadge rag={ragLevel} lang={lang} />
+                  </div>
+                  {/* Fixed-height number row so the value-vs-target bars below stay
+                      on ONE shared baseline whether or not a column is selected
+                      (selected uses a larger serif numeral). */}
+                  <div style={{ minHeight: 38, display: 'flex', alignItems: 'flex-end' }}>
+                    <span style={{
+                      fontFamily: sel ? 'var(--font-display)' : 'var(--font-body)',
+                      fontSize: sel ? 32 : 25, fontWeight: 700, color: 'var(--text-primary)',
+                      fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+                    }}>
+                      {value.toFixed(2)}%
+                    </span>
+                  </div>
+                  {/* value-vs-target bar — tick = target; fill beyond it = above target (worse) */}
+                  <div style={{ position: 'relative', height: 6, background: 'var(--surface-3)', borderRadius: 3, marginTop: 1 }} aria-hidden>
+                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, background: ragColor, borderRadius: 3 }} />
+                    <div style={{ position: 'absolute', left: `${TICK}%`, top: -1, height: 8, width: 1.5, background: 'var(--text-muted)' }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                    {t('Target', 'Sasaran')} {target.toFixed(0)}%
+                    {ind.who_target != null ? ` · WHO ${Number(ind.who_target).toFixed(0)}%` : ''}
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: isBad ? 'var(--danger)' : 'var(--success)' }}>
+                    {ind.gap > 0 ? '▲' : '▼'} {Math.abs(Number(ind.gap)).toFixed(2)} {t('vs target', 'vs sasaran')}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

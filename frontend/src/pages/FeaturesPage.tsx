@@ -69,12 +69,74 @@ const FEATURES: Feat[] = [
     to: '/geo', techEn: 'Tracks progress to NPAN & WHO 2027 targets', techBm: 'Jejak kemajuan ke sasaran NPAN & WHO 2027' },
 ];
 
+/* Group the 16 capabilities into pipeline-ordered themes so the page stops
+   reading as an undifferentiated feature grid (audit 14 · AI-TELL). Declared
+   by feature number so the FEATURES list above stays untouched. */
+const THEMES: { key: string; en: string; bm: string; ns: number[] }[] = [
+  { key: 'ingest',  en: 'Ingest & Map',     bm: 'Masukan & Pemetaan',     ns: [1, 2, 14] },
+  { key: 'clean',   en: 'Clean & Derive',   bm: 'Pembersihan & Terbitan', ns: [3, 4, 12] },
+  { key: 'analyse', en: 'Assess & Analyse', bm: 'Penilaian & Analisis',   ns: [5, 6, 7, 11, 16] },
+  { key: 'intel',   en: 'Intelligence',     bm: 'Kecerdasan AI',          ns: [9, 10, 13] },
+  { key: 'output',  en: 'Output',           bm: 'Keluaran',               ns: [8, 15] },
+];
+
 export function FeaturesPage() {
   const { t, lang } = useLang();
   const nav = useNavigate();
 
+  const byN: Record<number, Feat> = Object.fromEntries(FEATURES.map(f => [f.n, f]));
+
+  const renderCard = (f: Feat) => (
+    <button
+      key={f.n}
+      onClick={() => nav(f.to)}
+      className="card card-hover"
+      style={{
+        textAlign: 'left', padding: 20, cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+          background: 'var(--info-bg)', color: 'var(--primary-light)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {f.icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+              #{String(f.n).padStart(2, '0')}
+            </span>
+            <span style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+              background: 'var(--success-bg)', color: 'var(--success)',
+              borderRadius: 'var(--radius-pill)', padding: '2px 8px',
+            }}>
+              {t('Live', 'Aktif')}
+            </span>
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginTop: 3 }}>
+            {lang === 'en' ? f.en : f.bm}
+          </div>
+        </div>
+        <ArrowUpRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        {lang === 'en' ? f.descEn : f.descBm}
+      </p>
+      <div style={{
+        fontSize: 12, color: 'var(--text-muted)', paddingTop: 10,
+        borderTop: '1px solid var(--border)', lineHeight: 1.5,
+      }}>
+        {lang === 'en' ? f.techEn : f.techBm}
+      </div>
+    </button>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Hero */}
       <div style={{
         background: 'var(--gradient-brand)', color: '#fff', border: 'none',
@@ -96,57 +158,17 @@ export function FeaturesPage() {
         </p>
       </div>
 
-      {/* Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
-        {FEATURES.map(f => (
-          <button
-            key={f.n}
-            onClick={() => nav(f.to)}
-            className="card card-hover"
-            style={{
-              textAlign: 'left', padding: 20, cursor: 'pointer',
-              display: 'flex', flexDirection: 'column', gap: 12,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 11, flexShrink: 0,
-                background: 'var(--info-bg)', color: 'var(--primary-light)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {f.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
-                    #{String(f.n).padStart(2, '0')}
-                  </span>
-                  <span style={{
-                    fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
-                    background: 'var(--success-bg)', color: 'var(--success)',
-                    borderRadius: 'var(--radius-pill)', padding: '2px 8px',
-                  }}>
-                    {t('Live', 'Aktif')}
-                  </span>
-                </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginTop: 3 }}>
-                  {lang === 'en' ? f.en : f.bm}
-                </div>
-              </div>
-              <ArrowUpRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              {lang === 'en' ? f.descEn : f.descBm}
-            </p>
-            <div style={{
-              fontSize: 12, color: 'var(--text-muted)', paddingTop: 10,
-              borderTop: '1px solid var(--border)', lineHeight: 1.5,
-            }}>
-              {lang === 'en' ? f.techEn : f.techBm}
-            </div>
-          </button>
-        ))}
-      </div>
+      {/* Themed sections — one gold keyline header per pipeline stage */}
+      {THEMES.map(theme => (
+        <section key={theme.key}>
+          <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
+            {t(theme.en, theme.bm)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
+            {theme.ns.map(n => byN[n] && renderCard(byN[n]))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
