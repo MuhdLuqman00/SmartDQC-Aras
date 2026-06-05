@@ -68,10 +68,15 @@ _DAERAH_COLS   = ["daerah", "Daerah", "DAERAH", "district", "District", "kawasan
 _FORECAST_PERIODS = 4
 
 
-def _rag(actual: float, target: float) -> str:
+def _rag(actual: float, target: float, amber_tolerance: float = 0.20) -> str:
+    """Green ≤ target, Amber ≤ target×(1+amber_tolerance), else Red.
+
+    amber_tolerance is configurable (Settings → Thresholds, key
+    rag_amber_tolerance). The 0.20 default preserves the historical
+    target×1.20 amber band so existing callers are unchanged."""
     if actual <= target:
         return "Green"
-    if actual <= target * 1.20:
+    if actual <= target * (1 + amber_tolerance):
         return "Amber"
     return "Red"
 
@@ -108,7 +113,8 @@ def _resolve_targets(
 
 
 def _group_breakdown(
-    df: pd.DataFrame, group_col: str, key_name: str, npan_t: dict[str, float]
+    df: pd.DataFrame, group_col: str, key_name: str, npan_t: dict[str, float],
+    amber_tolerance: float = 0.20,
 ) -> list[dict]:
     """Per-group indicator rates + RAG status, keyed by flag name.
 
@@ -132,7 +138,7 @@ def _group_breakdown(
                 grp[col].fillna(0).astype(bool).sum() / n * 100, 2
             )
             rates[flag] = rate
-            status[flag] = _rag(rate, npan_t[kpi_key])
+            status[flag] = _rag(rate, npan_t[kpi_key], amber_tolerance)
         rows.append({key_name: str(value), "n": int(n),
                      "rates": rates, "status": status})
     return rows
@@ -143,6 +149,7 @@ def compute_kpi_dashboard(
     *,
     npan: dict[str, float] | None = None,
     who: dict[str, float] | None = None,
+    amber_tolerance: float = 0.20,
 ) -> dict:
     empty = {
         "overall_status": "Green",
@@ -190,20 +197,20 @@ def compute_kpi_dashboard(
             "npan_target":  npan_target,
             "who_target":   who_target,
             "gap":          round(actual - npan_target, 2),
-            "rag":          _rag(actual, npan_target),
-            "who_status":   _rag(actual, who_target) if who_target is not None else None,
+            "rag":          _rag(actual, npan_target, amber_tolerance),
+            "who_status":   _rag(actual, who_target, amber_tolerance) if who_target is not None else None,
         })
 
     # by_state — group on the first available state column
     state_col = next((c for c in _DISTRICT_COLS if c in df.columns), None)
-    by_state = _group_breakdown(df, state_col, "state", npan_t) if state_col else []
+    by_state = _group_breakdown(df, state_col, "state", npan_t, amber_tolerance) if state_col else []
 
     # by_daerah — same shape as by_state, scoped to the district column
     # if present. When the endpoint is called with ?state=X the upstream
     # filter has already narrowed df to that state, so by_daerah here is
     # already state-scoped (or national when unfiltered).
     daerah_col = next((c for c in _DAERAH_COLS if c in df.columns), None)
-    by_daerah = _group_breakdown(df, daerah_col, "district", npan_t) if daerah_col else []
+    by_daerah = _group_breakdown(df, daerah_col, "district", npan_t, amber_tolerance) if daerah_col else []
 
     # by_gender — tolerant column detection
     gender_col = next(
@@ -211,7 +218,7 @@ def compute_kpi_dashboard(
          if c in df.columns),
         None,
     )
-    by_gender = _group_breakdown(df, gender_col, "gender", npan_t) if gender_col else []
+    by_gender = _group_breakdown(df, gender_col, "gender", npan_t, amber_tolerance) if gender_col else []
 
     # by_income — indicator prevalence cross-cut by income group (B40/M40/T20)
     income_col = next(
@@ -221,7 +228,7 @@ def compute_kpi_dashboard(
          if c in df.columns),
         None,
     )
-    by_income = _group_breakdown(df, income_col, "income", npan_t) if income_col else []
+    by_income = _group_breakdown(df, income_col, "income", npan_t, amber_tolerance) if income_col else []
 
     # by_age — bucket months (<24 => "Bawah 2 Tahun") else "2-5 Tahun";
     # fall back to a year column if no months column exists.
@@ -249,7 +256,7 @@ def compute_kpi_dashboard(
         else:
             age_df = None
     by_age = (
-        _group_breakdown(age_df, "_age_group", "group", npan_t)
+        _group_breakdown(age_df, "_age_group", "group", npan_t, amber_tolerance)
         if age_df is not None else []
     )
 
@@ -320,6 +327,7 @@ def compute_trajectory_narratives(
     historical_snapshots: list[dict],
     current_breakdown: list[dict],
     npan: dict[str, float] | None = None,
+    atrisk_tolerance: float = 0.30,
 ) -> list[dict]:
     """
     Compute per-district, per-KPI trajectory narratives from historical indicator snapshots.
@@ -380,7 +388,7 @@ def compute_trajectory_narratives(
                     f"{district} dijangka mencapai sasaran {kpi_key} sebanyak {target}% menjelang 2027. "
                     f"Pada kadar semasa ({slope:+.2f} mata peratusan/tempoh), kadar akan mencapai {forecast_rate:.1f}%."
                 )
-            elif forecast_rate <= target * 1.30:
+            elif forecast_rate <= target * (1 + atrisk_tolerance):
                 status    = "At Risk"
                 status_bm = "Berisiko"
                 narrative_en = (

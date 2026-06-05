@@ -14,6 +14,8 @@ interface Thresholds {
   duplicate_rate_warn: number;
   duplicate_rate_fail: number;
   outlier_zscore_threshold: number;
+  rag_amber_tolerance: number;
+  trajectory_atrisk_tolerance: number;
 }
 
 const DEFAULT_THRESHOLDS: Thresholds = {
@@ -22,6 +24,8 @@ const DEFAULT_THRESHOLDS: Thresholds = {
   duplicate_rate_warn: 0.02,
   duplicate_rate_fail: 0.10,
   outlier_zscore_threshold: 3.0,
+  rag_amber_tolerance: 0.20,
+  trajectory_atrisk_tolerance: 0.30,
 };
 
 interface Rule { id: string; description: string; enabled: boolean; }
@@ -245,6 +249,20 @@ export function SettingsPage() {
       max: 5, step: 0.1, unit: '', scale: 1, recommended: 3.0,
       descEn: 'Numeric values further than this many standard deviations from the column mean are flagged as outliers. 3.0 is standard for normal distributions.',
       descBm: 'Nilai numerik yang melebihi bilangan sisihan piawai ini dari min lajur akan ditanda sebagai pencilan. 3.0 adalah piawai untuk taburan normal.',
+    },
+    {
+      key: 'rag_amber_tolerance',
+      labelEn: 'RAG Amber Band — Tolerance', labelBm: 'Jalur Amber RAG — Toleransi',
+      max: 100, step: 1, unit: '%', scale: 100, recommended: 20,
+      descEn: 'How far an indicator may exceed its target before turning Red. Within target → Green; up to this % above target → Amber; beyond → Red. Drives the dashboard, map and breakdown traffic lights.',
+      descBm: 'Sejauh mana penunjuk boleh melebihi sasaran sebelum bertukar Merah. Dalam sasaran → Hijau; sehingga % ini di atas sasaran → Amber; melebihi → Merah. Memandu lampu isyarat papan pemuka, peta dan pecahan.',
+    },
+    {
+      key: 'trajectory_atrisk_tolerance',
+      labelEn: 'Trajectory At-Risk — Tolerance', labelBm: 'Trajektori Berisiko — Toleransi',
+      max: 100, step: 1, unit: '%', scale: 100, recommended: 30,
+      descEn: 'On the target trajectory forecast, a district projected within this % above target is flagged "At Risk"; beyond it is "Off Track". Applies to the Geo & Risk trajectory list.',
+      descBm: 'Pada unjuran trajektori sasaran, daerah yang diunjur dalam % ini di atas sasaran ditanda "Berisiko"; melebihi itu "Tersasar". Terpakai pada senarai trajektori Geo & Risiko.',
     },
   ];
 

@@ -7,6 +7,7 @@ import { SessionGuard } from '../components/SessionGuard';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { ColumnHistogram } from '../components/ColumnHistogram';
 import { DonutCard } from '../components/DonutCard';
+import { StatusClassBars } from '../components/StatusClassBars';
 import { catalogByHome, isPieArrayBlock, isDonutObjectBlock } from '../lib/chartCatalog';
 import { translateIssue } from '../lib/issueCatalog';
 import { ErrorRetry } from '../components/ErrorRetry';
@@ -29,6 +30,17 @@ const DIM_LABELS: Record<string, { en: string; bm: string }> = {
   zscore_coverage:  { en: 'Z-score Coverage',      bm: 'Liputan Z-skor' },
 };
 const DIM_ORDER = Object.keys(DIM_LABELS);
+
+/* Diverging colour for the BMI-status donut so deficiency (coral) and excess
+   (gold) are distinguishable instead of both collapsing to the same coral the
+   3-bucket default produces. Reuses existing tokens only. */
+const bmiStatusColor = (label: string): string => {
+  const l = label.toLowerCase();
+  if (/normal|baik|healthy/.test(l)) return 'var(--status-good)';
+  if (/obes|over|lebih|gemuk/.test(l)) return 'var(--chart-4)';
+  if (/under|kurang|susut|thin|wast/.test(l)) return 'var(--status-critical)';
+  return 'var(--status-neutral)';
+};
 
 function ScoreGauge({ score }: { score: number }) {
   const rag = scoreToRag(score);
@@ -313,29 +325,45 @@ export function QualityPage() {
         </div>
 
         {/* ── Classification breakdown ─────────────────────────────────────
-            WHO z-score classes (WAZ/HAZ/BAZ) + BMI status pie. Hidden when
-            the dataset has none of these columns. */}
-        {blocks && catalogByHome('quality').some(e => e.key in blocks) && (
-          <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-              {t('Classification breakdown', 'Pecahan klasifikasi')}
+            WHO z-score classes (WAZ/HAZ/BAZ) are ordinal severity scales, so
+            they render as one stacked-bar card with a shared severity key
+            (C1 — same-coloured pie slices were unreadable). The BMI status
+            split stays a donut but with a diverging colour map so deficiency
+            and excess don't both read coral. Hidden when the dataset has none
+            of these columns. */}
+        {blocks && catalogByHome('quality').some(e => e.key in blocks) && (() => {
+          const classBars = catalogByHome('quality')
+            .filter(e => e.shape === 'donut_object' && isDonutObjectBlock(blocks[e.key]))
+            .map(e => {
+              const b = blocks[e.key] as { label: string; data: { label: string; count: number }[] };
+              return { key: e.key, titleEn: e.titleEn, titleBm: e.titleBm, data: b.data };
+            });
+          const bmiEntry = catalogByHome('quality')
+            .find(e => e.shape === 'pie_array' && isPieArrayBlock(blocks[e.key]));
+          return (
+            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {t('Classification breakdown', 'Pecahan klasifikasi')}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
+                {classBars.length > 0 && (
+                  <StatusClassBars
+                    title={t('WHO nutrition status (WAZ / HAZ / BAZ)', 'Status pemakanan WHO (WAZ / HAZ / BAZ)')}
+                    bars={classBars}
+                    lang={lang}
+                  />
+                )}
+                {bmiEntry && (
+                  <DonutCard
+                    title={lang === 'en' ? bmiEntry.titleEn : bmiEntry.titleBm}
+                    data={blocks[bmiEntry.key] as { label: string; count: number }[]}
+                    colorFor={bmiStatusColor}
+                  />
+                )}
+              </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-              {catalogByHome('quality').map(entry => {
-                const b = blocks[entry.key];
-                if (!b) return null;
-                const title = lang === 'en' ? entry.titleEn : entry.titleBm;
-                if (entry.shape === 'donut_object' && isDonutObjectBlock(b)) {
-                  return <DonutCard key={entry.key} title={title} data={b.data} />;
-                }
-                if (entry.shape === 'pie_array' && isPieArrayBlock(b)) {
-                  return <DonutCard key={entry.key} title={title} data={b} />;
-                }
-                return null;
-              })}
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </SessionGuard>
   );

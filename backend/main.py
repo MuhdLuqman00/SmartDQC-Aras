@@ -2264,7 +2264,8 @@ async def report_pptx_endpoint(
     _src = (entry.get("stats") or {}).get("source_type") or "myvass"
     eda_result = run_eda_auto(entry["df"], _src)
     _tgt = _load_kpi_targets(db)
-    kpi_result = compute_kpi_dashboard(entry["df"], npan=_tgt["npan"], who=_tgt["who"]) if include_kpi else None
+    _amber, _ = _rag_tolerances(db)
+    kpi_result = compute_kpi_dashboard(entry["df"], npan=_tgt["npan"], who=_tgt["who"], amber_tolerance=_amber) if include_kpi else None
     narrative = _get_or_build_narrative(cache_id, entry)
     data = build_pptx_bytes(eda_result, narrative, kpi_result=kpi_result, charts=_parse_charts(charts))
     _log_audit(action="report.pptx", detail=f"cache_id={cache_id} charts={charts or 'default'}")
@@ -2300,7 +2301,8 @@ async def report_pdf_endpoint(
     _src = (entry.get("stats") or {}).get("source_type") or "myvass"
     eda_result = run_eda_auto(entry["df"], _src)
     _tgt = _load_kpi_targets(db)
-    kpi_result = compute_kpi_dashboard(entry["df"], npan=_tgt["npan"], who=_tgt["who"]) if include_kpi else None
+    _amber, _ = _rag_tolerances(db)
+    kpi_result = compute_kpi_dashboard(entry["df"], npan=_tgt["npan"], who=_tgt["who"], amber_tolerance=_amber) if include_kpi else None
     narrative = _get_or_build_narrative(cache_id, entry)
     data = build_pdf_bytes(eda_result, narrative, kpi_result=kpi_result, charts=_parse_charts(charts))
     _log_audit(action="report.pdf", detail=f"cache_id={cache_id} charts={charts or 'default'}")
@@ -2360,7 +2362,8 @@ async def kpi_dashboard_endpoint(
         if state_col:
             df = df[df[state_col].astype(str).str.strip().str.lower() == state.strip().lower()]
     _tgt = _load_kpi_targets(db)
-    result = compute_kpi_dashboard(df, npan=_tgt["npan"], who=_tgt["who"])
+    _amber, _ = _rag_tolerances(db)
+    result = compute_kpi_dashboard(df, npan=_tgt["npan"], who=_tgt["who"], amber_tolerance=_amber)
     return JSONResponse(content=json_safe(result))
 
 
@@ -2422,6 +2425,7 @@ async def kpi_trajectory(req: TrajectoryRequest, db=Depends(get_db)):
     return compute_trajectory_narratives(
         req.historical_snapshots, req.current_breakdown,
         npan=_load_kpi_targets(db)["npan"],
+        atrisk_tolerance=_rag_tolerances(db)[1],
     )
 
 
@@ -2439,7 +2443,7 @@ async def kpi_trajectory_auto(
             404, "cache_id not found — run /clean/run first or check the UUID"
         )
     snapshots = compute_district_period_snapshots(entry["df"])
-    narratives = compute_trajectory_narratives(snapshots, [], npan=_load_kpi_targets(db)["npan"])
+    narratives = compute_trajectory_narratives(snapshots, [], npan=_load_kpi_targets(db)["npan"], atrisk_tolerance=_rag_tolerances(db)[1])
     periods = sorted({s["period"] for s in snapshots})
     return JSONResponse(content=json_safe({
         "narratives":    narratives,
@@ -4085,6 +4089,11 @@ _DEFAULT_THRESHOLDS = {
     "duplicate_rate_warn": 0.02,
     "duplicate_rate_fail": 0.10,
     "outlier_zscore_threshold": 3.0,
+    # RAG band tolerances (C2). Stored as fractions above target. 0.20 / 0.30
+    # preserve the historical target×1.20 amber band and target×1.30 trajectory
+    # "At Risk" band so behaviour is unchanged until an admin edits them.
+    "rag_amber_tolerance": 0.20,
+    "trajectory_atrisk_tolerance": 0.30,
 }
 
 _DEFAULT_RULES: dict = {
@@ -4122,6 +4131,16 @@ def _load_kpi_targets(db) -> dict:
         "npan": {**defaults["npan"], **(stored.get("npan") or {})},
         "who":  {**defaults["who"],  **(stored.get("who")  or {})},
     }
+
+
+def _rag_tolerances(db) -> tuple[float, float]:
+    """(amber_tolerance, atrisk_tolerance) from saved thresholds, falling back
+    to the historical defaults when an older threshold.all has no such keys."""
+    thr = _get_setting("threshold.all", _DEFAULT_THRESHOLDS, db)
+    return (
+        float(thr.get("rag_amber_tolerance", _DEFAULT_THRESHOLDS["rag_amber_tolerance"])),
+        float(thr.get("trajectory_atrisk_tolerance", _DEFAULT_THRESHOLDS["trajectory_atrisk_tolerance"])),
+    )
 
 
 def _set_setting(key: str, value, db) -> None:
