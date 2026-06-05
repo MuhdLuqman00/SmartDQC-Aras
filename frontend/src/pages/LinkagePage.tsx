@@ -502,16 +502,42 @@ export function LinkagePage() {
                 />
                 {t('Cross-dataset only', 'Merentas dataset sahaja')}
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+              <label
+                title={t('Show only people whose linked records disagree on an identity field.',
+                         'Tunjuk hanya orang yang rekod terpautnya bercanggah pada medan identiti.')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>
                 <input
                   type="checkbox"
                   checked={showOnlyConflicts}
                   onChange={e => setShowOnlyConflicts(e.target.checked)}
                 />
                 {t('Conflicts only', 'Konflik sahaja')}
+                <Info size={12} style={{ color: 'var(--text-muted)' }} />
               </label>
             </div>
           </div>
+
+          {/* B1 clarity: explain what a conflict is + the severity colour key
+             (matches the cell highlights and the row pill) so "2 konflik" and
+             coloured cells are self-explaining. Shown only when the result
+             actually contains conflicts. */}
+          {result.profiles.some(p => p.conflicts.length > 0) && (
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 14px', fontSize: 11, color: 'var(--text-secondary)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Info size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                {t('Conflicts = linked records that disagree on an identity field (gender, state, district, DOB or name).',
+                   'Konflik = rekod terpaut yang bercanggah pada medan identiti (jantina, negeri, daerah, tarikh lahir atau nama).')}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--status-watch)', flexShrink: 0 }} />
+                {t('Soft — minor, likely the same person', 'Lembut — kecil, mungkin orang sama')}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--status-critical)', flexShrink: 0 }} />
+                {t('Hard / Strong — clear disagreement, review the match', 'Keras / Kuat — percanggahan jelas, semak padanan')}
+              </span>
+            </div>
+          )}
 
           {result.warning && (
             <div style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text-primary)', marginBottom: 14 }}>
