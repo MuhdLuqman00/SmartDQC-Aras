@@ -7,11 +7,11 @@
 # but lets you change the LLM model without editing this file — just edit the
 # .env next to it (copy from .env.standalone.example) or pass it inline:
 #
-#   OLLAMA_MODEL=qwen3.5:4b-q4_K_M docker compose -f docker-compose.standalone.yml up -d
+#   OLLAMA_MODEL=hf.co/mradermacher/gemma-4-E4B-GGUF:Q6_K docker compose -f docker-compose.standalone.yml up -d
 #
 # Whatever model you set is pulled by Ollama on startup, so it must be a valid
-# Ollama tag (https://ollama.com/library) and the machine needs internet the
-# first time that model is pulled.
+# Ollama tag (https://ollama.com/library) or an hf.co/<repo>:<quant> GGUF
+# reference, and the machine needs internet the first time that model is pulled.
 
 services:
   smartdqc:
@@ -22,7 +22,7 @@ services:
       - "8080:80"     # web UI  ->  open http://localhost:8080
     environment:
       # ── The knob you wanted: change the model here (or in .env) ──────────
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:4b-q4_K_M}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-hf.co/mradermacher/gemma-4-E4B-GGUF:Q6_K}
       # Keep the model resident between requests so the AI insight button
       # doesn't cold-start (and 500) after an idle period. "-1" = forever.
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}

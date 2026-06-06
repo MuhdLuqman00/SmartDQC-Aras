@@ -7,7 +7,7 @@ import httpx
 logger = logging.getLogger("smartdqc.ollama")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b-it-q4_K_M")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "hf.co/mradermacher/gemma-4-E4B-GGUF:Q6_K")
 # Keep the model resident in memory between requests so the first click after
 # an idle period doesn't pay a cold model-load (the root cause of the post-idle
 # "failed to generate narrative" 500). "-1" = keep loaded indefinitely; can be

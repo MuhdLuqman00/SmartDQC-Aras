@@ -59,8 +59,12 @@ function prioColor(p?: string): string {
 
 export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
   const { t, lang } = useLang();
-  const pick = (o?: { bm?: string; en?: string }) =>
-    (lang === 'en' ? o?.en : o?.bm) || o?.en || o?.bm || '';
+  /* Scrub placeholders before picking so a templated summary/5W1H field — or a
+     stale cached narrative built by the old prompt — never renders as content. */
+  const pick = (o?: { bm?: string; en?: string }) => {
+    const en = cleanField(o?.en), bm = cleanField(o?.bm);
+    return (lang === 'en' ? en : bm) || en || bm || '';
+  };
 
   const summary = pick(raw.executive_summary);
   const insights = raw.insights_5w1h || {};

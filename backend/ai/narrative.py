@@ -2,15 +2,22 @@ import json
 import re
 from .ollama_client import generate, OllamaError
 
-INSIGHTS_SYSTEM = """/no_think
+_ANTI_ECHO_RULES = """Rules (follow exactly):
+- Fill EVERY field with real, specific content derived from the dataset context. Never copy the template.
+- The "..." in the schema below are placeholders — replace each one. Never output a literal "..." or an empty string.
+- Never output the words "in English", "in Bahasa Malaysia", "dalam bahasa Malaysia", or any field label as a value.
+- "en" must be English prose; "bm" must be Bahasa Malaysia prose. They must be genuine translations of each other, not the same string and not instructions about which language to use.
+- Respond with valid JSON only. No markdown, no commentary outside the JSON."""
+
+INSIGHTS_SYSTEM = f"""/no_think
 You are SmartDQC, a bilingual (Bahasa Malaysia and English) data quality analyst for KKM (Kementerian Kesihatan Malaysia).
 You analyse child nutrition and health data and produce structured JSON insights.
-Always respond with valid JSON only. No markdown, no explanation outside the JSON."""
+{_ANTI_ECHO_RULES}"""
 
-RECOMMENDATIONS_SYSTEM = """/no_think
+RECOMMENDATIONS_SYSTEM = f"""/no_think
 You are SmartDQC, a bilingual (Bahasa Malaysia and English) public health advisor for KKM.
 You produce actionable recommendations based on data insights.
-Always respond with valid JSON only. No markdown, no explanation outside the JSON."""
+{_ANTI_ECHO_RULES}"""
 
 
 def build_context(eda_result: dict) -> str:
@@ -134,6 +141,37 @@ def _is_echoed(rec: dict) -> bool:
     return _is_placeholder(rec.get("en")) and _is_placeholder(rec.get("bm"))
 
 
+def _scrub_bilingual(field) -> dict:
+    """Blank out any bm/en value that is scaffold/placeholder text.
+
+    The recommendation guards only cover the recommendation list; a templated
+    `executive_summary` or `insights_5w1h` field (e.g. a leaked "...") would
+    otherwise render raw. Returns a {bm, en} dict with placeholders cleared."""
+    if not isinstance(field, dict):
+        return {"bm": "", "en": ""}
+    out = dict(field)
+    for k in ("bm", "en"):
+        if _is_placeholder(out.get(k)):
+            out[k] = ""
+    return out
+
+
+def _scrub_insights(parsed: dict) -> dict:
+    """Clear placeholder/scaffold text from the summary + 5W1H fields so a model
+    slip (or a stale cached narrative built by the old prompt) never renders as
+    content. Mirrors the recommendation guard for the narrative body."""
+    if not isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed.get("executive_summary"), dict):
+        parsed["executive_summary"] = _scrub_bilingual(parsed["executive_summary"])
+    w5h1 = parsed.get("insights_5w1h")
+    if isinstance(w5h1, dict):
+        parsed["insights_5w1h"] = {
+            k: _scrub_bilingual(v) for k, v in w5h1.items()
+        }
+    return parsed
+
+
 def _insights_fallback(message_en: str, message_bm: str, flag: str) -> dict:
     """A clearly-flagged, non-blank insights payload.
 
@@ -155,7 +193,18 @@ def generate_insights(eda_result: dict) -> dict:
 Dataset context:
 {context}
 
-Respond with this exact JSON structure:
+Example of the REQUIRED shape, filled with real content (use the actual numbers from the context above, not these):
+{{
+  "executive_summary": {{
+    "en": "The dataset of 1,240 records scored 82 (grade B); stunting affects 11.3% of children aged 0-59 months, concentrated in Kelantan.",
+    "bm": "Set data 1,240 rekod mencatat skor 82 (gred B); kekerdilan menjejaskan 11.3% kanak-kanak berumur 0-59 bulan, tertumpu di Kelantan."
+  }},
+  "insights_5w1h": {{
+    "who": {{"en": "Children aged 0-59 months in the surveyed districts.", "bm": "Kanak-kanak berumur 0-59 bulan di daerah yang dikaji."}}
+  }}
+}}
+
+Now produce the response for THIS dataset using this exact JSON structure (replace every "..." with real content):
 {{
   "executive_summary": {{"bm": "...", "en": "..."}},
   "insights_5w1h": {{
@@ -181,7 +230,7 @@ Respond with this exact JSON structure:
             "empty_response",
         )
     try:
-        return _extract_json(raw)
+        return _scrub_insights(_extract_json(raw))
     except Exception:
         return _insights_fallback(
             "AI insight could not be parsed (model returned non-JSON output). "
@@ -209,7 +258,17 @@ Dataset context:
 
 Key insight: {summary_bm}
 
-Respond with this exact JSON structure:
+Example of ONE filled recommendation (real content — yours must be derived from the context above, not copied):
+{{
+  "action_en": "Prioritise stunting screening in Kelantan",
+  "action_bm": "Utamakan saringan kekerdilan di Kelantan",
+  "priority": "high",
+  "en": "Deploy mobile screening teams to the 3 districts with stunting above 15% within the next quarter.",
+  "bm": "Hantar pasukan saringan bergerak ke 3 daerah dengan kekerdilan melebihi 15% dalam suku tahun berikutnya.",
+  "reasoning": "Stunting is the highest indicator at 11.3% and is geographically concentrated."
+}}
+
+Now respond with this exact JSON structure (replace every "..." with real content):
 {{
   "recommendations": [
     {{
@@ -223,7 +282,7 @@ Respond with this exact JSON structure:
   ]
 }}
 
-Both action_en and action_bm are REQUIRED — never leave either blank, never reuse the same string for both. Provide 3-5 recommendations ordered by priority (high/medium/low)."""
+action_en/en must be English and action_bm/bm must be Bahasa Malaysia — never leave either blank, never reuse the same string for both, never write the word "English" or "Malaysia" as the value. Provide 3-5 recommendations ordered by priority (high/medium/low)."""
 
     if not raw_ok(insights):
         # Insights failed; don't waste a second model call or imply success.
