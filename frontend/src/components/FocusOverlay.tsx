@@ -1,12 +1,11 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /* Reusable focus/fullscreen overlay for analysis panels (E1b).
-   Deliberately reuses the app's existing modal language — the
-   .modal-backdrop/.modal-card animations, the rgba(0,0,0,0.5) scrim, flat
-   surface card, and the serif-title + gold-keyline dossier header — rather
-   than introducing a new glassy modal skin. Esc and backdrop-click close;
-   focus moves to the close button and body scroll is locked while open. */
+   Rendered via createPortal to document.body so position:fixed anchors to
+   the true viewport — not to the transformed .page-enter ancestor, which
+   establishes a containing block and breaks fixed positioning. */
 export function FocusOverlay({ open, onClose, title, children }: {
   open: boolean;
   onClose: () => void;
@@ -30,7 +29,7 @@ export function FocusOverlay({ open, onClose, title, children }: {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       role="dialog" aria-modal="true" aria-label={title}
@@ -78,6 +77,7 @@ export function FocusOverlay({ open, onClose, title, children }: {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
