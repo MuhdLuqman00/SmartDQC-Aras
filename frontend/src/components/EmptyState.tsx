@@ -19,7 +19,7 @@ export function EmptyState({ icon, title, description, action }: Props) {
         <div style={{ color: 'var(--text-muted)', opacity: 0.6 }}>{icon}</div>
       )}
       <h3 style={{
-        fontFamily: 'var(--font-display)',
+        fontFamily: 'var(--font-body)',
         fontWeight: 700, fontSize: 18, color: 'var(--text-primary)',
       }}>
         {title}

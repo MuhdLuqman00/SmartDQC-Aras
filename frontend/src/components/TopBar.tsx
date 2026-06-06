@@ -53,7 +53,7 @@ export function TopBar() {
           below it (letterhead alignment). */}
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         <h1 className="kkm-keyline" style={{
-          fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16,
+          fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 16,
           color: 'var(--text-primary)', whiteSpace: 'nowrap',
         }}>
           {lang === 'en' ? page.en : page.bm}

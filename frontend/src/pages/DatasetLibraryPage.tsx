@@ -171,7 +171,7 @@ export function DatasetLibraryPage() {
           onClick={() => setComparison(null)}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, maxWidth: 700, width: '90%', maxHeight: '80vh', overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, marginBottom: 16 }}>
+            <h3 style={{ fontFamily: 'var(--font-body)', fontSize: 16, fontWeight: 700, marginBottom: 16 }}>
               {t('Comparison Results', 'Hasil Perbandingan')}
             </h3>
             {(() => {

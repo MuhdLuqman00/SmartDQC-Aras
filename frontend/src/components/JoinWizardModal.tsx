@@ -189,7 +189,7 @@ export function JoinWizardModal({ left, right, onClose, onJoined }: Props): JSX.
         {/* ── Header ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
           <GitMerge size={20} style={{ color: 'var(--kkm-blue)' }} />
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, margin: 0, flex: 1 }}>
+          <h3 style={{ fontFamily: 'var(--font-body)', fontSize: 17, fontWeight: 700, margin: 0, flex: 1 }}>
             {t('Join Datasets', 'Cantum Set Data')}
           </h3>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>

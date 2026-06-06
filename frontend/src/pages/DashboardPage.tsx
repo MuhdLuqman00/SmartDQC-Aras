@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { Upload, X, ChevronDown, ChevronUp, TrendingUp, Maximize2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { ChoroplethMap, District } from '../components/ChoroplethMap';
+import { FocusOverlay } from '../components/FocusOverlay';
 import { RagBadge, type Rag as RagLevel } from '../components/RagBadge';
 import { DonutCard } from '../components/DonutCard';
 import { MiniBarCard } from '../components/MiniBarCard';
@@ -202,6 +203,8 @@ export function DashboardPage() {
      by default so the dashboard stays scannable on first paint. */
   const [blocks, setBlocks] = useState<Record<string, unknown> | null>(null);
   const [popOpen, setPopOpen] = useState(false);
+  const [panelFocus, setPanelFocus] = useState(false);
+  const [stateFilter, setStateFilter] = useState('');
 
   /* fetch summary (always-on) */
   useEffect(() => {
@@ -244,6 +247,19 @@ export function DashboardPage() {
     fetchKpi(code);
   };
 
+  useEffect(() => {
+    setStateFilter(selectedStateCode ? codeToStateName(selectedStateCode) : '');
+  }, [selectedStateCode]);
+
+  const handleFilterChange = (val: string) => {
+    setStateFilter(val);
+    const match = Object.entries(CODE_TO_STATE_NAME).find(
+      ([, name]) => name.toLowerCase() === val.trim().toLowerCase()
+    );
+    if (match) handleStateClick(match[0]);
+    else if (val === '') handleStateClick(null);
+  };
+
   /* ── Welcome / empty state ───────────────────────────────────────────── */
   if (!loading && summary?.session_count === 0) {
     return (
@@ -255,9 +271,9 @@ export function DashboardPage() {
           width: 56, height: 56, borderRadius: 14,
           background: 'var(--kkm-sky)', color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22,
+          fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 22,
         }}>S</div>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+        <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
           {t('Welcome to SmartDQC', 'Selamat datang ke SmartDQC')}
         </h2>
         <p style={{ color: 'var(--text-secondary)', maxWidth: 440, lineHeight: 1.7 }}>
@@ -271,7 +287,7 @@ export function DashboardPage() {
           style={{
             background: 'var(--kkm-blue)', color: '#fff', border: 'none',
             borderRadius: 'var(--radius-btn)', padding: '12px 28px',
-            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15,
+            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15,
             display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
           }}
         >
@@ -330,7 +346,7 @@ export function DashboardPage() {
 
       {/* ── Header + indicator selector ─────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, margin: 0 }}>
+        <h1 style={{ fontFamily: 'var(--font-body)', fontSize: 20, fontWeight: 700, margin: 0 }}>
           {t('Child Nutrition Status (Under 5 Years Old)', 'Status Pemakanan Kanak-Kanak Bawah 5 Tahun')}
         </h1>
         <div style={{ flex: 1 }} />
@@ -481,9 +497,12 @@ export function DashboardPage() {
                     </span>
                   </div>
                   {/* value-vs-target bar — tick = target; fill beyond it = above target (worse) */}
-                  <div style={{ position: 'relative', height: 6, background: 'var(--surface-3)', borderRadius: 3, marginTop: 1 }} aria-hidden>
+                  <div style={{ position: 'relative', height: 6, background: 'var(--surface-3)', borderRadius: 3, marginTop: 1, marginBottom: 18 }} aria-hidden>
                     <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, background: ragColor, borderRadius: 3 }} />
-                    <div style={{ position: 'absolute', left: `${TICK}%`, top: -1, height: 8, width: 1.5, background: 'var(--text-muted)' }} />
+                    <div style={{ position: 'absolute', left: `${TICK}%`, top: -3, height: 12, width: 2, background: 'var(--text-secondary)', borderRadius: 1 }} />
+                    <div style={{ position: 'absolute', left: `${TICK}%`, top: 14, transform: 'translateX(-50%)', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {t('Target', 'Sasaran')}
+                    </div>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     {t('Target', 'Sasaran')} {target.toFixed(0)}%
@@ -524,6 +543,28 @@ export function DashboardPage() {
               </button>
             )}
           </div>
+          {mapDistricts.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <input
+                type="text"
+                list="dash-state-filter"
+                value={stateFilter}
+                onChange={e => handleFilterChange(e.target.value)}
+                placeholder={t('Filter by state…', 'Tapis mengikut negeri…')}
+                style={{
+                  width: '100%', padding: '6px 10px', fontSize: 12,
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  borderRadius: 8, color: 'var(--text-primary)', outline: 'none',
+                  fontFamily: 'var(--font-body)',
+                }}
+              />
+              <datalist id="dash-state-filter">
+                {Object.entries(CODE_TO_STATE_NAME).map(([code, name]) => (
+                  <option key={code} value={name} />
+                ))}
+              </datalist>
+            </div>
+          )}
           {mapDistricts.length === 0
             ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                 {t('No state data for this dataset.', 'Tiada data negeri untuk dataset ini.')}
@@ -535,38 +576,145 @@ export function DashboardPage() {
           flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
         }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
-            {drilledToDaerah
-              ? `${t('By Daerah', 'Mengikut Daerah')} — ${codeToStateName(selectedStateCode!)}`
-              : t('By State', 'Mengikut Negeri')}
-            {selInd ? ` · ${lang === 'en' ? selInd.label_en : selInd.label_bm}` : ''}
-          </div>
-          {sortedStates.map(s => {
-            const v = Number(s.rates[selectedIndicator] ?? 0);
-            const label = breakdownKey === 'district' ? s.district : s.state;
-            return (
-              <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
-                  <span>{label}</span>
-                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
-                    <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
-                  </span>
-                </div>
-                <div style={{ height: 8, background: ragTrack(s.status[selectedIndicator]), borderRadius: 4 }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(s.status[selectedIndicator]), borderRadius: 4 }} />
-                </div>
-              </div>
-            );
-          })}
-          {sortedStates.length === 0 && (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-              {drilledToDaerah
-                ? t('No daerah data for this state.', 'Tiada data daerah untuk negeri ini.')
-                : t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+              {selectedStateCode && indicators.length > 0
+                ? `${codeToStateName(selectedStateCode)} · ${t('All Indicators', 'Semua Penunjuk')}`
+                : drilledToDaerah
+                  ? `${t('By Daerah', 'Mengikut Daerah')} — ${codeToStateName(selectedStateCode!)}`
+                  : t('By State', 'Mengikut Negeri')}
+              {!(selectedStateCode && indicators.length > 0) && selInd
+                ? ` · ${lang === 'en' ? selInd.label_en : selInd.label_bm}`
+                : ''}
             </div>
+            {(selectedStateCode ? indicators.length > 0 : sortedStates.length > 0) && (
+              <button
+                onClick={() => setPanelFocus(true)}
+                aria-label={t('Expand panel', 'Kembangkan panel')}
+                title={t('Expand', 'Kembang')}
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '5px 7px', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <Maximize2 size={14} />
+              </button>
+            )}
+          </div>
+          {selectedStateCode && indicators.length > 0 ? (
+            indicators.map(ind => {
+              const rl: RagLevel = ind.rag === 'Green' ? 'good' : ind.rag === 'Amber' ? 'warning' : 'critical';
+              const rc = ind.rag === 'Green' ? 'var(--status-good)' : ind.rag === 'Amber' ? 'var(--status-watch)' : 'var(--status-critical)';
+              const val = Number(ind.actual);
+              const tgt = Number(ind.npan_target) || 0;
+              const fp = tgt > 0 ? Math.min(100, (val / tgt) * 70) : 0;
+              return (
+                <div key={ind.key} style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? ind.label_en : ind.label_bm}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                        {val.toFixed(2)}%
+                      </span>
+                      <RagBadge rag={rl} lang={lang} />
+                    </div>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 3 }}>
+                    <div style={{ height: '100%', width: `${fp}%`, background: rc, borderRadius: 3 }} />
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              {sortedStates.map(s => {
+                const v = Number(s.rates[selectedIndicator] ?? 0);
+                const label = breakdownKey === 'district' ? s.district : s.state;
+                return (
+                  <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
+                      <span>{label}</span>
+                      <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
+                        <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 8, background: ragTrack(s.status[selectedIndicator]), borderRadius: 4 }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(s.status[selectedIndicator]), borderRadius: 4 }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {sortedStates.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                  {t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+                </div>
+              )}
+            </>
           )}
         </div>
+        <FocusOverlay
+          open={panelFocus}
+          onClose={() => setPanelFocus(false)}
+          title={selectedStateCode && indicators.length > 0
+            ? `${codeToStateName(selectedStateCode)} · ${t('All Indicators', 'Semua Penunjuk')}`
+            : drilledToDaerah
+              ? `${t('By Daerah', 'Mengikut Daerah')} — ${codeToStateName(selectedStateCode!)}`
+              : t('By State', 'Mengikut Negeri')}
+        >
+          {selectedStateCode && indicators.length > 0 ? (
+            indicators.map(ind => {
+              const rl: RagLevel = ind.rag === 'Green' ? 'good' : ind.rag === 'Amber' ? 'warning' : 'critical';
+              const rc = ind.rag === 'Green' ? 'var(--status-good)' : ind.rag === 'Amber' ? 'var(--status-watch)' : 'var(--status-critical)';
+              const val = Number(ind.actual);
+              const tgt = Number(ind.npan_target) || 0;
+              const fp = tgt > 0 ? Math.min(100, (val / tgt) * 70) : 0;
+              return (
+                <div key={ind.key} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? ind.label_en : ind.label_bm}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                        {val.toFixed(2)}%
+                      </span>
+                      <RagBadge rag={rl} lang={lang} />
+                    </div>
+                  </div>
+                  <div style={{ height: 8, background: 'var(--surface-3)', borderRadius: 4 }}>
+                    <div style={{ height: '100%', width: `${fp}%`, background: rc, borderRadius: 4 }} />
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              {sortedStates.map(s => {
+                const v = Number(s.rates[selectedIndicator] ?? 0);
+                const label = breakdownKey === 'district' ? s.district : s.state;
+                return (
+                  <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <span>{label}</span>
+                      <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
+                        <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 10, background: ragTrack(s.status[selectedIndicator]), borderRadius: 5 }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, v)}%`, background: ragSolid(s.status[selectedIndicator]), borderRadius: 5 }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {sortedStates.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+                  {t('Not available for this dataset.', 'Tiada untuk dataset ini.')}
+                </div>
+              )}
+            </>
+          )}
+        </FocusOverlay>
       </div>
 
       {/* ── By-Gender + By-Age ──────────────────────────────────────────── */}
@@ -629,7 +777,7 @@ export function DashboardPage() {
               <TrendingUp size={18} />
             </div>
             <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
                 {t('Indicator trend by year', 'Trend penunjuk mengikut tahun')}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>

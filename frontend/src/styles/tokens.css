@@ -53,11 +53,11 @@
      lightness lift for tints on cards/badges. */
   --status-good:     #2BB6A8;  /* Soft Teal                                */
   --status-watch:    #E9A23B;  /* Warm Amber                               */
-  --status-critical: #E56B6F;  /* Soft Coral Red                           */
+  --status-critical: #C0393B;  /* Deep Crimson — WCAG AA with white text   */
   --status-neutral:  #8A94A6;  /* unmatched / no-data tone                 */
   --status-good-bg:     #E1F5F2;
   --status-watch-bg:    #FCEFD8;
-  --status-critical-bg: #FCE3E4;
+  --status-critical-bg: #F5E0E0;
 
   /* ── Categorical chart palette (light theme) ──────────────────────────
      Six brand-anchored hues for non-status charts (gender, income,
@@ -102,7 +102,7 @@
 
   /* ── Elevation (Phase 2 — flatter, "printed on paper" depth) ─────────── */
   --shadow-sm:   0 1px 1px rgba(15,27,47,0.05);
-  --shadow-card: 0 1px 2px rgba(15,27,47,0.05), 0 3px 10px rgba(15,27,47,0.04);
+  --shadow-card: 0 1px 3px rgba(15,27,47,0.10), 0 4px 14px rgba(15,27,47,0.08);
   --shadow-md:   0 2px 8px rgba(15,27,47,0.08), 0 8px 22px rgba(15,27,47,0.06);
   --shadow-lg:   0 8px 28px rgba(15,27,47,0.14), 0 18px 50px rgba(15,27,47,0.10);
   --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.5);
@@ -162,11 +162,11 @@
      hue for selected-row / badge backdrops. */
   --status-good:     #4FD1C5;  /* Muted Aqua                              */
   --status-watch:    #F6C177;  /* Muted Amber                              */
-  --status-critical: #F38BA8;  /* Rose Red                                */
+  --status-critical: #E85D5D;  /* Bright Crimson — WCAG AA with white text */
   --status-neutral:  #6B7C99;
   --status-good-bg:     #11302C;
   --status-watch-bg:    #2E2510;
-  --status-critical-bg: #2C1620;
+  --status-critical-bg: #2E1111;
 
   /* Categorical chart palette (dark theme) — same hue family as light
      mode but lifted toward pastel so they sit on the navy surfaces
@@ -188,7 +188,7 @@
   --glow-accent:    0 0 0 3px rgba(110,143,196,0.25);
 
   --shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 6px 18px rgba(0,0,0,0.30);
+  --shadow-card: 0 2px 4px rgba(0,0,0,0.50), 0 8px 22px rgba(0,0,0,0.40);
   --shadow-md:   0 4px 12px rgba(0,0,0,0.45), 0 12px 32px rgba(0,0,0,0.35);
   --shadow-lg:   0 12px 36px rgba(0,0,0,0.55), 0 24px 64px rgba(0,0,0,0.45);
   --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.04);

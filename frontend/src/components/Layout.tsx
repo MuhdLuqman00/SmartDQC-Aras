@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -8,6 +8,10 @@ export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-w', collapsed ? '72px' : '248px');
+  }, [collapsed]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>

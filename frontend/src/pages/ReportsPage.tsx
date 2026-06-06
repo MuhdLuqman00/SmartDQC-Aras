@@ -199,7 +199,7 @@ export function ReportsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {card.icon}
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: 'var(--font-display)' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: 'var(--font-body)' }}>
               {lang === 'en' ? card.titleEn : card.titleBm}
             </div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
@@ -319,7 +319,7 @@ export function ReportsPage() {
       <div style={{ flexShrink: 0, display: 'flex' }}>{card.icon}</div>
       <div style={{ flex: 1, minWidth: 180 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: 14, fontFamily: 'var(--font-display)' }}>
+          <span style={{ fontWeight: 700, fontSize: 14, fontFamily: 'var(--font-body)' }}>
             {lang === 'en' ? card.titleEn : card.titleBm}
           </span>
           <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>

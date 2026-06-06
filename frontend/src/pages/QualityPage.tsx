@@ -55,10 +55,10 @@ function ScoreGauge({ score }: { score: number }) {
       <circle cx={70} cy={70} r={r} fill="none" stroke={color} strokeWidth={12}
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         transform="rotate(-90 70 70)" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
-      <text x={70} y={70} textAnchor="middle" fontSize={32} fontWeight={600} fill="var(--text-primary)" fontFamily="'Newsreader', Georgia, serif">
+      <text x={70} y={70} textAnchor="middle" fontSize={32} fontWeight={600} fill="var(--text-primary)" fontFamily="var(--font-body)">
         {score.toFixed(0)}
       </text>
-      <text x={70} y={88} textAnchor="middle" fontSize={11} fill="var(--text-muted)" fontFamily="'Public Sans', sans-serif">
+      <text x={70} y={88} textAnchor="middle" fontSize={11} fill="var(--text-muted)" fontFamily="var(--font-body)">
         / 100
       </text>
     </svg>
@@ -187,7 +187,7 @@ export function QualityPage() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{d.score}/{d.max}</span>
                       </div>
                       <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }} aria-hidden>
-                        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--kkm-sky)', borderRadius: 3 }} />
+                        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--chart-6)', borderRadius: 3 }} />
                       </div>
                     </div>
                   );

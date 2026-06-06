@@ -49,3 +49,6 @@ LEARNING_SUMMARY.*
 # Logs & dev scratch
 *.log
 phase2-login-*.png
+
+# Local model weights — too large for git, baked into Docker at build time
+model/*.gguf

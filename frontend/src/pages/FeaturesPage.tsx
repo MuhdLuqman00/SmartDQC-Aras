@@ -119,7 +119,7 @@ export function FeaturesPage() {
               {t('Live', 'Aktif')}
             </span>
           </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginTop: 3 }}>
             {lang === 'en' ? f.en : f.bm}
           </div>
         </div>
@@ -151,7 +151,7 @@ export function FeaturesPage() {
         }}>
           {t('Platform Capabilities', 'Keupayaan Platform')}
         </div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, marginBottom: 10 }}>
+        <h1 style={{ fontFamily: 'var(--font-body)', fontSize: 28, fontWeight: 800, marginBottom: 10 }}>
           {t('16 Integrated Capabilities', '16 Keupayaan Bersepadu')}
         </h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', maxWidth: 620, lineHeight: 1.7 }}>

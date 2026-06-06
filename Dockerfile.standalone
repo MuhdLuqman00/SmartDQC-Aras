@@ -66,11 +66,14 @@ ENV OLLAMA_BASE_URL=http://localhost:11434
 ENV DATABASE_URL=postgresql://smartdqc:smartdqc@localhost/smartdqc
 # Default LLM baked into the image; read by both the entrypoint pre-pull and
 # the backend. Override at run time with `-e OLLAMA_MODEL=...`.
-ENV OLLAMA_MODEL=qwen3.5:4b-q4_K_M
-# Qwen3 is a reasoning model: with thinking on it writes JSON into the
-# `thinking` field and leaves `response` empty, breaking AI insights. Disable
-# reasoning so answers land in `response`. Override with `-e OLLAMA_THINK=true`.
+ENV OLLAMA_MODEL=hf.co/mradermacher/gemma-4-E2B-GGUF:Q8_0
 ENV OLLAMA_THINK=false
+
+# Bake the model into the image at build time — runtime needs no internet access.
+RUN ollama serve & \
+    until curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; do sleep 1; done && \
+    ollama pull hf.co/mradermacher/gemma-4-E2B-GGUF:Q8_0 && \
+    pkill ollama
 
 VOLUME ["/var/lib/postgresql/data"]
 EXPOSE 3000 8000

@@ -292,7 +292,7 @@ export function UploadPage() {
           borderRadius: 'var(--radius-card)', padding: '32px',
           boxShadow: 'var(--shadow-card)',
         }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+          <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
             {t('Upload File', 'Muat Naik Fail')}
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
@@ -478,7 +478,7 @@ export function UploadPage() {
           boxShadow: 'var(--shadow-card)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700 }}>
+            <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 18, fontWeight: 700 }}>
               {t('Map Columns', 'Peta Lajur')}
             </h2>
             <span style={{
@@ -677,7 +677,7 @@ export function UploadPage() {
       )}
       {step === 3 && qualityCheck && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '32px', boxShadow: 'var(--shadow-card)' }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, marginBottom: 20 }}>
+          <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 18, fontWeight: 700, marginBottom: 20 }}>
             {t('Quality Check', 'Semak Kualiti')}
           </h2>
 
@@ -783,7 +783,7 @@ export function UploadPage() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '32px', boxShadow: 'var(--shadow-card)' }}>
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <CheckCircle2 size={44} style={{ color: 'var(--kkm-teal)', marginBottom: 12 }} />
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700 }}>
+            <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 20, fontWeight: 700 }}>
               {t('Cleaning Complete', 'Pembersihan Selesai')}
             </h2>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 6 }}>
@@ -862,7 +862,7 @@ export function UploadPage() {
 
           <button
             onClick={() => nav('/')}
-            style={{ width: '100%', background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '12px', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+            style={{ width: '100%', background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '12px', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             {t('View on Dashboard →', 'Lihat di Papan Pemuka →')}
           </button>

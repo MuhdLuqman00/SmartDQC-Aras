@@ -36,8 +36,8 @@ DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES
 # Pull ollama model in background once ollama is up
 (
     until curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do sleep 3; done
-    echo "[init] Pulling Ollama model: ${OLLAMA_MODEL:-gemma4:e4b}"
-    curl -s http://localhost:11434/api/pull -d "{\"name\":\"${OLLAMA_MODEL:-gemma4:e4b}\"}" | tail -1
+    echo "[init] Verifying Ollama model: ${OLLAMA_MODEL:-hf.co/mradermacher/gemma-4-E2B-GGUF:Q8_0}"
+    curl -s http://localhost:11434/api/pull -d "{\"name\":\"${OLLAMA_MODEL:-hf.co/mradermacher/gemma-4-E2B-GGUF:Q8_0}\"}" | tail -1
     echo "[init] Model ready."
 ) &
 

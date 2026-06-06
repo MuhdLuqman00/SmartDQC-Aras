@@ -640,7 +640,7 @@ export function GeoPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{trajTitle}</div>
               {offTrack > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: STATUS_VAR.critical, color: 'var(--primary-dark)' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: STATUS_VAR.critical, color: '#FFFFFF' }}>
                   {offTrack} {t('off track', 'tidak menuju sasaran')}
                 </span>
               )}

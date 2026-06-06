@@ -13,7 +13,7 @@ export type Rag = 'good' | 'warning' | 'critical';
 const CFG: Record<Rag, { bg: string; color: string; en: string; bm: string }> = {
   good:     { bg: 'var(--status-good)',     color: 'var(--primary-dark)', en: 'GOOD',     bm: 'BAIK'      },
   warning:  { bg: 'var(--status-watch)',    color: 'var(--primary-dark)', en: 'MODERATE', bm: 'SEDERHANA' },
-  critical: { bg: 'var(--status-critical)', color: 'var(--primary-dark)', en: 'CRITICAL', bm: 'KRITIKAL'  },
+  critical: { bg: 'var(--status-critical)', color: '#FFFFFF',             en: 'CRITICAL', bm: 'KRITIKAL'  },
 };
 
 export function RagBadge({ rag, lang = 'bm' }: { rag: Rag; lang?: 'en' | 'bm' }) {

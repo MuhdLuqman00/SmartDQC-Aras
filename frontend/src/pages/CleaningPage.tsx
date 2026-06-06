@@ -92,7 +92,7 @@ export function CleaningPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
             <CheckCircle2 size={26} style={{ color: 'var(--accent-soft)' }} />
             <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 20 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 20 }}>
                 {t('Cleaning Complete', 'Pembersihan Selesai')}
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{filename}</div>

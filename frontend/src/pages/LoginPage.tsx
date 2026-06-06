@@ -108,14 +108,14 @@ export function LoginPage() {
           <div style={{
             width: 46, height: 46, borderRadius: 13, background: 'var(--gradient-gold)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 20, color: '#0F1B2F',
+            fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 20, color: '#0F1B2F',
             boxShadow: '0 8px 22px rgba(200,150,46,0.4)',
           }}>S</div>
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', marginBottom: 3 }}>
               {t('Ministry of Health Malaysia', 'Kementerian Kesihatan Malaysia')}
             </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 16 }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 16 }}>
               Smart<span style={{ color: 'var(--accent-soft)' }}>DQC</span>
             </div>
           </div>
@@ -123,7 +123,7 @@ export function LoginPage() {
 
         <div style={{ position: 'relative' }}>
           <h1 style={{
-            fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 36,
+            fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 36,
             lineHeight: 1.2, marginBottom: 20,
           }}>
             {t('Data Quality &', 'Kualiti Data &')}<br />
@@ -140,7 +140,7 @@ export function LoginPage() {
               { v: 'BM·EN', l: t('Bilingual', 'Dwibahasa') },
             ].map(s => (
               <div key={s.l}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, color: 'var(--accent-soft)' }}>{s.v}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 22, color: 'var(--accent-soft)' }}>{s.v}</div>
                 <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.78)' }}>{s.l}</div>
               </div>
             ))}
@@ -166,7 +166,7 @@ export function LoginPage() {
           }}>
             <ShieldCheck size={22} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 6 }}>
+          <h2 style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 6 }}>
             {t('Sign In', 'Log Masuk')}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28 }}>

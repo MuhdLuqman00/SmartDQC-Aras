@@ -38,7 +38,7 @@ export function FocusOverlay({ open, onClose, title, children }: {
       style={{
         position: 'fixed', inset: 0, zIndex: 'var(--z-modal)' as React.CSSProperties['zIndex'],
         background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', padding: 24,
+        justifyContent: 'center', padding: 24, paddingLeft: 'calc(var(--sidebar-w, 0px) + 24px)',
       }}
     >
       <div
@@ -56,7 +56,7 @@ export function FocusOverlay({ open, onClose, title, children }: {
           gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
         }}>
           <h2 className="kkm-keyline" style={{
-            margin: 0, fontFamily: 'var(--font-display)', fontWeight: 700,
+            margin: 0, fontFamily: 'var(--font-body)', fontWeight: 700,
             fontSize: 16, color: 'var(--text-primary)',
           }}>
             {title}
