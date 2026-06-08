@@ -1207,6 +1207,37 @@ def _cache_get(key: str) -> dict | None:
     return None
 
 
+# Clinical bounds mirrored from backend/cleaning/kkm.py — keep in sync.
+_FLAG_BERAT_LOW,  _FLAG_BERAT_HIGH  = 12.0,  50.0   # BERAT_MIN / BERAT_MAX
+_FLAG_TINGGI_LOW, _FLAG_TINGGI_HIGH = 100.0, 160.0  # TINGGI_MIN / TINGGI_MAX
+_FLAG_BMI_LOW,    _FLAG_BMI_HIGH    = 13.5,  18.5   # BMI_UNDERWEIGHT / BMI_OBESE
+
+
+def _compute_row_flags(df: "pd.DataFrame") -> "pd.Series":
+    """Return a boolean Series: True if the row has a known quality issue.
+
+    Priority: use Data_Quality_Flag column if present (KKM cleaned output).
+    Fallback: check clinical bounds on recognised measurement columns so the
+    toggle works for non-KKM source types too.
+    """
+    if "Data_Quality_Flag" in df.columns:
+        return df["Data_Quality_Flag"] != "Valid"
+
+    flagged = pd.Series(False, index=df.index)
+    for col in df.columns:
+        c = col.lower()
+        if "berat" in c and "kg" in c:
+            vals = pd.to_numeric(df[col], errors="coerce")
+            flagged |= vals.isna() | (vals < _FLAG_BERAT_LOW) | (vals > _FLAG_BERAT_HIGH)
+        elif "tinggi" in c and "cm" in c:
+            vals = pd.to_numeric(df[col], errors="coerce")
+            flagged |= vals.isna() | (vals < _FLAG_TINGGI_LOW) | (vals > _FLAG_TINGGI_HIGH)
+        elif "bmi" in c:
+            vals = pd.to_numeric(df[col], errors="coerce")
+            flagged |= vals.isna() | (vals < _FLAG_BMI_LOW) | (vals > _FLAG_BMI_HIGH)
+    return flagged
+
+
 def _cache_set_narrative(key: str, narrative: dict) -> None:
     """Persist the AI narrative alongside the cleaned-data cache entry.
 
@@ -2019,9 +2050,9 @@ async def preview_cached_endpoint(
     if entry is None:
         raise HTTPException(404, "Cached data not found — please re-run cleaning.")
     df = entry["df"]
-    rows = (
-        df.head(limit).replace({np.nan: None}).to_dict(orient="records")
-    )
+    head = df.head(limit)
+    rows = head.replace({np.nan: None}).to_dict(orient="records")
+    row_flags = _compute_row_flags(head).tolist()
     return JSONResponse(
         content=json_safe(
             {
@@ -2029,6 +2060,7 @@ async def preview_cached_endpoint(
                 "rows": rows,
                 "row_count": int(len(df)),
                 "returned": len(rows),
+                "row_flags": row_flags,
             }
         )
     )
