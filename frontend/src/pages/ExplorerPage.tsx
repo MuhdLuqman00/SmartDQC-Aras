@@ -17,6 +17,8 @@ export function ExplorerPage() {
   const [page, setPage] = useState(0);
   const [fetched, setFetched] = useState<Record<string, unknown>[] | null>(null);
   const [serverRowCount, setServerRowCount] = useState<number | null>(null);
+  const [serverRowFlags, setServerRowFlags] = useState<boolean[] | null>(null);
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [editing, setEditing] = useState<{ rowIdx: number; col: string } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,6 +40,7 @@ export function ExplorerPage() {
         setServerRowCount(
           typeof r.data?.row_count === 'number' ? r.data.row_count : null,
         );
+        setServerRowFlags(Array.isArray(r.data?.row_flags) ? r.data.row_flags : null);
       })
       .catch(() => { setFetched(null); setFetchError(true); })
       .finally(() => setFetchLoading(false));
@@ -49,6 +52,14 @@ export function ExplorerPage() {
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
   const effectiveRowCount = rowCount ?? serverRowCount;
   const isTruncated = effectiveRowCount != null && rows.length < effectiveRowCount;
+
+  // Client-side flag fallback for session-context rows (no fetch fired for those).
+  const clientRowFlags = useMemo(
+    () => rows.map(row => columns.some(c => classifyCell(c, row[c]) !== 'ok')),
+    [rows, columns],
+  );
+  const rowFlags = serverRowFlags ?? clientRowFlags;
+  const flaggedCount = rowFlags.filter(Boolean).length;
 
   const numericColumns = useMemo(
     () => columns.filter(c =>
@@ -65,7 +76,10 @@ export function ExplorerPage() {
     [rows, activeHistCol],
   );
 
-  const editable = query === '';  // positional identity is only safe unfiltered
+  // Edit disabled under any client-side filter (search OR flagged toggle) because
+  // positional identity (absIdx) is only safe when rows are unfiltered.
+  // Phase 5's _row_id seam will lift this restriction.
+  const editable = query === '' && !showFlaggedOnly;
 
   const commitEdit = async () => {
     if (!editing || !cacheId) { setEditing(null); return; }
@@ -92,11 +106,16 @@ export function ExplorerPage() {
     }
   };
 
+  const flagFiltered = useMemo(
+    () => showFlaggedOnly ? rows.filter((_, i) => rowFlags[i] === true) : rows,
+    [rows, rowFlags, showFlaggedOnly],
+  );
+
   const filtered = useMemo(() => {
-    if (!query) return rows;
+    if (!query) return flagFiltered;
     const q = query.toLowerCase();
-    return rows.filter(r => columns.some(c => String(r[c] ?? '').toLowerCase().includes(q)));
-  }, [rows, query, columns]);
+    return flagFiltered.filter(r => columns.some(c => String(r[c] ?? '').toLowerCase().includes(q)));
+  }, [flagFiltered, query, columns]);
 
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -137,12 +156,16 @@ export function ExplorerPage() {
           {editable
             ? t('Double-click a cell — or focus it and press Enter — to edit. Enter saves, Esc cancels.',
                 'Klik dua kali sel — atau fokus dan tekan Enter — untuk menyunting. Enter simpan, Esc batal.')
-            : t('Clear the search to enable editing.',
-                'Kosongkan carian untuk membolehkan suntingan.')}
+            : showFlaggedOnly
+              ? t('Clear the flagged filter to enable editing.',
+                  'Kosongkan penapis bermasalah untuk membolehkan suntingan.')
+              : t('Clear the search to enable editing.',
+                  'Kosongkan carian untuk membolehkan suntingan.')}
         </div>
 
-        {/* Search */}
-        <div style={{ position: 'relative', maxWidth: 320 }}>
+        {/* Search + Flagged-only toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', maxWidth: 320, flex: '1 1 200px' }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             value={query}
@@ -155,6 +178,29 @@ export function ExplorerPage() {
               outline: 'none',
             }}
           />
+        </div>
+
+        {flaggedCount > 0 && (
+          <button
+            onClick={() => { setShowFlaggedOnly(v => !v); setPage(0); }}
+            aria-pressed={showFlaggedOnly}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: showFlaggedOnly ? 'var(--warning)' : 'var(--surface)',
+              border: `1px solid ${showFlaggedOnly ? 'var(--warning)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-btn)', padding: '7px 14px',
+              fontSize: 13, fontWeight: 600,
+              color: showFlaggedOnly ? '#fff' : 'var(--warning)',
+              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            <AlertTriangle size={13} aria-hidden />
+            {showFlaggedOnly
+              ? t(`Flagged only (${flaggedCount})`, `Bermasalah sahaja (${flaggedCount})`)
+              : t(`Show flagged (${flaggedCount})`, `Tunjuk bermasalah (${flaggedCount})`)
+            }
+          </button>
+        )}
         </div>
 
         {/* Truncation banner — visible when loaded rows < total rows */}
