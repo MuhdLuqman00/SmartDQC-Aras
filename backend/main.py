@@ -36,6 +36,7 @@ from typing import List, Optional
 from .config import STANDARD_SCHEMA, auto_suggest_mapping, detect_source_type
 from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, run_eda_auto, json_safe
+from .eda.kkm_quality_rules import analyze_kkm_quality
 from .eda.charts import build_chart_blocks
 from .export.tableau import (
     build_aggregated_table,
@@ -1523,6 +1524,59 @@ async def detect_type_endpoint(
     )
 
 
+# Map KKM business-rule ids → stable, localisable finding codes (issueCatalog.ts).
+# Keeps the frontend catalog clean while the backend keeps its BR-xx vocabulary.
+_BR_FINDING_CODE = {
+    "BR-01": "null_measurement_date",
+    "BR-02": "impossible_weight",
+    "BR-03": "impossible_height",
+    "BR-04": "duplicate_student_id",
+    "BR-05": "unknown_gender",
+    "BR-06": "unexpected_year_level",
+    "BR-07": "dob_in_id",
+    "BR-08": "both_measurements_null",
+    "BR-09": "suspicious_dates",
+}
+# KKMQualityChecker severities → frontend severity vocabulary.
+_BR_SEVERITY = {"CRITICAL": "critical", "ERROR": "critical", "WARNING": "warning", "INFO": "info"}
+_BR_SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+
+
+def _actionable_findings(df: pd.DataFrame, limit: int = 6) -> list[dict]:
+    """Run the (otherwise unwired) KKM business-rule checker on the RAW frame and
+    return a compact, PII-free list of the most actionable findings for B2.1.
+
+    Only aggregate counts/percentages + the rule's own description/fix are
+    surfaced — the checker's per-row `affected_rows` (which contain real data)
+    are deliberately NOT returned. Defensive: never break quality-check.
+    """
+    try:
+        report = analyze_kkm_quality(df)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Actionable findings skipped (KKM checker failed): %s", exc)
+        return []
+
+    findings: list[dict] = []
+    for issue in report.get("issues", []):
+        rule_id = issue.get("rule_id", "")
+        severity = _BR_SEVERITY.get(str(issue.get("severity", "")).upper(), "info")
+        findings.append(
+            {
+                "code": _BR_FINDING_CODE.get(rule_id, rule_id),
+                "rule_id": rule_id,
+                "field": issue.get("column"),
+                "title": issue.get("issue_type"),
+                "description": issue.get("description"),  # English detail (expand)
+                "fix": issue.get("recommended_fix"),
+                "severity": severity,
+                "count": int(issue.get("row_count", 0) or 0),
+                "pct": issue.get("pct_total", 0),
+            }
+        )
+    findings.sort(key=lambda f: (_BR_SEVERITY_RANK.get(f["severity"], 3), -f["count"]))
+    return findings[:limit]
+
+
 @app.post("/clean/quality-check")
 async def quality_check_endpoint(
     cache_id: Optional[str] = Query(None),
@@ -1578,6 +1632,14 @@ async def quality_check_endpoint(
         else:
             sample = col_data.dropna().head(5).tolist()
             col_info["sample_values"] = [str(v)[:50] for v in sample]
+            # Top categories (B2.1): value_counts of the non-null values, so the
+            # user can see WHAT dominates a categorical column at a glance.
+            vc = col_data.dropna().value_counts().head(5)
+            base = int(non_null) or 1
+            col_info["top_values"] = [
+                {"value": str(v)[:50], "count": int(c), "pct": round(c / base * 100, 1)}
+                for v, c in vc.items()
+            ]
 
         quality["columns"].append(col_info)
 
@@ -1614,6 +1676,10 @@ async def quality_check_endpoint(
     col_issues.sort(key=lambda i: i["count"], reverse=True)
     quality["quality_score"] = quality["overall_completeness"]
     quality["issues"] = col_issues[:5]
+
+    # B2.1: prominent, actionable business-rule findings (future dates, dupes,
+    # impossible measurements, …) computed on the raw frame — PII-free.
+    quality["actionable_findings"] = _actionable_findings(df)
 
     return JSONResponse(content=json_safe(quality))
 

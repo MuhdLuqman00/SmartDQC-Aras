@@ -155,6 +155,40 @@ const CATALOG: Record<string, CatalogEntry> = {
     issue: { en: 'Records flagged for review',        bm: 'Rekod ditanda untuk semakan' },
     rule:  { en: 'Flag records for review',           bm: 'Tandakan rekod untuk semakan' },
   },
+
+  // ── Pre-clean actionable findings (B2.1, KKM business rules BR-01…09) ──────
+  null_measurement_date: {
+    issue: { en: 'Measurement date missing',          bm: 'Tarikh pengukuran hilang' },
+    rule:  { en: 'Supply measurement dates',          bm: 'Sediakan tarikh pengukuran' },
+  },
+  impossible_weight: {
+    issue: { en: 'Impossible weight values',          bm: 'Nilai berat mustahil' },
+    rule:  { en: 'Review impossible weight values',   bm: 'Semak nilai berat mustahil' },
+  },
+  impossible_height: {
+    issue: { en: 'Impossible height values',          bm: 'Nilai tinggi mustahil' },
+    rule:  { en: 'Review impossible height values',   bm: 'Semak nilai tinggi mustahil' },
+  },
+  duplicate_student_id: {
+    issue: { en: 'Duplicate student IDs',             bm: 'ID murid berganda' },
+    rule:  { en: 'Investigate duplicate student IDs', bm: 'Siasat ID murid berganda' },
+  },
+  unexpected_year_level: {
+    issue: { en: 'Unexpected school year level',      bm: 'Tahun persekolahan luar jangka' },
+    rule:  { en: 'Check unexpected year levels',      bm: 'Semak tahun persekolahan luar jangka' },
+  },
+  dob_in_id: {
+    issue: { en: 'Birth date in ID (unvalidated)',    bm: 'Tarikh lahir dalam ID (belum disahkan)' },
+    rule:  { en: 'Cross-check birth date in ID',      bm: 'Semak silang tarikh lahir dalam ID' },
+  },
+  both_measurements_null: {
+    issue: { en: 'Missing both weight & height',      bm: 'Berat & tinggi kedua-duanya hilang' },
+    rule:  { en: 'Review records missing measurements', bm: 'Semak rekod tanpa pengukuran' },
+  },
+  suspicious_dates: {
+    issue: { en: 'Suspicious dates (future / too old)', bm: 'Tarikh mencurigakan (akan datang / terlalu lama)' },
+    rule:  { en: 'Correct suspicious dates',          bm: 'Betulkan tarikh mencurigakan' },
+  },
 };
 
 function interpolate(template: string, issue: IssueLike): string {

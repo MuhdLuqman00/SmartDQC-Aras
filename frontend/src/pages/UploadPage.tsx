@@ -17,11 +17,28 @@ type Step = 1 | 2 | 3 | 4;
 interface MappingRow { raw_column: string; standard_field: string; confidence: number; }
 interface Issue { code?: string; description: string; severity: 'critical' | 'warning' | 'info'; count: number; field?: string; pct?: number; }
 interface Rule { code?: string; description: string; }
+interface EvaluatedRule { code: string; count: number; fired: boolean; }
 interface CleanStats {
   rows_before: number; rows_after: number;
   quality_score: number; rules_applied: string[];
   rules?: Rule[];
   top_issues: Issue[];
+  rules_evaluated?: EvaluatedRule[];  // B2.2 — full check set with row counts
+  cleaned_columns?: string[];          // B2.2 — to surface computed columns added
+}
+
+/* B2.1 — pre-clean profile + actionable findings from /clean/quality-check. */
+interface ColTopValue { value: string; count: number; pct: number; }
+interface ColumnProfile {
+  name: string; non_null: number; null_count: number; null_percent: number;
+  unique_count: number; is_numeric: boolean;
+  min?: number; max?: number; mean?: number;
+  sample_values?: string[]; top_values?: ColTopValue[];
+}
+interface ActionableFinding {
+  code?: string; rule_id?: string; field?: string | null; title?: string;
+  description?: string; fix?: string;
+  severity: 'critical' | 'warning' | 'info'; count: number; pct?: number | null;
 }
 
 /* ── Mapping normaliser ──────────────────────────────────────────────────
@@ -116,8 +133,9 @@ export function UploadPage() {
   const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
 
   /* Step 3 state */
-  const [qualityCheck, setQualityCheck] = useState<{ score: number; issues: Issue[] } | null>(null);
+  const [qualityCheck, setQualityCheck] = useState<{ score: number; issues: Issue[]; columns: ColumnProfile[]; findings: ActionableFinding[] } | null>(null);
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
+  const [expandedFinding, setExpandedFinding] = useState<number | null>(null);
 
   /* Step 4 state */
   const [cleanStats, setCleanStats] = useState<CleanStats | null>(null);
@@ -225,7 +243,12 @@ export function UploadPage() {
       await api.post(`/mapping/validate?cache_id=${cacheId}`, { mapping: mappingDict });
       /* proceed to quality check */
       const qr = await api.post(`/clean/quality-check?cache_id=${cacheId}`, { mapping: mappingDict });
-      setQualityCheck({ score: Number(qr.data.quality_score ?? qr.data.completeness_pct) || 0, issues: qr.data.issues || [] });
+      setQualityCheck({
+        score: Number(qr.data.quality_score ?? qr.data.completeness_pct) || 0,
+        issues: qr.data.issues || [],
+        columns: Array.isArray(qr.data.columns) ? qr.data.columns : [],
+        findings: Array.isArray(qr.data.actionable_findings) ? qr.data.actionable_findings : [],
+      });
       setStep(3);
     } catch { setError(t('Validation failed.', 'Pengesahan gagal.')); }
     finally { setLoading(false); }
@@ -249,6 +272,8 @@ export function UploadPage() {
         rules_applied: Array.isArray(r.data.rules_applied) ? r.data.rules_applied : [],
         rules: Array.isArray(r.data.rules) ? r.data.rules : undefined,
         top_issues: Array.isArray(r.data.top_issues) ? r.data.top_issues : [],
+        rules_evaluated: Array.isArray(r.data.rules_evaluated) ? r.data.rules_evaluated : undefined,
+        cleaned_columns: Array.isArray(r.data.cleaned_columns) ? r.data.cleaned_columns : undefined,
       });
       setPersistWarn(persistWarning(r.data, lang));
       setSession({
@@ -705,6 +730,119 @@ export function UploadPage() {
             </div>
           </div>
 
+          {/* ── B2.1 Data Profile (pre-clean stats) ──────────────────────── */}
+          {/* Actionable findings — prominent "what needs attention" (KKM BR-01…09). */}
+          {qualityCheck.findings.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                {t('What needs attention', 'Apa yang perlu diberi perhatian')}
+              </div>
+              {qualityCheck.findings.map((f, i) => {
+                const open = expandedFinding === i;
+                const sev = f.severity === 'critical' ? 'var(--danger)' : f.severity === 'warning' ? 'var(--warning)' : 'var(--text-muted)';
+                const scope = [
+                  t(`${Number(f.count).toLocaleString()} rows`, `${Number(f.count).toLocaleString()} baris`),
+                  f.field ? t(`column “${f.field}”`, `lajur “${f.field}”`) : null,
+                  f.pct != null && Number(f.pct) > 0 ? `${f.pct}%` : null,
+                ].filter(Boolean).join(' · ');
+                const pid = `qc-finding-${i}`;
+                return (
+                  <div key={i} style={{ borderBottom: i < qualityCheck.findings.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <button type="button" onClick={() => setExpandedFinding(open ? null : i)} aria-expanded={open} aria-controls={pid}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--text-primary)' }}>
+                      <AlertCircle size={15} style={{ color: sev, flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{translateIssue(f, lang)}</span>
+                      <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{Number(f.count).toLocaleString()}</span>
+                      <ChevronDown size={15} style={{ color: 'var(--text-muted)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform var(--transition)' }} />
+                    </button>
+                    {open && (
+                      <div id={pid} style={{ padding: '0 0 12px 25px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>{t('Affected', 'Terjejas')}</div>
+                          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{scope}</div>
+                        </div>
+                        {f.description && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>{t('Detail', 'Butiran')}</div>
+                            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{f.description}</div>
+                          </div>
+                        )}
+                        {f.fix && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>{t('Suggested fix', 'Cadangan tindakan')}</div>
+                            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{f.fix}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Per-column profile — raw stats: null %, range, top categories. */}
+          {qualityCheck.columns.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  {t('Column profile', 'Profil lajur')}
+                </div>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t(`${qualityCheck.columns.length} columns`, `${qualityCheck.columns.length} lajur`)}
+                </span>
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface-2)' }}>
+                        {[t('Column', 'Lajur'), t('Type', 'Jenis'), t('Missing', 'Hilang'), t('Range / Top values', 'Julat / Nilai teratas')].map(h => (
+                          <th key={h} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {qualityCheck.columns.map((c, i) => {
+                        const nullPct = Number(c.null_percent) || 0;
+                        const nullColor = nullPct >= 50 ? 'var(--danger)' : nullPct >= 10 ? 'var(--warning)' : 'var(--success)';
+                        return (
+                          <tr key={c.name} style={{ borderBottom: i < qualityCheck.columns.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                            <td style={{ padding: '9px 12px', fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{c.name}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{c.is_numeric ? t('Numeric', 'Numerik') : t('Text', 'Teks')}</td>
+                            <td style={{ padding: '9px 12px', minWidth: 120 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ flex: 1, height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden', minWidth: 48 }}>
+                                  <div style={{ width: `${Math.min(100, nullPct)}%`, height: '100%', background: nullColor }} />
+                                </div>
+                                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', minWidth: 38, textAlign: 'right' }}>{nullPct}%</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                              {c.is_numeric
+                                ? <span style={{ fontFamily: 'var(--font-mono)' }}>{c.min != null && c.max != null ? `${c.min} – ${c.max}` : '—'}</span>
+                                : (c.top_values && c.top_values.length
+                                    ? <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                                        {c.top_values.slice(0, 3).map(tv => (
+                                          <span key={tv.value} style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '1px 8px', color: 'var(--text-secondary)' }}>
+                                            {tv.value} <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{tv.pct}%</span>
+                                          </span>
+                                        ))}
+                                        {c.unique_count > 3 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{c.unique_count - 3}</span>}
+                                      </span>
+                                    : '—')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Issues detected — null columns with suggested fixes (existing). */}
           {qualityCheck.issues.slice(0, 5).map((issue, i, arr) => {
             const open = expandedIssue === i;
             const fix = suggestFix(issue, lang);
@@ -819,25 +957,100 @@ export function UploadPage() {
             ))}
           </div>
 
+          {/* ── B2.2 "What changed" — before/after delta from rules_evaluated ── */}
           {(() => {
-            // Prefer localisable `rules` (code + description); fall back to the
-            // legacy string[] for parity with older responses.
-            const ruleList: Rule[] = cleanStats.rules && cleanStats.rules.length
-              ? cleanStats.rules
-              : cleanStats.rules_applied.map(d => ({ description: d }));
-            if (!ruleList.length) return null;
+            const evaluated = cleanStats.rules_evaluated ?? [];
+            const before = Number(cleanStats.rows_before) || 0;
+            // Honest "what was added": the analytic columns cleaning computes.
+            const COMPUTED_RE = /^(Ind_|Age_|WAZ|HAZ|BAZ)|^(BMI|Gender|Kategori_Umur|BMI_Category|BMI_Category_EN)$|_Status$|_Category$/;
+            const added = (cleanStats.cleaned_columns ?? []).filter(c => COMPUTED_RE.test(c));
+
+            // Fallback for older responses without rules_evaluated → legacy chips.
+            if (!evaluated.length) {
+              const ruleList: Rule[] = cleanStats.rules && cleanStats.rules.length
+                ? cleanStats.rules
+                : cleanStats.rules_applied.map(d => ({ description: d }));
+              if (!ruleList.length) return null;
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    {t('Rules Applied', 'Peraturan Digunakan')}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {ruleList.map((r, i) => (
+                      <span key={r.code ?? r.description ?? i} style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '3px 10px', color: 'var(--text-secondary)' }}>
+                        {translateRule(r, lang)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            const fired = evaluated.filter(r => r.fired && r.count > 0).sort((a, b) => b.count - a.count);
+            const passed = evaluated.filter(r => !(r.fired && r.count > 0));
+            const maxCount = Math.max(1, ...fired.map(r => r.count));
             return (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
-                  {t('Rules Applied', 'Peraturan Digunakan')}
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                  {t('What changed', 'Apa yang berubah')}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ruleList.map((r, i) => (
-                    <span key={r.code ?? r.description ?? i} style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '3px 10px', color: 'var(--text-secondary)' }}>
-                      {translateRule(r, lang)}
-                    </span>
-                  ))}
-                </div>
+
+                {/* Waterfall: rows removed per fired rule (arrow + label + count, not colour alone) */}
+                {fired.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {fired.map(r => {
+                      const pct = (r.count / (before || 1)) * 100;
+                      return (
+                        <div key={r.code} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ChevronDown size={13} style={{ color: 'var(--danger)', flexShrink: 0 }} aria-hidden />
+                          <span style={{ flex: '0 0 38%', minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                            {translateRule({ code: r.code, description: r.code }, lang)}
+                          </span>
+                          <div style={{ flex: 1, height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.max(2, (r.count / maxCount) * 100)}%`, height: '100%', background: 'var(--danger)' }} />
+                          </div>
+                          <span style={{ flex: '0 0 auto', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--danger)', minWidth: 78, textAlign: 'right' }}>
+                            −{Number(r.count).toLocaleString()} ({pct.toFixed(1)}%)
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 8, fontSize: 12.5 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('Rows kept', 'Baris dikekalkan')}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 600 }}>
+                        {Number(before).toLocaleString()} → {Number(cleanStats.rows_after).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {t('No rows were removed — every record passed the cleaning rules.',
+                       'Tiada baris dibuang — setiap rekod lulus peraturan pembersihan.')}
+                  </div>
+                )}
+
+                {/* Passed checks (muted) — full transparency that they ran */}
+                {passed.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 12, lineHeight: 1.6 }}>
+                    {t('Also checked, nothing removed: ', 'Turut disemak, tiada dibuang: ')}
+                    {passed.map(r => translateRule({ code: r.code, description: r.code }, lang)).join(' · ')}
+                  </div>
+                )}
+
+                {/* Columns added by cleaning — the honest "values added" (not "filled") */}
+                {added.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                      {t('Columns added by cleaning', 'Lajur ditambah oleh pembersihan')}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {added.map(c => (
+                        <span key={c} className="mono" style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '3px 10px', color: 'var(--text-secondary)' }}>{c}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
