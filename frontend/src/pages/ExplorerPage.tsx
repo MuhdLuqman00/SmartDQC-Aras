@@ -181,7 +181,7 @@ export function ExplorerPage() {
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{
-            fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+            fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 'var(--radius-pill)',
             background: 'var(--surface-2)', border: '1px solid var(--border)',
             color: 'var(--text-secondary)',
           }}>
@@ -198,7 +198,7 @@ export function ExplorerPage() {
               display: 'flex', alignItems: 'center', gap: 6,
               background: 'var(--kkm-blue)', border: '1px solid var(--kkm-blue)',
               borderRadius: 'var(--radius-btn)', padding: '7px 14px',
-              fontSize: 13, fontWeight: 600, color: '#fff',
+              fontSize: 13, fontWeight: 600, color: 'var(--text-on-navy)',
             }}
           >
             <Download size={14} /> {t('Download XLSX', 'Muat Turun XLSX')}
@@ -236,7 +236,7 @@ export function ExplorerPage() {
               style={{
                 width: '100%', padding: '8px 12px 8px 32px',
                 background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', outline: 'none',
+                borderRadius: 'var(--radius-btn)', fontSize: 13, color: 'var(--text-primary)',
               }}
             />
           </div>
@@ -251,7 +251,7 @@ export function ExplorerPage() {
                 border: `1px solid ${showFlaggedOnly ? 'var(--warning)' : 'var(--border)'}`,
                 borderRadius: 'var(--radius-btn)', padding: '7px 14px',
                 fontSize: 13, fontWeight: 600,
-                color: showFlaggedOnly ? '#fff' : 'var(--warning)',
+                color: showFlaggedOnly ? 'var(--text-on-navy)' : 'var(--warning)',
                 cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
               }}
             >
@@ -278,7 +278,7 @@ export function ExplorerPage() {
             style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
               background: 'var(--warning-bg)', border: '1px solid var(--warning)',
-              borderRadius: 8, padding: '10px 14px', fontSize: 13,
+              borderRadius: 'var(--radius-card)', padding: '10px 14px', fontSize: 13,
               color: 'var(--text-primary)',
             }}
           >
@@ -302,11 +302,11 @@ export function ExplorerPage() {
             <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('Cell highlight', 'Sorotan sel')}:
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--danger-bg)', border: '1px solid var(--danger)', borderRadius: 4, padding: '2px 8px', fontSize: 11 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--danger-bg)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 11 }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--danger)', display: 'inline-block', flexShrink: 0 }} aria-hidden />
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t('Impossible value', 'Nilai mustahil')}</span>
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 4, padding: '2px 8px', fontSize: 11 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 11 }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--warning)', display: 'inline-block', flexShrink: 0 }} aria-hidden />
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t('Out of range / missing', 'Di luar julat / tiada nilai')}</span>
             </span>
@@ -353,7 +353,8 @@ export function ExplorerPage() {
                             fontSize: 11, color: 'var(--text-secondary)', letterSpacing: '0.05em',
                             borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
                             cursor: 'pointer', userSelect: 'none',
-                            background: sortCol === c ? 'var(--surface-3, var(--surface-2))' : 'var(--surface-2)',
+                            transition: 'background var(--transition)',
+                            background: sortCol === c ? 'var(--surface-3)' : 'var(--surface-2)',
                           }}
                         >
                           {c}
@@ -441,7 +442,7 @@ export function ExplorerPage() {
                                         width: 120, padding: '2px 6px', fontSize: 12,
                                         fontFamily: 'var(--font-mono)',
                                         border: `1px solid ${editError ? 'var(--danger)' : 'var(--kkm-blue)'}`,
-                                        borderRadius: 4, background: 'var(--surface)', color: 'var(--text-primary)',
+                                        borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)',
                                       }}
                                     />
                                     {editError && (
@@ -509,7 +510,7 @@ export function ExplorerPage() {
               <select
                 value={activeHistCol}
                 onChange={e => setHistCol(e.target.value)}
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)' }}
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)' }}
               >
                 {numericColumns.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
