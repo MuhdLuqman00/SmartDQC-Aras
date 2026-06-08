@@ -497,7 +497,7 @@ def _summarise_cleaning(stats: dict, rows_before: int, rows_after: int) -> dict:
     for key, val in stats.items():
         if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
             continue
-        if key in _NON_ISSUE_STAT_KEYS or key.startswith("standardized_"):
+        if key in _NON_ISSUE_STAT_KEYS or key.startswith(("standardized_", "ind_", "gender_")):
             continue
         label = key.replace("_", " ").strip().capitalize()
         pct = (val / rows_before * 100) if rows_before else 0
@@ -1119,7 +1119,7 @@ async def download_cleaned_merged(
 
 import uuid as _uuid
 
-from .eda.cleaning import clean_data, detect_data_type
+from .eda.cleaning import clean_data, detect_data_type, EVALUATED_RULES
 
 # ── Cleaned-DataFrame cache: in-memory hot tier + durable disk tier ──────────
 # The v2 frontend references uploaded/cleaned data by cache_id across many
@@ -1690,6 +1690,14 @@ async def clean_run_endpoint(
             new_cache_id, persist_error,
         )
 
+    # Build the full evaluated-rule set for this cleaner type so Quality
+    # Report can show all checks including ones that passed (count=0).
+    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["generic"])
+    rules_evaluated = [
+        {"code": c, "count": int(stats.get(c, 0)), "fired": int(stats.get(c, 0)) > 0}
+        for c in _rule_codes
+    ]
+
     _log_audit(action="clean.run", detail=f"cache_id={new_cache_id}")
     return JSONResponse(
         content=json_safe(
@@ -1709,6 +1717,7 @@ async def clean_run_endpoint(
                 "rules_applied": summary["rules_applied"],
                 "rules": summary["rules"],
                 "top_issues": summary["top_issues"],
+                "rules_evaluated": rules_evaluated,
                 "persisted": persisted,
                 "persist_error": persist_error,
             }

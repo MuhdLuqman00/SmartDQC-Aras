@@ -7,7 +7,7 @@ import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { persistWarning } from '../lib/persistWarning';
-import { translateIssue } from '../lib/issueCatalog';
+import { translateIssue, translateRule } from '../lib/issueCatalog';
 import { suggestFix } from '../lib/issueFix';
 
 /* ── Step types ──────────────────────────────────────────────────────── */
@@ -834,7 +834,7 @@ export function UploadPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {ruleList.map((r, i) => (
                     <span key={r.code ?? r.description ?? i} style={{ fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '3px 10px', color: 'var(--text-secondary)' }}>
-                      {translateIssue(r, lang)}
+                      {translateRule(r, lang)}
                     </span>
                   ))}
                 </div>

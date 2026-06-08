@@ -9,7 +9,7 @@ import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { RagBadge, scoreToRag } from '../components/RagBadge';
 import { InlineEmpty } from '../components/InlineEmpty';
-import { translateIssue } from '../lib/issueCatalog';
+import { translateIssue, translateRule } from '../lib/issueCatalog';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000';
 
@@ -29,12 +29,17 @@ export function CleaningPage() {
   const removedPct = before > 0 ? (removed / before) * 100 : 0;
   // Prefer the localisable `rules` (code + description); fall back to the
   // legacy `rules_applied` string[] for older cached sessions.
-  const rules: Rule[] = Array.isArray(stats?.rules)
+  const _isDistrib = (code?: string | null) =>
+    !!code && (code.startsWith('ind_') || code.startsWith('gender_'));
+
+  const rules: Rule[] = (Array.isArray(stats?.rules)
     ? (stats!.rules as Rule[])
     : Array.isArray(stats?.rules_applied)
-      ? (stats!.rules_applied as string[]).map(d => ({ description: d }))
-      : [];
-  const issues: Issue[] = Array.isArray(stats?.top_issues) ? (stats!.top_issues as Issue[]) : [];
+      ? (stats!.rules_applied as string[]).map((d): Rule => ({ description: d }))
+      : []
+  ).filter(r => !_isDistrib(r.code));
+  const issues: Issue[] = (Array.isArray(stats?.top_issues) ? (stats!.top_issues as Issue[]) : [])
+    .filter(i => !_isDistrib(i.code));
 
   const card: React.CSSProperties = {
     background: 'var(--surface)', border: '1px solid var(--border)',
@@ -151,7 +156,7 @@ export function CleaningPage() {
                     fontSize: 12, background: 'var(--info-bg)', border: '1px solid var(--primary-light)',
                     borderRadius: 'var(--radius-pill)', padding: '5px 12px', color: 'var(--primary-light)', fontWeight: 600,
                   }}>
-                    {translateIssue(r, lang)}
+                    {translateRule(r, lang)}
                   </span>
                 ))}
               </div>

@@ -9,12 +9,13 @@ import { ColumnHistogram } from '../components/ColumnHistogram';
 import { DonutCard } from '../components/DonutCard';
 import { StatusClassBars } from '../components/StatusClassBars';
 import { catalogByHome, isPieArrayBlock, isDonutObjectBlock } from '../lib/chartCatalog';
-import { translateIssue } from '../lib/issueCatalog';
+import { translateIssue, translateRule } from '../lib/issueCatalog';
 import { ErrorRetry } from '../components/ErrorRetry';
 import { InlineEmpty } from '../components/InlineEmpty';
 
 interface Issue { code?: string; description: string; severity: 'critical' | 'warning' | 'info'; count: number; samples?: string[]; field?: string; pct?: number; }
 interface Rule { code?: string; description: string; }
+interface RuleEvaluated { code: string; count: number; fired: boolean; }
 interface AnomalyRow { row_index: number; columns: string[]; suggestion: string; }
 interface DimEntry { score: number; max: number; }
 
@@ -75,12 +76,20 @@ export function QualityPage() {
 
   const score = qualityScore ?? 0;
   const stats = cleanStats as Record<string, unknown> | null;
-  const issues: Issue[] = (stats?.top_issues as Issue[]) ?? [];
-  // Prefer localisable `rules` (code + description); fall back to the legacy
-  // string[] for older cached sessions.
-  const rulesApplied: Rule[] = Array.isArray(stats?.rules)
+  const _isDistrib = (code?: string | null) =>
+    !!code && (code.startsWith('ind_') || code.startsWith('gender_'));
+
+  const issues: Issue[] = ((stats?.top_issues as Issue[]) ?? [])
+    .filter(i => !_isDistrib(i.code));
+  // `rules_evaluated` is the full check set (fired + passed) from fresh runs.
+  // Fall back to the fired-only `rules` for older cached sessions.
+  const rulesEvaluated: RuleEvaluated[] | null = Array.isArray(stats?.rules_evaluated)
+    ? (stats!.rules_evaluated as RuleEvaluated[])
+    : null;
+  const rulesApplied: Rule[] = (Array.isArray(stats?.rules)
     ? (stats!.rules as Rule[])
-    : ((stats?.rules_applied as string[]) ?? []).map(d => ({ description: d }));
+    : ((stats?.rules_applied as string[]) ?? []).map((d): Rule => ({ description: d }))
+  ).filter(r => !_isDistrib(r.code));
 
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
   /* Classification breakdown — fetched from the same /charts/blocks
@@ -229,18 +238,42 @@ export function QualityPage() {
             ))}
           </div>
 
-          {/* Rules applied */}
-          {rulesApplied.length > 0 && (
+          {/* Rules applied — prefer the full evaluated set (fired + passed);
+              fall back to fired-only for older cached sessions */}
+          {(rulesEvaluated ?? rulesApplied).length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
                 {t('Rules Applied', 'Peraturan Digunakan')}
               </div>
+              {rulesEvaluated && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
+                  {t('All checks evaluated — dimmed rules found no issues.', 'Semua semakan dinilai — peraturan redup tiada isu ditemui.')}
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {rulesApplied.map((r, i) => (
-                  <span key={r.code ?? r.description ?? i} style={{ fontSize: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 12px', color: 'var(--text-secondary)' }}>
-                    {translateIssue(r, lang)}
-                  </span>
-                ))}
+                {rulesEvaluated
+                  ? rulesEvaluated.map((r) => (
+                    <span key={r.code} style={{
+                      fontSize: 12,
+                      background: r.fired ? 'var(--surface-2)' : 'transparent',
+                      border: `1px solid ${r.fired ? 'var(--border)' : 'var(--border)'}`,
+                      borderRadius: 999,
+                      padding: '4px 12px',
+                      color: r.fired ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      opacity: r.fired ? 1 : 0.55,
+                    }}>
+                      {translateRule(r, lang)}
+                      {!r.fired && (
+                        <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--text-muted)' }}>✓</span>
+                      )}
+                    </span>
+                  ))
+                  : rulesApplied.map((r, i) => (
+                    <span key={r.code ?? r.description ?? i} style={{ fontSize: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 12px', color: 'var(--text-secondary)' }}>
+                      {translateRule(r, lang)}
+                    </span>
+                  ))
+                }
               </div>
             </div>
           )}

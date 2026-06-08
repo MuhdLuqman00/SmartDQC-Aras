@@ -910,7 +910,7 @@ def clean_generic(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 def clean_data(df: pd.DataFrame, data_type: str) -> tuple[pd.DataFrame, dict]:
     """
     Clean data based on data type.
-    
+
     Args:
         df: Raw DataFrame
         data_type: 'kpm', 'myvass', 'ncdc', or 'unknown' (any unsupported schema)
@@ -928,6 +928,48 @@ def clean_data(df: pd.DataFrame, data_type: str) -> tuple[pd.DataFrame, dict]:
     # unknown / any unsupported schema → generic (never ValueError, never
     # silently mis-routed to clean_myvass).
     return clean_generic(df)
+
+
+# ── Evaluated-rule registry ──────────────────────────────────────────────────
+# Every rule code a cleaner can fire, including checks that may produce a
+# count of zero (passed). Used by /clean/run to build `rules_evaluated` so
+# the Quality Report "Rules Applied" card shows the full check set, not just
+# the ones that found problems.
+EVALUATED_RULES: dict[str, list[str]] = {
+    "myvass": [
+        "dropped_invalid_gender",
+        "dropped_date_before_dob",
+        "dropped_age_over5",
+        "dropped_measurement_outlier",
+        "dropped_no_measurement",
+        "dropped_bmi_outlier",
+        "dropped_null_zscore",
+    ],
+    "ncdc": [
+        "dropped_invalid_gender",
+        "dropped_pendapatan_x",
+        "dropped_null_dob",
+        "dropped_date_before_dob",
+        "dropped_age_invalid",
+        "dropped_measurement_outlier",
+        "dropped_no_measurement",
+        "dropped_bmi_outlier",
+        "dropped_duplicate_mykid",
+        "dropped_null_zscore",
+    ],
+    "kpm": [
+        "dropped_ragu_gender",
+        "dropped_invalid_gender",
+        "dropped_duplicate_id",
+        "dropped_invalid_date",
+        "dropped_age_invalid",
+        "dropped_measurement_outlier",
+        "dropped_no_bmi",
+    ],
+    "generic": [
+        "dropped_date_before_dob",
+    ],
+}
 
 
 def detect_data_type(columns: list[str], filename: str = "") -> str:
