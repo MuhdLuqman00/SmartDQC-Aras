@@ -89,6 +89,56 @@ export function classifyCell(col: string, value: unknown): CellFlag {
   return 'ok';
 }
 
+/** Validate a proposed edit value before persisting. Client-side guardrail only —
+ *  the backend still coerces dtype on receipt. */
+export function validateEdit(col: string, value: string): { ok: boolean; messageEN: string; messageBM: string } {
+  const ok = { ok: true, messageEN: '', messageBM: '' };
+
+  if (value.trim() === '') return ok; // allow clearing — server handles null coercion
+
+  if (isBeratCol(col)) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return {
+      ok: false,
+      messageEN: 'Weight must be a number.',
+      messageBM: 'Berat mestilah nombor.',
+    };
+    if (n < BERAT_IMPOSSIBLE_LOW || n > BERAT_IMPOSSIBLE_HIGH) return {
+      ok: false,
+      messageEN: `Weight must be between ${BERAT_IMPOSSIBLE_LOW}–${BERAT_IMPOSSIBLE_HIGH} kg.`,
+      messageBM: `Berat mestilah antara ${BERAT_IMPOSSIBLE_LOW}–${BERAT_IMPOSSIBLE_HIGH} kg.`,
+    };
+    return ok;
+  }
+
+  if (isTinggiCol(col)) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return {
+      ok: false,
+      messageEN: 'Height must be a number.',
+      messageBM: 'Tinggi mestilah nombor.',
+    };
+    if (n < TINGGI_IMPOSSIBLE_LOW || n > TINGGI_IMPOSSIBLE_HIGH) return {
+      ok: false,
+      messageEN: `Height must be between ${TINGGI_IMPOSSIBLE_LOW}–${TINGGI_IMPOSSIBLE_HIGH} cm.`,
+      messageBM: `Tinggi mestilah antara ${TINGGI_IMPOSSIBLE_LOW}–${TINGGI_IMPOSSIBLE_HIGH} cm.`,
+    };
+    return ok;
+  }
+
+  if (isBmiCol(col)) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return {
+      ok: false,
+      messageEN: 'BMI must be a number.',
+      messageBM: 'BMI mestilah nombor.',
+    };
+    return ok;
+  }
+
+  return ok;
+}
+
 /** Returns style overrides for a flagged cell. Spread onto the <td> style prop. */
 export function cellFlagStyle(flag: CellFlag): React.CSSProperties {
   if (flag === 'danger') return {

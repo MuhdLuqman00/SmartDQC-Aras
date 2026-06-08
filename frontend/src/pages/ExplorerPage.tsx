@@ -6,7 +6,7 @@ import { useSession } from '../context/SessionContext';
 import { SessionGuard } from '../components/SessionGuard';
 import { ColumnHistogram } from '../components/ColumnHistogram';
 import { ErrorRetry } from '../components/ErrorRetry';
-import { classifyCell, cellFlagStyle } from '../utils/cellFlags';
+import { classifyCell, cellFlagStyle, validateEdit } from '../utils/cellFlags';
 
 const PAGE_SIZE = 50;
 
@@ -20,6 +20,7 @@ export function ExplorerPage() {
   const [editing, setEditing] = useState<{ rowIdx: number; col: string } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string>('');
   const [localRows, setLocalRows] = useState<Record<string, unknown>[] | null>(null);
   const [fetchError, setFetchError] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(false);
@@ -68,6 +69,12 @@ export function ExplorerPage() {
 
   const commitEdit = async () => {
     if (!editing || !cacheId) { setEditing(null); return; }
+    const validation = validateEdit(editing.col, editValue);
+    if (!validation.ok) {
+      setEditError(`${validation.messageEN} / ${validation.messageBM}`);
+      return;
+    }
+    setEditError('');
     setSaving(true);
     try {
       const r = await api.patch<{ row_index: number; row: Record<string, unknown> }>(
@@ -244,6 +251,7 @@ export function ExplorerPage() {
                             if (!editable) return;
                             setEditing({ rowIdx: absIdx, col: c });
                             setEditValue(row[c] == null ? '' : String(row[c]));
+                            setEditError('');
                           }}
                           onKeyDown={e => {
                             if (!editable || isEditing) return;
@@ -251,6 +259,7 @@ export function ExplorerPage() {
                               e.preventDefault();
                               setEditing({ rowIdx: absIdx, col: c });
                               setEditValue(row[c] == null ? '' : String(row[c]));
+                              setEditError('');
                             }
                           }}
                           style={{
@@ -261,18 +270,36 @@ export function ExplorerPage() {
                           }}
                         >
                           {isEditing ? (
-                            <input
-                              autoFocus
-                              value={editValue}
-                              disabled={saving}
-                              onChange={e => setEditValue(e.target.value)}
-                              onBlur={commitEdit}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') commitEdit();
-                                if (e.key === 'Escape') setEditing(null);
-                              }}
-                              style={{ width: 120, padding: '2px 6px', fontSize: 12, fontFamily: 'var(--font-mono)', border: '1px solid var(--kkm-blue)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text-primary)' }}
-                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <input
+                                autoFocus
+                                value={editValue}
+                                disabled={saving}
+                                aria-invalid={editError ? true : undefined}
+                                aria-describedby={editError ? `edit-err-${absIdx}-${c}` : undefined}
+                                onChange={e => { setEditValue(e.target.value); setEditError(''); }}
+                                onBlur={commitEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') commitEdit();
+                                  if (e.key === 'Escape') { setEditing(null); setEditError(''); }
+                                }}
+                                style={{
+                                  width: 120, padding: '2px 6px', fontSize: 12,
+                                  fontFamily: 'var(--font-mono)',
+                                  border: `1px solid ${editError ? 'var(--danger)' : 'var(--kkm-blue)'}`,
+                                  borderRadius: 4, background: 'var(--surface)', color: 'var(--text-primary)',
+                                }}
+                              />
+                              {editError && (
+                                <span
+                                  id={`edit-err-${absIdx}-${c}`}
+                                  role="alert"
+                                  style={{ fontSize: 10, color: 'var(--danger)', whiteSpace: 'normal', maxWidth: 160, lineHeight: 1.3 }}
+                                >
+                                  {editError}
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                               {row[c] == null
