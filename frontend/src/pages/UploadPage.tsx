@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { Upload, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, ChevronDown, RefreshCw } from 'lucide-react';
@@ -17,7 +17,7 @@ type Step = 1 | 2 | 3 | 4;
 interface MappingRow { raw_column: string; standard_field: string; confidence: number; }
 interface Issue { code?: string; description: string; severity: 'critical' | 'warning' | 'info'; count: number; field?: string; pct?: number; }
 interface Rule { code?: string; description: string; }
-interface EvaluatedRule { code: string; count: number; fired: boolean; }
+interface EvaluatedRule { code: string; count: number; fired: boolean; enabled?: boolean; locked?: boolean; }
 interface CleanStats {
   rows_before: number; rows_after: number;
   quality_score: number; rules_applied: string[];
@@ -150,6 +150,7 @@ export function UploadPage() {
   const [rules, setRules] = useState<CleanRule[]>([]);
   const [impact, setImpact] = useState<RuleImpact | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Step 4 state */
   const [cleanStats, setCleanStats] = useState<CleanStats | null>(null);
@@ -272,7 +273,11 @@ export function UploadPage() {
     const next = rules.map(r => r.code === code ? { ...r, enabled } : r);
     setRules(next);
     api.post('/settings/rules/toggle', { rule: code, enabled }).catch(() => {});  // persist (B3.4)
-    void runPreview(next);
+    // Debounce the (full-run) impact preview so rapid toggles don't stack
+    // multiple z-score cleans; show the pending state immediately.
+    setImpactLoading(true);
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => { void runPreview(next); }, 400);
   };
 
   /* ── Step 2 → 3: validate mapping ─────────────────────────────────── */
@@ -1092,7 +1097,10 @@ export function UploadPage() {
             }
 
             const fired = evaluated.filter(r => r.fired && r.count > 0).sort((a, b) => b.count - a.count);
-            const passed = evaluated.filter(r => !(r.fired && r.count > 0));
+            // A user-disabled rule (enabled === false) did NOT run — keep it
+            // out of "passed" so we never claim a skipped rule found nothing.
+            const disabled = evaluated.filter(r => r.enabled === false);
+            const passed = evaluated.filter(r => r.enabled !== false && !(r.fired && r.count > 0));
             const maxCount = Math.max(1, ...fired.map(r => r.count));
             return (
               <div style={{ marginBottom: 20 }}>
@@ -1139,6 +1147,14 @@ export function UploadPage() {
                   <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 12, lineHeight: 1.6 }}>
                     {t('Also checked, nothing removed: ', 'Turut disemak, tiada dibuang: ')}
                     {passed.map(r => translateRule({ code: r.code, description: r.code }, lang)).join(' · ')}
+                  </div>
+                )}
+
+                {/* Disabled rules — honestly marked as NOT applied, never "passed" */}
+                {disabled.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
+                    {t('Turned off (not applied): ', 'Dimatikan (tidak digunakan): ')}
+                    {disabled.map(r => translateRule({ code: r.code, description: r.code }, lang)).join(' · ')}
                   </div>
                 )}
 
