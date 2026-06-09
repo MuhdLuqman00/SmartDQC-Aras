@@ -13,6 +13,7 @@ v2 (current):
                         + contradiction scanning (hard/soft/strong severities)
                         + canonical identity + chronological timeline
 """
+
 from __future__ import annotations
 
 import re
@@ -54,24 +55,28 @@ def link_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     result = []
     for ic, members in groups.items():
-        result.append({
-            "ic":               ic,
-            "source_types":     list({m["source_type"] for m in members}),
-            "sources":          members,
-            "match_confidence": 1.0,
-            "name":             next((m["name"] for m in members if m.get("name")), None),
-            "dob":              next((m["dob"] for m in members if m.get("dob")), None),
-        })
+        result.append(
+            {
+                "ic": ic,
+                "source_types": list({m["source_type"] for m in members}),
+                "sources": members,
+                "match_confidence": 1.0,
+                "name": next((m["name"] for m in members if m.get("name")), None),
+                "dob": next((m["dob"] for m in members if m.get("dob")), None),
+            }
+        )
 
     for rec in unmatched:
-        result.append({
-            "ic":               rec.get("ic", ""),
-            "source_types":     [rec["source_type"]],
-            "sources":          [rec],
-            "match_confidence": 0.0,
-            "name":             rec.get("name"),
-            "dob":              rec.get("dob"),
-        })
+        result.append(
+            {
+                "ic": rec.get("ic", ""),
+                "source_types": [rec["source_type"]],
+                "sources": [rec],
+                "match_confidence": 0.0,
+                "name": rec.get("name"),
+                "dob": rec.get("dob"),
+            }
+        )
 
     return result
 
@@ -84,15 +89,17 @@ def persist_linkage(groups: list[dict], db_session) -> int:
     rows_written = 0
     for group in groups:
         for src in group["sources"]:
-            db_session.add(EntityLinkage(
-                ic_no=group["ic"],
-                source_type=src["source_type"],
-                dataset_id=src.get("dataset_id"),
-                name=group["name"],
-                dob=group["dob"],
-                match_confidence=group["match_confidence"],
-                created_at=datetime.utcnow(),
-            ))
+            db_session.add(
+                EntityLinkage(
+                    ic_no=group["ic"],
+                    source_type=src["source_type"],
+                    dataset_id=src.get("dataset_id"),
+                    name=group["name"],
+                    dob=group["dob"],
+                    match_confidence=group["match_confidence"],
+                    created_at=datetime.utcnow(),
+                )
+            )
             rows_written += 1
 
     db_session.commit()
@@ -123,6 +130,21 @@ def _levenshtein(a: str, b: str) -> int:
     return prev[-1]
 
 
+def _deletes_within(term: str, max_deletes: int) -> set[str]:
+    """All strings from deleting up to max_deletes chars (term included).
+    For a 12-digit IC at max_deletes=1 this is 13 strings."""
+    results = {term}
+    frontier = {term}
+    for _ in range(max(0, max_deletes)):
+        nxt = set()
+        for w in frontier:
+            for i in range(len(w)):
+                nxt.add(w[:i] + w[i + 1 :])
+        results |= nxt
+        frontier = nxt
+    return results
+
+
 def _normalise_name(raw: str) -> str:
     """Uppercase + strip + collapse internal whitespace so 'Ali  Bin Ahmad' and
     'ALI BIN AHMAD ' are equivalent for boost-comparison."""
@@ -150,9 +172,17 @@ def _normalise_dob(raw: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NAME_PARTICLES = {
-    "BIN", "BINTI", "BT", "BTE", "B",   # Malay
-    "A/L", "A/P", "AL", "AP",            # Indian Malaysian
-    "S/O", "D/O",                        # alternative South Asian
+    "BIN",
+    "BINTI",
+    "BT",
+    "BTE",
+    "B",  # Malay
+    "A/L",
+    "A/P",
+    "AL",
+    "AP",  # Indian Malaysian
+    "S/O",
+    "D/O",  # alternative South Asian
 }
 
 
@@ -279,6 +309,7 @@ def _canonicalise_group(
             tally[v].append(s)
         if not tally:
             return None
+
         # Sort: highest count → newest dataset → best source priority.
         def _rank(item):
             value, srcs = item
@@ -286,20 +317,22 @@ def _canonicalise_group(
             # Filter to actually-present datetimes before taking max.
             datetimes = [
                 dataset_created_at_by_id.get(s.get("dataset_id"))
-                for s in srcs if s.get("dataset_id")
+                for s in srcs
+                if s.get("dataset_id")
             ]
             datetimes = [d for d in datetimes if isinstance(d, datetime)]
             newest_ts = max((d.timestamp() for d in datetimes), default=0.0)
             best_prio = min(_source_priority(s.get("source_type")) for s in srcs)
             return (-count, -newest_ts, best_prio)
+
         ranked = sorted(tally.items(), key=_rank)
         return ranked[0][0]
 
-    canonical["ic"]       = group.get("ic") or _pick("ic")
-    canonical["name"]     = _pick("name")
-    canonical["dob"]      = _pick("dob")
-    canonical["gender"]   = _pick("gender")
-    canonical["state"]    = _pick("state")
+    canonical["ic"] = group.get("ic") or _pick("ic")
+    canonical["name"] = _pick("name")
+    canonical["dob"] = _pick("dob")
+    canonical["gender"] = _pick("gender")
+    canonical["state"] = _pick("state")
     canonical["district"] = _pick("district")
     return canonical
 
@@ -314,16 +347,18 @@ def _build_timeline(group: dict) -> list[dict]:
         d = _parse_dob(s.get("measure_date"))  # same parser; works for any date
         if d is None:
             continue
-        out.append({
-            "date":        d.isoformat(),
-            "source_type": s.get("source_type"),
-            "weight_kg":   s.get("weight_kg"),
-            "height_cm":   s.get("height_cm"),
-            "bmi":         s.get("bmi"),
-            "waz":         s.get("waz"),
-            "haz":         s.get("haz"),
-            "baz":         s.get("baz"),
-        })
+        out.append(
+            {
+                "date": d.isoformat(),
+                "source_type": s.get("source_type"),
+                "weight_kg": s.get("weight_kg"),
+                "height_cm": s.get("height_cm"),
+                "bmi": s.get("bmi"),
+                "waz": s.get("waz"),
+                "haz": s.get("haz"),
+                "baz": s.get("baz"),
+            }
+        )
     out.sort(key=lambda r: r["date"])
     return out
 
@@ -389,11 +424,13 @@ def _scan_conflicts(
                 for (_, v) in parsed[1:]
             )
             if not ok or severe:
-                conflicts.append({
-                    "field": "dob",
-                    "severity": "hard",
-                    "values": [v for (_, v) in parsed],
-                })
+                conflicts.append(
+                    {
+                        "field": "dob",
+                        "severity": "hard",
+                        "values": [v for (_, v) in parsed],
+                    }
+                )
 
     # Name — fuzzy comparison decides severity
     name_vals = _values_for("name")
@@ -410,11 +447,13 @@ def _scan_conflicts(
             severity = "hard"
         else:
             severity = "soft"
-        conflicts.append({
-            "field": "name",
-            "severity": severity,
-            "values": name_vals,
-        })
+        conflicts.append(
+            {
+                "field": "name",
+                "severity": severity,
+                "values": name_vals,
+            }
+        )
 
     return conflicts
 
@@ -460,8 +499,8 @@ def link_records_v2(
                     district, measure_date, weight_kg, height_cm, bmi, waz,
                     haz, baz — all optional, passed through]}
     """
-    groups: list[dict] = []                          # list of group dicts
-    by_ic: dict[str, dict] = {}                      # normalised IC → group
+    groups: list[dict] = []  # list of group dicts
+    by_ic: dict[str, dict] = {}  # normalised IC → group
     by_name_dob_exact: dict[tuple[str, str], dict] = {}  # (name, dob)  → group
     # bucketed index for fuzzy-name pass: (dob_year_month) → list[group]
     by_dob_window: dict[tuple[int, int], list[dict]] = defaultdict(list)
@@ -479,7 +518,9 @@ def link_records_v2(
         if win and g not in by_dob_window[win]:
             by_dob_window[win].append(g)
 
-    def _new_group(rec: dict, ic_norm: str, confidence: float, reasons: list[str]) -> dict:
+    def _new_group(
+        rec: dict, ic_norm: str, confidence: float, reasons: list[str]
+    ) -> dict:
         g = {
             "ic": ic_norm,
             "sources": [rec],
@@ -493,7 +534,9 @@ def link_records_v2(
         return g
 
     def _attach(
-        g: dict, rec: dict, *,
+        g: dict,
+        rec: dict,
+        *,
         drop_confidence_floor: float | None = None,
         boost: float = 0.0,
         add_reason: str | None = None,
@@ -534,23 +577,30 @@ def link_records_v2(
     if fuzzy_ic and len(by_ic) > 1:
         merged_targets: dict[int, dict] = {}  # id(losing_group) → winner
         ic_keys = list(by_ic.keys())
-        for i in range(len(ic_keys)):
-            key_i = ic_keys[i]
+        # Build symmetric-delete index over current IC keys (replaces O(G^2) scan).
+        delete_index: dict[str, list[str]] = defaultdict(list)
+        for key in ic_keys:
+            for variant in _deletes_within(key, fuzzy_ic_max_distance):
+                delete_index[variant].append(key)
+        for key_i in ic_keys:  # preserve original key order
             g_i = by_ic[key_i]
             if id(g_i) in merged_targets:
                 continue
-            for j in range(i + 1, len(ic_keys)):
-                key_j = ic_keys[j]
+            # Candidate partners = ICs sharing any delete-variant with key_i.
+            cand: set[str] = set()
+            for variant in _deletes_within(key_i, fuzzy_ic_max_distance):
+                cand.update(delete_index.get(variant, ()))
+            cand.discard(key_i)
+            for key_j in cand:
                 g_j = by_ic[key_j]
-                if id(g_j) in merged_targets:
+                if g_j is g_i or id(g_j) in merged_targets:
                     continue
-                d = _levenshtein(key_i, key_j)
+                d = _levenshtein(key_i, key_j)  # verify — drop false candidates
                 if 0 < d <= fuzzy_ic_max_distance:
-                    # Merge g_j INTO g_i. Re-use _attach so reason chips +
-                    # confidence floor stay consistent with everywhere else.
                     for src in list(g_j["sources"]):
                         _attach(
-                            g_i, src,
+                            g_i,
+                            src,
                             drop_confidence_floor=0.85,
                             add_reason=f"fuzzy_ic±{d}",
                         )
@@ -567,7 +617,7 @@ def link_records_v2(
     if name_dob_boost:
         for rec in fuzzy_unmatched:
             name_n = _normalise_name(rec.get("name", ""))
-            dob_n  = _normalise_dob(rec.get("dob", ""))
+            dob_n = _normalise_dob(rec.get("dob", ""))
             if not name_n or not dob_n:
                 still_unmatched.append(rec)
                 continue
@@ -600,25 +650,31 @@ def link_records_v2(
             candidates: list[dict] = []
             for dy, dm in ((0, -1), (0, 0), (0, 1)):
                 y, m = base[0] + dy, base[1] + dm
-                if   m == 0:  y, m = y - 1, 12
-                elif m == 13: y, m = y + 1, 1
+                if m == 0:
+                    y, m = y - 1, 12
+                elif m == 13:
+                    y, m = y + 1, 1
                 candidates.extend(by_dob_window.get((y, m), []))
             best_g, best_sim = None, name_fuzzy_threshold
             for g in candidates:
                 if not g.get("name"):
                     continue
                 gdob = g.get("dob")
-                if gdob is None or not _dob_equal(rec.get("dob"), gdob, dob_tolerance_days):
+                if gdob is None or not _dob_equal(
+                    rec.get("dob"), gdob, dob_tolerance_days
+                ):
                     continue
                 sim = _name_similarity(rec_name, g["name"])
                 if sim >= best_sim:
                     best_g, best_sim = g, sim
             if best_g is not None:
                 _attach(
-                    best_g, rec,
+                    best_g,
+                    rec,
                     drop_confidence_floor=0.7,
                     add_reason=(
-                        f"name_fuzzy:{best_sim:.2f}" if dob_tolerance_days == 0
+                        f"name_fuzzy:{best_sim:.2f}"
+                        if dob_tolerance_days == 0
                         else f"name_fuzzy:{best_sim:.2f}+dob±{dob_tolerance_days}d"
                     ),
                 )
@@ -627,8 +683,10 @@ def link_records_v2(
                 # IC-less record with a fuzzy-similar name can find this
                 # one. Pass 5 will skip records that already landed here.
                 _new_group(
-                    rec, _normalise_ic(rec.get("ic", "")),
-                    confidence=0.0, reasons=["unmatched"],
+                    rec,
+                    _normalise_ic(rec.get("ic", "")),
+                    confidence=0.0,
+                    reasons=["unmatched"],
                 )
     else:
         truly_unmatched = still_unmatched
@@ -658,7 +716,7 @@ def link_records_v2(
     for g in groups:
         g["profile"] = {
             "canonical": _canonicalise_group(g, dataset_created_at_by_id),
-            "timeline":  _build_timeline(g),
+            "timeline": _build_timeline(g),
         }
         g["conflicts"] = _scan_conflicts(
             g,
