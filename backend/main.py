@@ -1850,11 +1850,22 @@ def _resolve_effective_type(cache_id: Optional[str], data_type: str) -> str:
 
 @app.get("/clean/rules")
 def clean_rules(data_type: str = Query("myvass")):
-    """Registry view of the REAL cleaning rules for a source type (B3 panel +
-    Settings). One vocabulary shared with /clean/run's rules_evaluated."""
-    return JSONResponse(
-        content=json_safe({"data_type": data_type, "rules": rules_for_source(data_type)})
-    )
+    """Registry view of the REAL cleaning rules for a source type, annotated with
+    the user's persisted enabled state (B3 panel + Settings share one vocabulary).
+    Best-effort on the setting: defaults to all-enabled if the store is unavailable."""
+    state: dict = {}
+    try:
+        from .db.init_db import SessionLocal as _SessionLocal
+        if _SessionLocal is not None:
+            _db = _SessionLocal()
+            try:
+                state = _load_rule_state(_db)
+            finally:
+                _db.close()
+    except Exception:  # pragma: no cover - settings store unavailable
+        state = {}
+    rules = [{**r, "enabled": state.get(r["code"], True)} for r in rules_for_source(data_type)]
+    return JSONResponse(content=json_safe({"data_type": data_type, "rules": rules}))
 
 
 @app.post("/clean/preview-impact")
@@ -4378,20 +4389,8 @@ _DEFAULT_THRESHOLDS = {
     "trajectory_atrisk_tolerance": 0.30,
 }
 
-_DEFAULT_RULES: dict = {
-    k: {"enabled": True}
-    for k in [
-        "duplicate_check",
-        "missing_value_check",
-        "ic_format_check",
-        "age_range_check",
-        "height_range_check",
-        "weight_range_check",
-        "bmi_range_check",
-        "date_format_check",
-        "gender_value_check",
-    ]
-}
+# (legacy _DEFAULT_RULES removed — cleaning rules now come from RULE_REGISTRY,
+#  surfaced via /settings/rules and persisted under cleaning.enabled_rules.)
 
 
 def _get_setting(key: str, default, db) -> dict:
@@ -4450,22 +4449,45 @@ def post_thresholds(updates: dict, db=Depends(get_db)):
     return current
 
 
+def _load_rule_state(db) -> dict:
+    """{code: enabled} for every registry rule (B3). Default all-on; locked rules
+    forced on; overlaid with the stored cleaning.enabled_rules selection."""
+    stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
+    state = {}
+    for code, meta in RULE_REGISTRY.items():
+        if meta.get("locked"):
+            state[code] = True
+        else:
+            v = stored.get(code)
+            state[code] = True if v is None else bool(v)
+    return state
+
+
+def _rules_view(db) -> dict:
+    state = _load_rule_state(db)
+    return {"rules": [{"code": c, **m, "enabled": state[c]} for c, m in RULE_REGISTRY.items()]}
+
+
 @app.get("/settings/rules")
 def get_rules(db=Depends(get_db)):
-    return _get_setting("rules.all", _DEFAULT_RULES, db)
+    """Registry-driven cleaning-rule state (B3). Replaces the inert rules.all set
+    the cleaners never read — the SAME codes now drive the pipeline."""
+    return _rules_view(db)
 
 
 @app.post("/settings/rules/toggle")
 def toggle_rule(body: dict, db=Depends(get_db)):
     rule = body.get("rule")
-    enabled = body.get("enabled", True)
-    current = _get_setting("rules.all", _DEFAULT_RULES, db)
-    if rule not in current:
+    enabled = bool(body.get("enabled", True))
+    if rule not in RULE_REGISTRY:
         raise HTTPException(status_code=404, detail=f"Rule '{rule}' not found")
-    current[rule]["enabled"] = enabled
-    _set_setting("rules.all", current, db)
+    if rule in LOCKED_RULES:
+        raise HTTPException(status_code=400, detail=f"Rule '{rule}' is locked and always runs")
+    stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
+    stored[rule] = enabled
+    _set_setting("cleaning.enabled_rules", stored, db)
     _log_audit(action="settings.rule_toggle", detail=f"{rule}={'on' if enabled else 'off'}")
-    return current
+    return _rules_view(db)
 
 
 def _load_target_year(db) -> int | None:

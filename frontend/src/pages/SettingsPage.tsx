@@ -28,7 +28,14 @@ const DEFAULT_THRESHOLDS: Thresholds = {
   trajectory_atrisk_tolerance: 0.30,
 };
 
-interface Rule { id: string; description: string; enabled: boolean; }
+/* B3: registry-driven cleaning rule — the SAME rule the pipeline runs. */
+interface Rule {
+  code: string;
+  en: string; bm: string;
+  desc_en: string; desc_bm: string;
+  locked: boolean;
+  enabled: boolean;
+}
 
 /* KPI benchmark targets. Both NPAN (national policy) and WHO (clinical
    standard) targets are editable, admin-only. Labels live here; the backend
@@ -58,66 +65,6 @@ const SOURCE_LABELS: Record<string, { en: string; bm: string }> = {
   custom:         { en: 'Custom override', bm: 'Tetapan tersuai' },
 };
 
-/* Rule metadata — backend defaults don't ship descriptions, so we
-   surface them here. Grouped so the rules tab reads as a checklist
-   rather than 9 anonymous toggles. */
-const RULE_META: Record<string, { groupEn: string; groupBm: string; nameEn: string; nameBm: string; descEn: string; descBm: string }> = {
-  duplicate_check: {
-    groupEn: 'Integrity', groupBm: 'Integriti',
-    nameEn: 'Duplicate row detection', nameBm: 'Pengesanan baris duplikat',
-    descEn: 'Flag exact-duplicate rows (same IC + same measurement date).',
-    descBm: 'Tandakan baris duplikat tepat (IC dan tarikh pengukuran sama).',
-  },
-  missing_value_check: {
-    groupEn: 'Integrity', groupBm: 'Integriti',
-    nameEn: 'Missing-value check', nameBm: 'Semakan nilai hilang',
-    descEn: 'Flag rows where critical columns (IC, height, weight, date) are blank.',
-    descBm: 'Tandakan baris di mana lajur kritikal (IC, tinggi, berat, tarikh) kosong.',
-  },
-  ic_format_check: {
-    groupEn: 'Format', groupBm: 'Format',
-    nameEn: 'IC number format', nameBm: 'Format nombor IC',
-    descEn: 'Verify each IC is a 12-digit Malaysian identification number.',
-    descBm: 'Sahkan setiap IC ialah nombor pengenalan Malaysia 12-digit.',
-  },
-  date_format_check: {
-    groupEn: 'Format', groupBm: 'Format',
-    nameEn: 'Date format', nameBm: 'Format tarikh',
-    descEn: 'Verify dates parse to a valid calendar value (no Feb 30, no future birth dates).',
-    descBm: 'Sahkan tarikh dihurai kepada nilai kalendar sah (tiada 30 Februari, tiada tarikh lahir akan datang).',
-  },
-  gender_value_check: {
-    groupEn: 'Format', groupBm: 'Format',
-    nameEn: 'Gender value', nameBm: 'Nilai jantina',
-    descEn: 'Restrict gender values to L/P (or Male/Female aliases).',
-    descBm: 'Hadkan nilai jantina kepada L/P (atau alias Lelaki/Perempuan).',
-  },
-  age_range_check: {
-    groupEn: 'Range', groupBm: 'Julat',
-    nameEn: 'Age range', nameBm: 'Julat umur',
-    descEn: 'Reject ages outside 0–60 months for paediatric nutrition datasets.',
-    descBm: 'Tolak umur di luar 0–60 bulan untuk dataset pemakanan pediatrik.',
-  },
-  height_range_check: {
-    groupEn: 'Range', groupBm: 'Julat',
-    nameEn: 'Height range', nameBm: 'Julat tinggi',
-    descEn: 'Reject heights outside 40–130 cm (WHO under-5 reference window).',
-    descBm: 'Tolak tinggi di luar 40–130 cm (rujukan WHO bawah-5 tahun).',
-  },
-  weight_range_check: {
-    groupEn: 'Range', groupBm: 'Julat',
-    nameEn: 'Weight range', nameBm: 'Julat berat',
-    descEn: 'Reject weights outside 1.5–35 kg (WHO under-5 reference window).',
-    descBm: 'Tolak berat di luar 1.5–35 kg (rujukan WHO bawah-5 tahun).',
-  },
-  bmi_range_check: {
-    groupEn: 'Consistency', groupBm: 'Konsistensi',
-    nameEn: 'BMI consistency', nameBm: 'Konsistensi BMI',
-    descEn: 'Verify recorded BMI matches weight/height² to within rounding tolerance.',
-    descBm: 'Sahkan BMI yang direkodkan sepadan dengan berat/tinggi² dalam toleransi pembundaran.',
-  },
-};
-
 export function SettingsPage() {
   const { t } = useLang();
   const { user } = useAuth();
@@ -135,19 +82,9 @@ export function SettingsPage() {
     api.get<Thresholds>('/settings/thresholds').then(r => setThresholds(r.data)).catch(console.error);
     api.get<KpiTargets>('/settings/kpi-targets').then(r => setKpi(r.data)).catch(console.error);
     api.get('/settings/rules').then(r => {
-      /* Backend returns a dict keyed by rule-id: { duplicate_check: { enabled }, … }.
-         Normalise to Rule[] so an object can never reach rules.map() (was blanking
-         the page). Also tolerate a future array or { rules: [...] } shape. */
-      const data = r.data?.rules ?? r.data ?? {};
-      const list: Rule[] = Array.isArray(data)
-        ? data
-        : Object.entries(data as Record<string, { enabled?: boolean; description?: string }>)
-            .map(([id, v]) => ({
-              id,
-              description: typeof v?.description === 'string' ? v.description : '',
-              enabled: v?.enabled !== false,
-            }));
-      setRules(list);
+      /* Backend (B3) returns { rules: [{ code, en, bm, desc_en, desc_bm,
+         locked, enabled }] } — the real cleaner rules, shared with the pipeline. */
+      setRules(Array.isArray(r.data?.rules) ? r.data.rules : []);
     }).catch(console.error);
   }, []);
 
@@ -205,12 +142,12 @@ export function SettingsPage() {
     } finally { setKpiSaving(false); }
   };
 
-  const toggleRule = async (id: string) => {
-    const rule = rules.find(r => r.id === id);
-    if (!rule) return;
+  const toggleRule = async (code: string) => {
+    const rule = rules.find(r => r.code === code);
+    if (!rule || rule.locked) return;  // locked rules are structural — never toggled
     const enabled = !rule.enabled;
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled } : r));
-    await api.post('/settings/rules/toggle', { rule: id, enabled }).catch(console.error);
+    setRules(prev => prev.map(r => r.code === code ? { ...r, enabled } : r));
+    await api.post('/settings/rules/toggle', { rule: code, enabled }).catch(console.error);
   };
 
   const sliderStyle: React.CSSProperties = { width: '100%', accentColor: 'var(--kkm-blue)' };
@@ -368,57 +305,48 @@ export function SettingsPage() {
         </div>
       )}
 
-      {/* Rules tab */}
+      {/* Rules tab — registry-driven (B3): the SAME rules the pipeline runs. */}
       {tab === 'rules' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            {t('These rules run during cleaning. Changes are saved and also apply in the upload pipeline. Locked rules are required for valid indicators and always run.',
+               'Peraturan ini dijalankan semasa pembersihan. Perubahan disimpan dan turut digunakan dalam saluran muat naik. Peraturan terkunci diperlukan untuk penunjuk sah dan sentiasa dijalankan.')}
+          </p>
           {rules.length === 0 ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
               {t('No rules found.', 'Tiada peraturan ditemui.')}
             </div>
-          ) : (() => {
-            // Group rules by RULE_META.group; rules without metadata fall under "Other".
-            const groups: Record<string, { en: string; bm: string; items: Rule[] }> = {};
-            for (const rule of rules) {
-              const meta = RULE_META[rule.id];
-              const key = meta?.groupEn ?? 'Other';
-              groups[key] ||= { en: meta?.groupEn ?? 'Other', bm: meta?.groupBm ?? 'Lain-lain', items: [] };
-              groups[key].items.push(rule);
-            }
-            return Object.entries(groups).map(([key, g]) => (
-              <div key={key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
-                <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
-                  {t(g.en, g.bm)}
-                </div>
-                {g.items.map((rule, i) => {
-                  const meta = RULE_META[rule.id];
-                  const name = meta ? t(meta.nameEn, meta.nameBm) : (rule.description || rule.id);
-                  const desc = meta ? t(meta.descEn, meta.descBm) : '';
-                  return (
-                    <div key={rule.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < g.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                      <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2 }}>
-                        <input type="checkbox" checked={rule.enabled} onChange={() => toggleRule(rule.id)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                        <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: 'pointer' }}>
-                          <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
-                        </div>
-                      </label>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</div>
-                        {desc && (
-                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{desc}</div>
-                        )}
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{rule.id}</div>
-                      </div>
-                      {!rule.enabled && (
-                        <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                          {t('Disabled', 'Dilumpuhkan')}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+          ) : (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+              <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                {t('Cleaning Rules', 'Peraturan Pembersihan')}
               </div>
-            ));
-          })()}
+              {rules.map((rule, i) => (
+                <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < rules.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2, opacity: rule.locked ? 0.55 : 1 }}>
+                    <input type="checkbox" checked={rule.enabled} disabled={rule.locked} onChange={() => toggleRule(rule.code)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
+                      <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
+                    </div>
+                  </label>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{t(rule.desc_en, rule.desc_bm)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{rule.code}</div>
+                  </div>
+                  {rule.locked ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      {t('Always on', 'Sentiasa aktif')}
+                    </span>
+                  ) : !rule.enabled ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      {t('Disabled', 'Dilumpuhkan')}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

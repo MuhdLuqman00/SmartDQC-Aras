@@ -2,12 +2,6 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
 
-_DEFAULT_RULE_KEYS = [
-    "duplicate_check", "missing_value_check", "ic_format_check",
-    "age_range_check", "height_range_check", "weight_range_check",
-    "bmi_range_check", "date_format_check", "gender_value_check",
-]
-
 
 @pytest.fixture
 def client(override_get_db):
@@ -29,19 +23,26 @@ def test_post_thresholds_persists(client):
     assert resp2.json()["missing_rate_warn"] == pytest.approx(0.07)
 
 
-def test_get_rules_returns_all_defaults(client):
+def test_get_rules_returns_registry(client):
     resp = client.get("/settings/rules")
     assert resp.status_code == 200
-    rules = resp.json()
-    for key in _DEFAULT_RULE_KEYS:
-        assert key in rules
+    rules = {r["code"]: r for r in resp.json()["rules"]}
+    # real cleaner rule codes (B3), not the old inert rules.all keys
+    assert "dropped_invalid_gender" in rules
+    assert rules["dropped_null_zscore"]["locked"] is True
+    assert {"en", "bm", "desc_en", "desc_bm", "enabled"} <= set(rules["dropped_invalid_gender"])
 
 
 def test_toggle_rule_disables(client):
-    resp = client.post("/settings/rules/toggle", json={"rule": "duplicate_check", "enabled": False})
+    resp = client.post("/settings/rules/toggle", json={"rule": "dropped_invalid_gender", "enabled": False})
     assert resp.status_code == 200
-    resp2 = client.get("/settings/rules")
-    assert resp2.json()["duplicate_check"]["enabled"] is False
+    rules = {r["code"]: r for r in client.get("/settings/rules").json()["rules"]}
+    assert rules["dropped_invalid_gender"]["enabled"] is False
+
+
+def test_toggle_locked_rule_rejected(client):
+    resp = client.post("/settings/rules/toggle", json={"rule": "dropped_null_zscore", "enabled": False})
+    assert resp.status_code == 400
 
 
 def test_toggle_unknown_rule_returns_404(client):

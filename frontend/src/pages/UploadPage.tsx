@@ -41,6 +41,15 @@ interface ActionableFinding {
   severity: 'critical' | 'warning' | 'info'; count: number; pct?: number | null;
 }
 
+/* B3 — interactive cleaning rules (registry-driven, shared with Settings). */
+interface CleanRule {
+  code: string; en: string; bm: string;
+  desc_en: string; desc_bm: string;
+  locked: boolean; enabled: boolean;
+}
+interface RuleImpactRow { code: string; count: number; fired: boolean; locked: boolean; enabled: boolean; }
+interface RuleImpact { rows_before: number; rows_after: number; per_rule: RuleImpactRow[]; }
+
 /* ── Mapping normaliser ──────────────────────────────────────────────────
    The backend is inconsistent: /upload/preview returns auto_mapping as
    { col: { standard, confidence } } while /upload/merge-preview returns it
@@ -136,6 +145,11 @@ export function UploadPage() {
   const [qualityCheck, setQualityCheck] = useState<{ score: number; issues: Issue[]; columns: ColumnProfile[]; findings: ActionableFinding[] } | null>(null);
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [expandedFinding, setExpandedFinding] = useState<number | null>(null);
+
+  /* Step 3 — B3 interactive rules */
+  const [rules, setRules] = useState<CleanRule[]>([]);
+  const [impact, setImpact] = useState<RuleImpact | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
 
   /* Step 4 state */
   const [cleanStats, setCleanStats] = useState<CleanStats | null>(null);
@@ -233,6 +247,34 @@ export function UploadPage() {
     finally { setLoading(false); }
   };
 
+  /* ── B3: live row-impact preview + rule toggle (persist to Settings) ──── */
+
+  const runPreview = async (rulesList: CleanRule[]) => {
+    if (!cacheId) return;
+    const mappingDict: Record<string, string> = {};
+    mapping.forEach(m => { if (m.standard_field) mappingDict[m.raw_column] = m.standard_field; });
+    const enabled = rulesList.filter(r => r.enabled || r.locked).map(r => r.code);
+    setImpactLoading(true);
+    try {
+      const pr = await api.post(
+        `/clean/preview-impact?cache_id=${cacheId}&data_type=${encodeURIComponent(detectedType || 'auto')}`,
+        { mapping: mappingDict, enabled_rules: enabled },
+      );
+      setImpact(pr.data);
+    } catch { /* non-fatal — impact is advisory */ }
+    finally { setImpactLoading(false); }
+  };
+
+  const toggleCleanRule = (code: string) => {
+    const rule = rules.find(r => r.code === code);
+    if (!rule || rule.locked) return;  // locked rules are structural
+    const enabled = !rule.enabled;
+    const next = rules.map(r => r.code === code ? { ...r, enabled } : r);
+    setRules(next);
+    api.post('/settings/rules/toggle', { rule: code, enabled }).catch(() => {});  // persist (B3.4)
+    void runPreview(next);
+  };
+
   /* ── Step 2 → 3: validate mapping ─────────────────────────────────── */
 
   const handleValidateMapping = async () => {
@@ -249,6 +291,13 @@ export function UploadPage() {
         columns: Array.isArray(qr.data.columns) ? qr.data.columns : [],
         findings: Array.isArray(qr.data.actionable_findings) ? qr.data.actionable_findings : [],
       });
+      /* B3: load the real cleaning rules for this source + a baseline impact. */
+      try {
+        const rr = await api.get(`/clean/rules?data_type=${encodeURIComponent(detectedType || 'auto')}`);
+        const rl: CleanRule[] = Array.isArray(rr.data?.rules) ? rr.data.rules : [];
+        setRules(rl);
+        void runPreview(rl);
+      } catch { setRules([]); }
       setStep(3);
     } catch { setError(t('Validation failed.', 'Pengesahan gagal.')); }
     finally { setLoading(false); }
@@ -264,6 +313,8 @@ export function UploadPage() {
       const r = await api.post(`/clean/run?cache_id=${cacheId}`, {
         mapping: mappingDict,
         dataset_name: datasetName.trim() || undefined,
+        // B3: the user's rule selection (locked rules always run server-side).
+        enabled_rules: rules.length ? rules.filter(rr => rr.enabled || rr.locked).map(rr => rr.code) : undefined,
       });
       setCleanStats({
         rows_before: Number(r.data.rows_before) || rowCount,
@@ -891,6 +942,59 @@ export function UploadPage() {
               </div>
             );
           })}
+
+          {/* ── B3 Review Cleaning Rules — toggle + live row impact ───────── */}
+          {rules.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  {t('Review cleaning rules', 'Semak peraturan pembersihan')}
+                </div>
+                {impact && (
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {impactLoading
+                      ? t('Calculating…', 'Mengira…')
+                      : t(`Keeps ${Number(impact.rows_after).toLocaleString()} of ${Number(impact.rows_before).toLocaleString()} rows`,
+                          `Kekal ${Number(impact.rows_after).toLocaleString()} daripada ${Number(impact.rows_before).toLocaleString()} baris`)}
+                  </span>
+                )}
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                {rules.map((rule, i) => {
+                  const per = impact?.per_rule.find(p => p.code === rule.code);
+                  return (
+                    <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: i < rules.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <label style={{ position: 'relative', width: 40, height: 22, flexShrink: 0, marginTop: 1, opacity: rule.locked ? 0.55 : 1 }}>
+                        <input type="checkbox" checked={rule.enabled} disabled={rule.locked} onChange={() => toggleCleanRule(rule.code)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: 11, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
+                          <div style={{ position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 21 : 3, transition: 'left var(--transition)' }} />
+                        </div>
+                      </label>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2 }}>{t(rule.desc_en, rule.desc_bm)}</div>
+                      </div>
+                      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 84, marginTop: 1 }}>
+                        {rule.locked ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Always on', 'Sentiasa aktif')}</span>
+                        ) : !rule.enabled ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Off', 'Mati')}</span>
+                        ) : per && per.count > 0 ? (
+                          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--danger)' }}>−{Number(per.count).toLocaleString()}</span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>0</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                {t('Toggle a rule to preview its row impact before cleaning. Locked rules are required for valid indicators. Choices are saved to Settings.',
+                   'Togol peraturan untuk pratonton kesan baris sebelum pembersihan. Peraturan terkunci diperlukan untuk penunjuk sah. Pilihan disimpan ke Tetapan.')}
+              </p>
+            </div>
+          )}
 
           {error && <div style={{ marginTop: 12, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
 
