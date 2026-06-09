@@ -268,16 +268,29 @@ AUTO_MAPPING_HINTS = {
 
 # ─── SOURCE TYPE DETECTION ────────────────────────────────────────────────────
 
+# Legacy values used in older cached datasets / sessions.
+_SCHEMA_TYPE_ALIASES: dict[str, str] = {"unknown": "general", "generic": "general"}
+
+
+def normalize_schema_type(t: str) -> str:
+    """Map legacy schema-type strings to current canonical names.
+
+    "unknown" and "generic" were used before the rename; both resolve to
+    "general" so persisted sessions and cached datasets continue to work.
+    """
+    return _SCHEMA_TYPE_ALIASES.get(t, t)
+
+
 def detect_source_type(columns: list) -> str:
     """Detect data source from column names (case-insensitive).
 
     Returns one of: "kpm" (school), "myvass" (real MyVAS vaccination export OR
-    the TASKA wide format), or "unknown".
+    the TASKA wide format), or "general" (conservative safe-mode cleaner).
     NCDC is column-identical to the *TASKA wide* MyVASS variant (same schema) and
     is therefore not auto-distinguishable from it — it is chosen via the manual
     source-type selector. The real MyVAS vaccination schema (IC_NO_PASSPORT /
     DOSE_DATE / FACILITY_NAME …) IS distinguishable and detected directly.
-    Unknown routes to the merge-all-schemas best-match mapper.
+    "general" routes to the merge-all-schemas best-match mapper.
     """
     cols_lower = {c.lower().strip() for c in columns}
     # Normalize underscores → spaces so signals match both "nama taska" and "nama_taska"
@@ -305,7 +318,7 @@ def detect_source_type(columns: list) -> str:
     if sum(1 for s in taska_signals if s in joined or s in cols_normalized) >= 2:
         return "myvass"
 
-    return "unknown"
+    return "general"
 
 
 def auto_suggest_mapping(columns: list, source_type: str) -> dict:
@@ -319,11 +332,11 @@ def auto_suggest_mapping(columns: list, source_type: str) -> dict:
     mapping = {k: None for k in STANDARD_SCHEMA.keys()}
     hints = AUTO_MAPPING_HINTS.get(source_type, {})
 
-    # For unknown (or any source with no hint set) reuse the column-name
+    # For general (or any source with no hint set) reuse the column-name
     # knowledge from ALL supported schemas (myvass/ncdc/kpm), so a near-known or
     # unsupported dataset gets deterministic per-field best-match hints instead
     # of depending 100% on the LLM.
-    generic = (not hints) or source_type == "unknown"
+    generic = (not hints) or normalize_schema_type(source_type) == "general"
     if generic:
         merged: dict = {}
         for hintset in AUTO_MAPPING_HINTS.values():

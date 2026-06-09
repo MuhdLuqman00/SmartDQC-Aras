@@ -17,8 +17,8 @@ def test_detects_kpm_school():
     assert detect_source_type(cols) == "kpm"
 
 
-def test_unrecognised_columns_are_unknown():
-    assert detect_source_type(["foo", "bar", "baz"]) == "unknown"
+def test_unrecognised_columns_are_general():
+    assert detect_source_type(["foo", "bar", "baz"]) == "general"
 
 
 def test_klinik_is_no_longer_a_source_type():

@@ -31,7 +31,7 @@ def _needs_ai_assist(auto_map: dict, unmapped_threshold: int = 3) -> bool:
 def ai_suggest_mapping(
     columns: list[str],
     sample_values: dict[str, list],
-    source_type: str = "unknown",
+    source_type: str = "general",
 ) -> dict[str, str | None]:
     """Return {standard_field: raw_column} using LLM. Falls back to empty map on error."""
     schema_desc = "\n".join(

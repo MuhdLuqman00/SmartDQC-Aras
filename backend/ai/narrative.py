@@ -36,7 +36,7 @@ def build_context(eda_result: dict) -> str:
     rows = eda_result.get("total_rows")
     if rows is not None:
         cols = eda_result.get("total_columns", "N/A")
-        src = eda_result.get("source_type", "unknown")
+        src = eda_result.get("source_type", "general")
         parts.append(f"Dataset: {rows} records, {cols} columns, source: {src}")
 
     dq = eda_result.get("data_quality_score") or {}

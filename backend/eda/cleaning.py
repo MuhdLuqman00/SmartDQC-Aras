@@ -94,26 +94,45 @@ def _parse_date(series: pd.Series) -> pd.Series:
     return iso.where(is_iso, other)
 
 
+def _exclude(df: pd.DataFrame, mask: pd.Series, code: str) -> None:
+    """Tag rows matching mask as non-analyzable instead of dropping them.
+
+    `analyzable` and `exclude_reason` columns must already exist on `df`.
+    Count stats with `(mask & df["analyzable"]).sum()` BEFORE calling this so
+    each row is attributed to the first rule that excludes it."""
+    if not mask.any():
+        return
+    df.loc[mask, "analyzable"] = False
+    prev = df.loc[mask, "exclude_reason"]
+    df.loc[mask, "exclude_reason"] = prev.apply(lambda r: f"{r}; {code}" if r else code)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MYVASS CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]:
-    """
-    Clean MyVASS data and compute WHO z-scores.
+    """Clean MyVASS data and compute WHO z-scores.
+
+    Flag-then-filter: rows that fail quality rules are tagged with
+    `analyzable=False` and `exclude_reason` instead of being physically
+    dropped. The full frame is returned so callers can offer both a
+    full-flagged download and an analysis-ready filtered view.
 
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
     stats = {"raw_count": len(df), "data_type": "myvass"}
     df = df.copy()
+    df["analyzable"] = True
+    df["exclude_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
-    
+
     # Normalize column names
     df.columns = df.columns.str.strip()
-    
+
     # Find key columns (case- and separator-insensitive: already-processed
     # exports use underscores e.g. "Tarikh_Lahir" / "Tarikh_Pengukuran",
     # raw sources use spaces — both must match the same patterns).
@@ -126,49 +145,48 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
                 if norm(p) in nc:
                     return col
         return None
-    
+
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "date_of_birth", "birth"])
     weight_col = find_col(["berat", "weight"])
     height_col = find_col(["panjang", "tinggi", "height", "length"])
     measure_date_col = find_col(["tarikh antropometri", "tarikh ukur", "tarikh pengukuran", "pengukuran", "measurement date", "dose_date"])
     state_col = find_col(["negeri", "state"])
-    
+
     # Rule 1: Standardize and filter gender
     if gender_col:
         df["Gender"] = df[gender_col].astype(str).str.upper().str.strip().map(GENDER_MAP)
         if _on("dropped_invalid_gender"):
-            before = len(df)
-            df = df[df["Gender"].notna()].copy()
-            stats["dropped_invalid_gender"] = before - len(df)
+            _mask = df["Gender"].isna()
+            stats["dropped_invalid_gender"] = int((_mask & df["analyzable"]).sum())
+            _exclude(df, _mask, "dropped_invalid_gender")
         else:
             stats["dropped_invalid_gender"] = 0
     else:
         df["Gender"] = None
         stats["dropped_invalid_gender"] = 0
-    
+
     # Parse dates
     if dob_col:
         df["Tarikh_Lahir"] = _parse_date(df[dob_col])
     else:
         df["Tarikh_Lahir"] = pd.NaT
-        
+
     if measure_date_col:
         df["Tarikh_Ukur"] = _parse_date(df[measure_date_col])
     else:
         df["Tarikh_Ukur"] = pd.NaT
-    
-    # Rule 4: Drop where measurement < DOB
-    before = len(df)
-    bad_date = (df["Tarikh_Lahir"].notna() & 
-                df["Tarikh_Ukur"].notna() & 
+
+    # Rule 4: Flag where measurement < DOB
+    bad_date = (df["Tarikh_Lahir"].notna() &
+                df["Tarikh_Ukur"].notna() &
                 (df["Tarikh_Ukur"] < df["Tarikh_Lahir"]))
     if _on("dropped_date_before_dob"):
-        stats["dropped_date_before_dob"] = int(bad_date.sum())
-        df = df[~bad_date].copy()
+        stats["dropped_date_before_dob"] = int((bad_date & df["analyzable"]).sum())
+        _exclude(df, bad_date, "dropped_date_before_dob")
     else:
         stats["dropped_date_before_dob"] = 0
-    
+
     # Compute age in days
     has_both_dates = df["Tarikh_Lahir"].notna() & df["Tarikh_Ukur"].notna()
     df["Age_Days"] = np.where(
@@ -177,51 +195,50 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
         np.nan
     )
     df["Age_Months"] = (df["Age_Days"] / 30.4375).round(2)
-    
-    # Rule 3: Drop age >= 60 months
+
+    # Rule 3: Flag age >= 60 months
     age_invalid = df["Age_Months"].notna() & (df["Age_Months"] >= AGE_MAX_MONTHS_INFANT)
     if _on("dropped_age_over5"):
-        stats["dropped_age_over5"] = int(age_invalid.sum())
-        df = df[~age_invalid].copy()
+        stats["dropped_age_over5"] = int((age_invalid & df["analyzable"]).sum())
+        _exclude(df, age_invalid, "dropped_age_over5")
     else:
         stats["dropped_age_over5"] = 0
-    
+
     # Convert measurements to numeric
     if weight_col:
         df["Berat_kg"] = pd.to_numeric(df[weight_col], errors="coerce")
     else:
         df["Berat_kg"] = np.nan
-        
+
     if height_col:
         df["Tinggi_cm"] = pd.to_numeric(df[height_col], errors="coerce")
     else:
         df["Tinggi_cm"] = np.nan
-    
-    # Rule 2: Drop measurement outliers
+
+    # Rule 2: Flag measurement outliers
     berat_bad = (df["Berat_kg"] < BERAT_MIN_INFANT) | (df["Berat_kg"] > BERAT_MAX_INFANT)
     tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_INFANT) | (df["Tinggi_cm"] > TINGGI_MAX_INFANT)
-    
+
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
-        stats["dropped_measurement_outlier"] = int(outlier_mask.sum())
-        df = df[~outlier_mask].copy()
+        stats["dropped_measurement_outlier"] = int((outlier_mask & df["analyzable"]).sum())
+        _exclude(df, outlier_mask, "dropped_measurement_outlier")
     else:
         stats["dropped_measurement_outlier"] = 0
-    
-    # Rule 6: Drop rows with both measurements null
-    before = len(df)
+
+    # Rule 6: Flag rows with both measurements null
     no_meas = df["Berat_kg"].isna() & df["Tinggi_cm"].isna()
     if _on("dropped_no_measurement"):
-        stats["dropped_no_measurement"] = int(no_meas.sum())
-        df = df[~no_meas].copy()
+        stats["dropped_no_measurement"] = int((no_meas & df["analyzable"]).sum())
+        _exclude(df, no_meas, "dropped_no_measurement")
     else:
         stats["dropped_no_measurement"] = 0
-    
+
     # Drop raw BMI column from source (e.g. BMI_KG_M2) — will recalculate
     raw_bmi_cols = [c for c in df.columns if "bmi" in c.lower() and c != "BMI"]
     if raw_bmi_cols:
         df = df.drop(columns=raw_bmi_cols)
-    
+
     # Calculate BMI from weight and height
     valid_both = df["Berat_kg"].notna() & df["Tinggi_cm"].notna() & (df["Tinggi_cm"] > 0)
     df["BMI"] = np.where(
@@ -229,91 +246,94 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
         (df["Berat_kg"] / ((df["Tinggi_cm"] / 100) ** 2)).round(2),
         np.nan
     )
-    
-    # Rule 5: Drop implausible BMI > 40
-    before = len(df)
+
+    # Rule 5: Flag implausible BMI > 40
     bmi_bad = df["BMI"].notna() & (df["BMI"] > BMI_MAX)
     if _on("dropped_bmi_outlier"):
-        stats["dropped_bmi_outlier"] = int(bmi_bad.sum())
-        df = df[~bmi_bad].copy()
+        stats["dropped_bmi_outlier"] = int((bmi_bad & df["analyzable"]).sum())
+        _exclude(df, bmi_bad, "dropped_bmi_outlier")
     else:
         stats["dropped_bmi_outlier"] = 0
-    
+
     # Calculate WHO Z-scores (using daily LMS tables from Excel)
     if ZSCORE_AVAILABLE:
         df["WAZ"] = None
         df["HAZ"] = None
         df["BAZ"] = None
-        
+
         for idx in df.index:
+            # Skip already-excluded rows — z-scores on junk inputs are meaningless
+            if not df.loc[idx, "analyzable"]:
+                continue
             age_days = df.loc[idx, "Age_Days"]
             sex = df.loc[idx, "Gender"]
             weight = df.loc[idx, "Berat_kg"]
             height = df.loc[idx, "Tinggi_cm"]
             bmi = df.loc[idx, "BMI"]
-            
+
             if pd.notna(age_days) and pd.notna(sex):
                 if pd.notna(weight):
                     waz = compute_zscore(weight, sex, age_days, "WAZ")
                     if waz is not None and BIV["WAZ"][0] <= waz <= BIV["WAZ"][1]:
                         df.loc[idx, "WAZ"] = round(waz, 2)
-                
+
                 if pd.notna(height):
                     haz = compute_zscore(height, sex, age_days, "HAZ")
                     if haz is not None and BIV["HAZ"][0] <= haz <= BIV["HAZ"][1]:
                         df.loc[idx, "HAZ"] = round(haz, 2)
-                
+
                 if pd.notna(bmi):
                     baz = compute_zscore(bmi, sex, age_days, "BAZ")
                     if baz is not None and BIV["BAZ"][0] <= baz <= BIV["BAZ"][1]:
                         df.loc[idx, "BAZ"] = round(baz, 2)
-        
+
         df["WAZ_Status"] = df["WAZ"].apply(lambda z: classify_waz(z) if pd.notna(z) else None)
         df["HAZ_Status"] = df["HAZ"].apply(lambda z: classify_haz(z) if pd.notna(z) else None)
         df["BAZ_Status"] = df["BAZ"].apply(lambda z: classify_baz(z) if pd.notna(z) else None)
-        
-        # Indicator flags
+
+        # Indicator flags (computed on all rows; excluded rows get False which is
+        # fine — they are never used in analytics)
         df["Ind_Kurang_Berat_Badan"] = df["WAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Bantut"] = df["HAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Susut"] = df["BAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Berlebihan_BB"] = df["BAZ"].apply(lambda z: z > 1 if pd.notna(z) else False)
         df["Ind_Obes"] = df["BAZ"].apply(lambda z: z > 2 if pd.notna(z) else False)
-        
-        # Rule 7: Drop rows with null z-scores
-        before = len(df)
+
+        # Rule 7: Flag rows with null z-scores (locked — always runs)
         null_zscore = df["WAZ"].isna() | df["HAZ"].isna() | df["BAZ"].isna()
-        stats["dropped_null_zscore"] = int(null_zscore.sum())
-        df = df[~null_zscore].copy()
-        
+        stats["dropped_null_zscore"] = int((null_zscore & df["analyzable"]).sum())
+        _exclude(df, null_zscore, "dropped_null_zscore")
+
         # Normal indicator
         df["Ind_Normal"] = ~(df["Ind_Kurang_Berat_Badan"] | df["Ind_Bantut"] | df["Ind_Susut"])
-        
-        stats["ind_kurang_berat"] = int(df["Ind_Kurang_Berat_Badan"].sum())
-        stats["ind_bantut"] = int(df["Ind_Bantut"].sum())
-        stats["ind_susut"] = int(df["Ind_Susut"].sum())
-        stats["ind_berlebihan_bb"] = int(df["Ind_Berlebihan_BB"].sum())
-        stats["ind_obes"] = int(df["Ind_Obes"].sum())
-        stats["ind_normal"] = int(df["Ind_Normal"].sum())
+
+        _a = df["analyzable"]
+        stats["ind_kurang_berat"] = int(df.loc[_a, "Ind_Kurang_Berat_Badan"].sum())
+        stats["ind_bantut"] = int(df.loc[_a, "Ind_Bantut"].sum())
+        stats["ind_susut"] = int(df.loc[_a, "Ind_Susut"].sum())
+        stats["ind_berlebihan_bb"] = int(df.loc[_a, "Ind_Berlebihan_BB"].sum())
+        stats["ind_obes"] = int(df.loc[_a, "Ind_Obes"].sum())
+        stats["ind_normal"] = int(df.loc[_a, "Ind_Normal"].sum())
     else:
         stats["dropped_null_zscore"] = 0
-    
+
     # Age category column
     if "Age_Days" in df.columns:
         df["Kategori_Umur"] = np.where(
             df["Age_Days"] < 730, "Bawah 2 Tahun",
             np.where(df["Age_Days"] < 1826, "Bawah 5 Tahun", "5 Tahun ke Atas")
         )
-    
-    # Final stats
-    stats["final_count"] = len(df)
+
+    # Final stats — final_count = analyzable rows, not len(df)
+    stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
-    
-    # Gender breakdown
+
+    # Gender breakdown over analyzable rows only
     if "Gender" in df.columns:
-        gender_counts = df["Gender"].value_counts().to_dict()
+        gender_counts = df.loc[df["analyzable"], "Gender"].value_counts().to_dict()
         stats["gender_male"] = gender_counts.get("Male", 0)
         stats["gender_female"] = gender_counts.get("Female", 0)
-    
+
     return df, stats
 
 
@@ -322,26 +342,28 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]:
-    """
-    Clean NCDC (TASKA) data and compute WHO z-scores.
-    
+    """Clean NCDC (TASKA) data and compute WHO z-scores.
+
+    Flag-then-filter: rows that fail quality rules are tagged with
+    `analyzable=False` and `exclude_reason` instead of being physically
+    dropped.
+
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
     stats = {"raw_count": len(df), "data_type": "ncdc"}
     df = df.copy()
+    df["analyzable"] = True
+    df["exclude_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
-    
+
     # Normalize column names
     df.columns = df.columns.str.strip()
-    
+
     # Find key columns
     def find_col(patterns):
-        # Separator-insensitive: processed exports use underscores
-        # ("Tarikh_Lahir"), raw sources use spaces — both must match the
-        # same patterns or near-known schemas lose all rows.
         def norm(s: str) -> str:
             return s.lower().replace("_", " ").replace("-", " ")
         for col in df.columns:
@@ -350,19 +372,19 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
                 if norm(p) in nc:
                     return col
         return None
-    
+
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "birth"])
     state_col = find_col(["negeri", "state"])
     mykid_col = find_col(["mykid", "no. mykid", "ic"])
     income_col = find_col(["pendapatan", "income"])
-    
+
     # Find year-specific columns
     years = []
     weight_cols = {}
     height_cols = {}
     date_cols = {}
-    
+
     for col in df.columns:
         import re
         match = re.match(r"(\d{4})\s*(Berat|Tinggi|Tarikh)", col, re.IGNORECASE)
@@ -377,21 +399,22 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
                 height_cols[year] = col
             elif "tarikh" in col_type:
                 date_cols[year] = col
-    
-    # Reshape wide to long if year columns exist
+
+    # Reshape wide to long if year columns exist (then re-init flag columns on
+    # the new long frame since row count changed)
     if years:
         all_records = []
         base_cols = [c for c in df.columns if not any(str(y) in c for y in years)]
-        
+
         for _, row in df.iterrows():
             for year in years:
                 w_col = weight_cols.get(year)
                 h_col = height_cols.get(year)
                 d_col = date_cols.get(year)
-                
+
                 weight = row.get(w_col) if w_col else None
                 height = row.get(h_col) if h_col else None
-                
+
                 if pd.notna(weight) or pd.notna(height):
                     record = {c: row[c] for c in base_cols if c in row}
                     record["Year"] = year
@@ -399,207 +422,213 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
                     record["Tinggi_cm"] = height
                     record["Tarikh_Pengukuran"] = row.get(d_col) if d_col else None
                     all_records.append(record)
-        
+
         df = pd.DataFrame(all_records)
+        df["analyzable"] = True
+        df["exclude_reason"] = ""
         stats["years_found"] = years
+        stats["raw_count"] = len(df)
     else:
         df["Year"] = None
-    
+
     # Rule 1: Standardize and filter gender
     if gender_col:
         df["Gender"] = df[gender_col].astype(str).str.upper().str.strip().map(GENDER_MAP)
         if _on("dropped_invalid_gender"):
-            before = len(df)
-            df = df[df["Gender"].notna()].copy()
-            stats["dropped_invalid_gender"] = before - len(df)
+            _mask = df["Gender"].isna()
+            stats["dropped_invalid_gender"] = int((_mask & df["analyzable"]).sum())
+            _exclude(df, _mask, "dropped_invalid_gender")
         else:
             stats["dropped_invalid_gender"] = 0
     else:
         df["Gender"] = None
         stats["dropped_invalid_gender"] = 0
-    
+
     # Rule 9: Exclude Pendapatan = 'X'
     if income_col:
-        before = len(df)
         pendapatan_x = df[income_col].astype(str).str.upper().str.strip() == "X"
         if _on("dropped_pendapatan_x"):
-            stats["dropped_pendapatan_x"] = int(pendapatan_x.sum())
-            df = df[~pendapatan_x].copy()
+            stats["dropped_pendapatan_x"] = int((pendapatan_x & df["analyzable"]).sum())
+            _exclude(df, pendapatan_x, "dropped_pendapatan_x")
         else:
             stats["dropped_pendapatan_x"] = 0
     else:
         stats["dropped_pendapatan_x"] = 0
-    
+
     # Parse dates
     if dob_col:
         df["Tarikh_Lahir"] = _parse_date(df[dob_col])
     else:
         df["Tarikh_Lahir"] = pd.NaT
-    
+
     if "Tarikh_Pengukuran" in df.columns:
         df["Tarikh_Pengukuran"] = _parse_date(df["Tarikh_Pengukuran"])
     else:
         df["Tarikh_Pengukuran"] = pd.NaT
-    
-    # Drop null DOB
+
+    # Flag null DOB
     if _on("dropped_null_dob"):
-        before = len(df)
-        df = df[df["Tarikh_Lahir"].notna()].copy()
-        stats["dropped_null_dob"] = before - len(df)
+        _mask = df["Tarikh_Lahir"].isna()
+        stats["dropped_null_dob"] = int((_mask & df["analyzable"]).sum())
+        _exclude(df, _mask, "dropped_null_dob")
     else:
         stats["dropped_null_dob"] = 0
-    
-    # Rule 4: Drop where measurement < DOB
-    before = len(df)
-    bad_date = (df["Tarikh_Lahir"].notna() & 
-                df["Tarikh_Pengukuran"].notna() & 
+
+    # Rule 4: Flag where measurement < DOB
+    bad_date = (df["Tarikh_Lahir"].notna() &
+                df["Tarikh_Pengukuran"].notna() &
                 (df["Tarikh_Pengukuran"] < df["Tarikh_Lahir"]))
     if _on("dropped_date_before_dob"):
-        stats["dropped_date_before_dob"] = int(bad_date.sum())
-        df = df[~bad_date].copy()
+        stats["dropped_date_before_dob"] = int((bad_date & df["analyzable"]).sum())
+        _exclude(df, bad_date, "dropped_date_before_dob")
     else:
         stats["dropped_date_before_dob"] = 0
-    
+
     # Compute age
     has_both = df["Tarikh_Lahir"].notna() & df["Tarikh_Pengukuran"].notna()
     df["Age_Days"] = np.where(has_both, (df["Tarikh_Pengukuran"] - df["Tarikh_Lahir"]).dt.days, np.nan)
     df["Age_Months"] = (df["Age_Days"] / 30.4375).round(2)
-    
-    # Rule 3: Drop age >= 60 months
+
+    # Rule 3: Flag negative age or age >= 60 months
     age_invalid = (df["Age_Days"] < 0) | (df["Age_Months"] >= AGE_MAX_MONTHS_INFANT)
     if _on("dropped_age_invalid"):
-        stats["dropped_age_invalid"] = int((age_invalid & df["Age_Months"].notna()).sum())
-        df = df[~(age_invalid & df["Age_Months"].notna())].copy()
+        _mask = age_invalid & df["Age_Months"].notna()
+        stats["dropped_age_invalid"] = int((_mask & df["analyzable"]).sum())
+        _exclude(df, _mask, "dropped_age_invalid")
     else:
         stats["dropped_age_invalid"] = 0
-    
+
     # Convert measurements
     df["Berat_kg"] = pd.to_numeric(df.get("Berat_kg"), errors="coerce")
     df["Tinggi_cm"] = pd.to_numeric(df.get("Tinggi_cm"), errors="coerce")
-    
-    # Rule 2: Drop measurement outliers
+
+    # Rule 2: Flag measurement outliers
     berat_bad = (df["Berat_kg"] < BERAT_MIN_INFANT) | (df["Berat_kg"] > BERAT_MAX_INFANT)
     tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_INFANT) | (df["Tinggi_cm"] > TINGGI_MAX_INFANT)
-    
+
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
-        stats["dropped_measurement_outlier"] = int(outlier_mask.sum())
-        df = df[~outlier_mask].copy()
+        stats["dropped_measurement_outlier"] = int((outlier_mask & df["analyzable"]).sum())
+        _exclude(df, outlier_mask, "dropped_measurement_outlier")
     else:
         stats["dropped_measurement_outlier"] = 0
-    
-    # Rule 6: Drop no measurements
-    before = len(df)
+
+    # Rule 6: Flag no measurements
     no_meas = df["Berat_kg"].isna() & df["Tinggi_cm"].isna()
     if _on("dropped_no_measurement"):
-        stats["dropped_no_measurement"] = int(no_meas.sum())
-        df = df[~no_meas].copy()
+        stats["dropped_no_measurement"] = int((no_meas & df["analyzable"]).sum())
+        _exclude(df, no_meas, "dropped_no_measurement")
     else:
         stats["dropped_no_measurement"] = 0
-    
+
     # Drop raw BMI column from source — will recalculate
     raw_bmi_cols = [c for c in df.columns if "bmi" in c.lower() and c != "BMI"]
     if raw_bmi_cols:
         df = df.drop(columns=raw_bmi_cols)
-    
+
     # Calculate BMI from weight and height
     valid_both = df["Berat_kg"].notna() & df["Tinggi_cm"].notna() & (df["Tinggi_cm"] > 0)
     df["BMI"] = np.where(valid_both, (df["Berat_kg"] / ((df["Tinggi_cm"] / 100) ** 2)).round(2), np.nan)
-    
-    # Rule 5: Drop implausible BMI
-    before = len(df)
+
+    # Rule 5: Flag implausible BMI
     bmi_bad = df["BMI"].notna() & (df["BMI"] > BMI_MAX)
     if _on("dropped_bmi_outlier"):
-        stats["dropped_bmi_outlier"] = int(bmi_bad.sum())
-        df = df[~bmi_bad].copy()
+        stats["dropped_bmi_outlier"] = int((bmi_bad & df["analyzable"]).sum())
+        _exclude(df, bmi_bad, "dropped_bmi_outlier")
     else:
         stats["dropped_bmi_outlier"] = 0
-    
-    # Rule 8: Remove duplicate MyKid (keep most recent)
+
+    # Rule 8: Flag duplicate MyKid (keep most recent; flag older duplicates)
     if mykid_col and "Tarikh_Pengukuran" in df.columns and _on("dropped_duplicate_mykid"):
-        before = len(df)
-        df = df.sort_values("Tarikh_Pengukuran", ascending=False)
-        df = df.drop_duplicates(subset=[mykid_col], keep="first")
-        stats["dropped_duplicate_mykid"] = before - len(df)
+        df_sorted = df.sort_values("Tarikh_Pengukuran", ascending=False)
+        dup_mask = df_sorted.duplicated(subset=[mykid_col], keep="first")
+        # Map back to original index
+        dup_idx = df_sorted.index[dup_mask]
+        _mask = pd.Series(False, index=df.index)
+        _mask.loc[dup_idx] = True
+        stats["dropped_duplicate_mykid"] = int((_mask & df["analyzable"]).sum())
+        _exclude(df, _mask, "dropped_duplicate_mykid")
     else:
         stats["dropped_duplicate_mykid"] = 0
-    
+
     # Calculate WHO Z-scores (using daily LMS tables from Excel)
     if ZSCORE_AVAILABLE:
         df["WAZ"] = None
         df["HAZ"] = None
         df["BAZ"] = None
-        
+
         for idx in df.index:
+            if not df.loc[idx, "analyzable"]:
+                continue
             age_days = df.loc[idx, "Age_Days"]
             sex = df.loc[idx, "Gender"]
             weight = df.loc[idx, "Berat_kg"]
             height = df.loc[idx, "Tinggi_cm"]
             bmi = df.loc[idx, "BMI"]
-            
+
             if pd.notna(age_days) and pd.notna(sex):
                 if pd.notna(weight):
                     waz = compute_zscore(weight, sex, age_days, "WAZ")
                     if waz is not None and BIV["WAZ"][0] <= waz <= BIV["WAZ"][1]:
                         df.loc[idx, "WAZ"] = round(waz, 2)
-                
+
                 if pd.notna(height):
                     haz = compute_zscore(height, sex, age_days, "HAZ")
                     if haz is not None and BIV["HAZ"][0] <= haz <= BIV["HAZ"][1]:
                         df.loc[idx, "HAZ"] = round(haz, 2)
-                
+
                 if pd.notna(bmi):
                     baz = compute_zscore(bmi, sex, age_days, "BAZ")
                     if baz is not None and BIV["BAZ"][0] <= baz <= BIV["BAZ"][1]:
                         df.loc[idx, "BAZ"] = round(baz, 2)
-        
+
         df["WAZ_Status"] = df["WAZ"].apply(lambda z: classify_waz(z) if pd.notna(z) else None)
         df["HAZ_Status"] = df["HAZ"].apply(lambda z: classify_haz(z) if pd.notna(z) else None)
         df["BAZ_Status"] = df["BAZ"].apply(lambda z: classify_baz(z) if pd.notna(z) else None)
-        
+
         # Indicator flags
         df["Ind_Kurang_Berat_Badan"] = df["WAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Bantut"] = df["HAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Susut"] = df["BAZ"].apply(lambda z: z < -2 if pd.notna(z) else False)
         df["Ind_Berlebihan_BB"] = df["BAZ"].apply(lambda z: z > 1 if pd.notna(z) else False)
         df["Ind_Obes"] = df["BAZ"].apply(lambda z: z > 2 if pd.notna(z) else False)
-        
-        # Rule 7: Drop rows with null z-scores
-        before = len(df)
+
+        # Rule 7: Flag rows with null z-scores (locked — always runs)
         null_zscore = df["WAZ"].isna() | df["HAZ"].isna() | df["BAZ"].isna()
-        stats["dropped_null_zscore"] = int(null_zscore.sum())
-        df = df[~null_zscore].copy()
-        
+        stats["dropped_null_zscore"] = int((null_zscore & df["analyzable"]).sum())
+        _exclude(df, null_zscore, "dropped_null_zscore")
+
         df["Ind_Normal"] = ~(df["Ind_Kurang_Berat_Badan"] | df["Ind_Bantut"] | df["Ind_Susut"])
-        
-        stats["ind_kurang_berat"] = int(df["Ind_Kurang_Berat_Badan"].sum())
-        stats["ind_bantut"] = int(df["Ind_Bantut"].sum())
-        stats["ind_susut"] = int(df["Ind_Susut"].sum())
-        stats["ind_berlebihan_bb"] = int(df["Ind_Berlebihan_BB"].sum())
-        stats["ind_obes"] = int(df["Ind_Obes"].sum())
-        stats["ind_normal"] = int(df["Ind_Normal"].sum())
+
+        _a = df["analyzable"]
+        stats["ind_kurang_berat"] = int(df.loc[_a, "Ind_Kurang_Berat_Badan"].sum())
+        stats["ind_bantut"] = int(df.loc[_a, "Ind_Bantut"].sum())
+        stats["ind_susut"] = int(df.loc[_a, "Ind_Susut"].sum())
+        stats["ind_berlebihan_bb"] = int(df.loc[_a, "Ind_Berlebihan_BB"].sum())
+        stats["ind_obes"] = int(df.loc[_a, "Ind_Obes"].sum())
+        stats["ind_normal"] = int(df.loc[_a, "Ind_Normal"].sum())
     else:
         stats["dropped_null_zscore"] = 0
-    
+
     # Age category column
     if "Age_Days" in df.columns:
         df["Kategori_Umur"] = np.where(
             df["Age_Days"] < 730, "Bawah 2 Tahun",
             np.where(df["Age_Days"] < 1826, "Bawah 5 Tahun", "5 Tahun ke Atas")
         )
-    
-    # Final stats
-    stats["final_count"] = len(df)
+
+    # Final stats — final_count = analyzable rows, not len(df)
+    stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
-    
+
     if "Gender" in df.columns:
-        gender_counts = df["Gender"].value_counts().to_dict()
+        gender_counts = df.loc[df["analyzable"], "Gender"].value_counts().to_dict()
         stats["gender_male"] = gender_counts.get("Male", 0)
         stats["gender_female"] = gender_counts.get("Female", 0)
-    
+
     if "Year" in df.columns:
-        stats["year_counts"] = df["Year"].value_counts().to_dict()
-    
+        stats["year_counts"] = df.loc[df["analyzable"], "Year"].value_counts().to_dict()
+
     return df, stats
 
 
@@ -608,29 +637,31 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]:
-    """
-    Clean KPM (school) data and calculate BMI categories.
-    
+    """Clean KPM (school) data and calculate BMI categories.
+
+    Flag-then-filter: rows that fail quality rules are tagged with
+    `analyzable=False` and `exclude_reason` instead of being physically
+    dropped.
+
     Note: KPM data is for 7-year-olds (school age), which is beyond WHO infant
     z-score tables, so we use BMI thresholds instead of z-scores.
-    
+
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
     stats = {"raw_count": len(df), "data_type": "kpm"}
     df = df.copy()
+    df["analyzable"] = True
+    df["exclude_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
-    
+
     # Normalize column names
     df.columns = df.columns.str.strip()
-    
+
     # Find key columns
     def find_col(patterns):
-        # Separator-insensitive: processed exports use underscores
-        # ("Tarikh_Lahir"), raw sources use spaces — both must match the
-        # same patterns or near-known schemas lose all rows.
         def norm(s: str) -> str:
             return s.lower().replace("_", " ").replace("-", " ")
         for col in df.columns:
@@ -639,7 +670,7 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]
                 if norm(p) in nc:
                     return col
         return None
-    
+
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "birth"])
     weight_col = find_col(["berat", "weight"])
@@ -649,99 +680,100 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]
     school_col = find_col(["nama sekolah", "sekolah", "school"])
     student_id_col = find_col(["id_murid", "student_id", "id"])
     year_col = find_col(["thn_ting", "tahun", "year"])
-    
-    # Rule 3: Standardize gender (drop RAGU)
+
+    # Rule 3: Standardize gender (flag RAGU)
     if gender_col:
         df["Jantina_Raw"] = df[gender_col].astype(str).str.upper().str.strip()
         if _on("dropped_ragu_gender"):
-            before = len(df)
-            df = df[df["Jantina_Raw"] != "RAGU"].copy()
-            stats["dropped_ragu_gender"] = before - len(df)
+            _mask = df["Jantina_Raw"] == "RAGU"
+            stats["dropped_ragu_gender"] = int((_mask & df["analyzable"]).sum())
+            _exclude(df, _mask, "dropped_ragu_gender")
         else:
             stats["dropped_ragu_gender"] = 0
-        
+
         df["Gender"] = df["Jantina_Raw"].map(GENDER_MAP)
         if _on("dropped_invalid_gender"):
-            before = len(df)
-            df = df[df["Gender"].notna()].copy()
-            stats["dropped_invalid_gender"] = before - len(df)
+            _mask = df["Gender"].isna()
+            stats["dropped_invalid_gender"] = int((_mask & df["analyzable"]).sum())
+            _exclude(df, _mask, "dropped_invalid_gender")
         else:
             stats["dropped_invalid_gender"] = 0
     else:
         df["Gender"] = None
         stats["dropped_ragu_gender"] = 0
         stats["dropped_invalid_gender"] = 0
-    
-    # Rule 2: Drop duplicate ID_MURID (keep first)
+
+    # Rule 2: Flag duplicate ID_MURID (keep first; flag later duplicates)
     if student_id_col and _on("dropped_duplicate_id"):
-        before = len(df)
-        df = df.drop_duplicates(subset=[student_id_col], keep="first")
-        stats["dropped_duplicate_id"] = before - len(df)
+        dup_mask = df.duplicated(subset=[student_id_col], keep="first")
+        stats["dropped_duplicate_id"] = int((dup_mask & df["analyzable"]).sum())
+        _exclude(df, dup_mask, "dropped_duplicate_id")
     else:
         stats["dropped_duplicate_id"] = 0
-    
+
     # Parse dates
     if dob_col:
         df["Tarikh_Lahir"] = _parse_date(df[dob_col])
     else:
         df["Tarikh_Lahir"] = pd.NaT
-    
+
     if measure_date_col:
         df["Tarikh_Pengukuran"] = _parse_date(df[measure_date_col])
     else:
         df["Tarikh_Pengukuran"] = pd.NaT
-    
-    # Rule 5: Validate dates (no future, no epoch)
+
+    # Rule 5: Flag invalid dates (future or before DOB)
     today = pd.Timestamp.now()
     invalid_date = (
         (df["Tarikh_Pengukuran"] > today) |
         (df["Tarikh_Pengukuran"] < df["Tarikh_Lahir"])
     )
     if _on("dropped_invalid_date"):
-        stats["dropped_invalid_date"] = int((invalid_date & df["Tarikh_Pengukuran"].notna()).sum())
-        df = df[~(invalid_date & df["Tarikh_Pengukuran"].notna())].copy()
+        _mask = invalid_date & df["Tarikh_Pengukuran"].notna()
+        stats["dropped_invalid_date"] = int((_mask & df["analyzable"]).sum())
+        _exclude(df, _mask, "dropped_invalid_date")
     else:
         stats["dropped_invalid_date"] = 0
-    
+
     # Calculate age
     has_both = df["Tarikh_Lahir"].notna() & df["Tarikh_Pengukuran"].notna()
     df["Age_Days"] = np.where(has_both, (df["Tarikh_Pengukuran"] - df["Tarikh_Lahir"]).dt.days, np.nan)
     df["Age_Years"] = (df["Age_Days"] / 365.25).round(1)
-    
-    # Rule 4: Validate age 6-8 years for school
+
+    # Rule 4: Flag age outside 5–10 years for school cohort
     age_invalid = df["Age_Years"].notna() & ((df["Age_Years"] < 5) | (df["Age_Years"] > 10))
     if _on("dropped_age_invalid"):
-        stats["dropped_age_invalid"] = int(age_invalid.sum())
-        df = df[~age_invalid].copy()
+        stats["dropped_age_invalid"] = int((age_invalid & df["analyzable"]).sum())
+        _exclude(df, age_invalid, "dropped_age_invalid")
     else:
         stats["dropped_age_invalid"] = 0
-    
+
     # Convert measurements
     if weight_col:
         df["Berat_kg"] = pd.to_numeric(df[weight_col], errors="coerce")
     else:
         df["Berat_kg"] = np.nan
-    
+
     if height_col:
         df["Tinggi_cm"] = pd.to_numeric(df[height_col], errors="coerce")
     else:
         df["Tinggi_cm"] = np.nan
-    
-    # Rule 6 & 7: Drop measurement outliers
+
+    # Rule 6 & 7: Flag measurement outliers
     berat_bad = (df["Berat_kg"] < BERAT_MIN_SCHOOL) | (df["Berat_kg"] > BERAT_MAX_SCHOOL)
     tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_SCHOOL) | (df["Tinggi_cm"] > TINGGI_MAX_SCHOOL)
-    
+
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
-        stats["dropped_measurement_outlier"] = int(outlier_mask.sum())
-        df = df[~outlier_mask].copy()
+        stats["dropped_measurement_outlier"] = int((outlier_mask & df["analyzable"]).sum())
+        _exclude(df, outlier_mask, "dropped_measurement_outlier")
     else:
         stats["dropped_measurement_outlier"] = 0
-    
+
     # Calculate BMI
     valid_both = df["Berat_kg"].notna() & df["Tinggi_cm"].notna() & (df["Tinggi_cm"] > 0)
     df["BMI"] = np.where(valid_both, (df["Berat_kg"] / ((df["Tinggi_cm"] / 100) ** 2)).round(2), np.nan)
-    
+
     # Rule 9: BMI Categories
     df["BMI_Category"] = df["BMI"].apply(_classify_bmi_school)
     df["BMI_Category_EN"] = df["BMI_Category"].map({
@@ -750,33 +782,33 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]
         "Berlebihan Berat Badan": "Overweight",
         "Obes": "Obese"
     })
-    
+
     # Indicator flags
     df["Ind_Kurus"] = df["BMI_Category"] == "Kurus"
     df["Ind_Normal"] = df["BMI_Category"] == "Normal"
     df["Ind_Berlebihan"] = df["BMI_Category"] == "Berlebihan Berat Badan"
     df["Ind_Obes"] = df["BMI_Category"] == "Obes"
-    
-    # Drop rows with no BMI
-    before = len(df)
-    df = df[df["BMI"].notna()].copy()
-    stats["dropped_no_bmi"] = before - len(df)
-    
-    # Final stats
-    stats["final_count"] = len(df)
+
+    # Flag rows with no computable BMI (locked — required for BMI categories)
+    no_bmi = df["BMI"].isna()
+    stats["dropped_no_bmi"] = int((no_bmi & df["analyzable"]).sum())
+    _exclude(df, no_bmi, "dropped_no_bmi")
+
+    # Final stats — final_count = analyzable rows, not len(df)
+    stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
-    
-    # Category counts
-    stats["ind_kurus"] = int(df["Ind_Kurus"].sum())
-    stats["ind_normal"] = int(df["Ind_Normal"].sum())
-    stats["ind_berlebihan"] = int(df["Ind_Berlebihan"].sum())
-    stats["ind_obes"] = int(df["Ind_Obes"].sum())
-    
+
+    _a = df["analyzable"]
+    stats["ind_kurus"] = int(df.loc[_a, "Ind_Kurus"].sum())
+    stats["ind_normal"] = int(df.loc[_a, "Ind_Normal"].sum())
+    stats["ind_berlebihan"] = int(df.loc[_a, "Ind_Berlebihan"].sum())
+    stats["ind_obes"] = int(df.loc[_a, "Ind_Obes"].sum())
+
     if "Gender" in df.columns:
-        gender_counts = df["Gender"].value_counts().to_dict()
+        gender_counts = df.loc[_a, "Gender"].value_counts().to_dict()
         stats["gender_male"] = gender_counts.get("Male", 0)
         stats["gender_female"] = gender_counts.get("Female", 0)
-    
+
     return df, stats
 
 
@@ -784,8 +816,8 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]
 # GENERIC CLEANING (unknown / near-known schemas)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def clean_generic(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]:
-    """Conservative cleaner for unknown / "almost-the-same-as-known" schemas.
+def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]:
+    """Conservative cleaner for general / "almost-the-same-as-known" schemas.
 
     Assumes column mapping has already renamed columns toward the canonical
     schema. Unlike the source-specific cleaners it is *honest, not silent*:
@@ -799,8 +831,10 @@ def clean_generic(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
       with a reason — never fabricated as a 0% number.
     - stats carries a coverage report so the gap is visible to the user.
     """
-    stats: dict = {"raw_count": len(df), "data_type": "generic"}
+    stats: dict = {"raw_count": len(df), "data_type": "general"}
     df = df.copy()
+    df["analyzable"] = True
+    df["exclude_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
@@ -865,15 +899,15 @@ def clean_generic(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     df["Age_Days"] = age_days
     df["Age_Months"] = (df["Age_Days"] / 30.4375).round(2)
 
-    # Only genuine logical garbage is dropped, and only when both dates exist.
+    # Only genuine logical garbage is flagged, and only when both dates exist.
     bad_date = (
         df["Tarikh_Lahir"].notna()
         & df["Tarikh_Ukur"].notna()
         & (df["Tarikh_Ukur"] < df["Tarikh_Lahir"])
     )
     if _on("dropped_date_before_dob"):
-        stats["dropped_date_before_dob"] = int(bad_date.sum())
-        df = df[~bad_date].copy()
+        stats["dropped_date_before_dob"] = int((bad_date & df["analyzable"]).sum())
+        _exclude(df, bad_date, "dropped_date_before_dob")
     else:
         stats["dropped_date_before_dob"] = 0
 
@@ -962,7 +996,7 @@ def clean_generic(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
         if n not in unavailable
     )
 
-    stats["final_count"] = len(df)
+    stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
     stats["coverage"] = coverage
     stats["assumptions"] = assumptions
@@ -981,8 +1015,9 @@ def clean_data(df: pd.DataFrame, data_type: str, enabled_rules=None) -> tuple[pd
 
     Args:
         df: Raw DataFrame
-        data_type: 'kpm', 'myvass', 'ncdc', or 'unknown' (any unsupported schema)
-            which routes to the conservative generic cleaner.
+        data_type: 'kpm', 'myvass', 'ncdc', or 'general' (any unsupported schema)
+            which routes to the conservative general cleaner. Legacy values
+            'unknown' and 'generic' are normalised to 'general'.
         enabled_rules: optional set/collection of rule codes the user kept on
             (B3). None ⇒ every rule runs (legacy behaviour). Locked rules in
             RULE_REGISTRY always run regardless.
@@ -990,15 +1025,17 @@ def clean_data(df: pd.DataFrame, data_type: str, enabled_rules=None) -> tuple[pd
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
+    from backend.config import normalize_schema_type
+    data_type = normalize_schema_type(data_type)
     if data_type == "kpm":
         return clean_kpm(df, enabled_rules)
     elif data_type == "myvass":
         return clean_myvass(df, enabled_rules)
     elif data_type == "ncdc":
         return clean_ncdc(df, enabled_rules)
-    # unknown / any unsupported schema → generic (never ValueError, never
-    # silently mis-routed to clean_myvass).
-    return clean_generic(df, enabled_rules)
+    # general / any unsupported schema → conservative general cleaner (never
+    # ValueError, never silently mis-routed to clean_myvass).
+    return clean_general(df, enabled_rules)
 
 
 # ── Evaluated-rule registry ──────────────────────────────────────────────────
@@ -1037,7 +1074,7 @@ EVALUATED_RULES: dict[str, list[str]] = {
         "dropped_measurement_outlier",
         "dropped_no_bmi",
     ],
-    "generic": [
+    "general": [
         "dropped_date_before_dob",
     ],
 }
@@ -1151,7 +1188,7 @@ LOCKED_RULES: frozenset[str] = frozenset(
 def rules_for_source(data_type: str) -> list[dict]:
     """Registry view for one source type, in cleaner-execution order. Used by the
     Settings tab and the pipeline rule panel so both list the SAME real rules."""
-    codes = EVALUATED_RULES.get(data_type, EVALUATED_RULES["generic"])
+    codes = EVALUATED_RULES.get(data_type, EVALUATED_RULES["general"])
     return [{"code": c, **RULE_REGISTRY[c]} for c in codes if c in RULE_REGISTRY]
 
 
@@ -1168,7 +1205,7 @@ def detect_data_type(columns: list[str], filename: str = "") -> str:
     Auto-detect data type from column names and filename.
     
     Returns:
-        str: 'kpm', 'myvass', 'ncdc', or 'unknown'
+        str: 'kpm', 'myvass', 'ncdc', or 'general'
     """
     col_set = set(c.upper() for c in columns)
     fname = filename.lower()
@@ -1193,4 +1230,4 @@ def detect_data_type(columns: list[str], filename: str = "") -> str:
     if "pemakanan" in fname or "anthropometry" in fname:
         return "myvass"
     
-    return "unknown"
+    return "general"

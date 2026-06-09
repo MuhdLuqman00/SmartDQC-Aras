@@ -39,7 +39,7 @@ interface Rule {
   source_types: string[];
 }
 
-type RuleSchema = 'myvass' | 'ncdc' | 'kpm' | 'generic';
+type RuleSchema = 'myvass' | 'ncdc' | 'kpm' | 'general';
 
 /* KPI benchmark targets. Both NPAN (national policy) and WHO (clinical
    standard) targets are editable, admin-only. Labels live here; the backend
@@ -329,7 +329,7 @@ export function SettingsPage() {
                 ['myvass', 'MyVASS'],
                 ['ncdc', 'NCDC'],
                 ['kpm', 'KPM'],
-                ['generic', t('Other', 'Lain-lain')],
+                ['general', t('Other', 'Lain-lain')],
               ] as [RuleSchema, string][]).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setRuleSchema(key)}
                   style={{

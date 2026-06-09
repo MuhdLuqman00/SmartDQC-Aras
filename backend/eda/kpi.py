@@ -165,6 +165,13 @@ def compute_kpi_dashboard(
     if df is None or df.empty:
         return empty
 
+    # Filter to analyzable rows when flag-then-filter columns are present.
+    # Frames from old callers (no analyzable column) pass through unchanged.
+    if "analyzable" in df.columns:
+        df = df[df["analyzable"]]
+    if df.empty:
+        return empty
+
     npan_t, who_t = _resolve_targets(npan, who)
 
     total = len(df)

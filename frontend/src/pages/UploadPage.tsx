@@ -184,7 +184,7 @@ export function UploadPage() {
             files.forEach(f => fd.append('files', f));
             const r = await api.post('/upload/merge-preview', fd);
             setCacheId(r.data.cache_id);
-            setDetectedType(r.data.source_type || 'unknown');
+            setDetectedType(r.data.source_type || 'general');
             setRowCount(Number(r.data.total_rows ?? r.data.row_count) || 0);
             return r.data.auto_mapping || {};
           })()
@@ -196,7 +196,7 @@ export function UploadPage() {
               : '/upload/preview';
             const r = await api.post(url, fd);
             setCacheId(r.data.cache_id);
-            setDetectedType(r.data.detected_source_type || r.data.source_type || 'unknown');
+            setDetectedType(r.data.detected_source_type || r.data.source_type || 'general');
             setRowCount(Number(r.data.rows ?? r.data.row_count) || 0);
             setWideFormat(r.data.is_wide_format || false);
             setSheets(r.data.sheets || []);
@@ -406,7 +406,7 @@ export function UploadPage() {
                 <option value="myvass">{t('MyVASS (TASKA)', 'MyVASS (TASKA)')}</option>
                 <option value="ncdc">{t('NCDC (TASKA)', 'NCDC (TASKA)')}</option>
                 <option value="kpm">{t('KPM (School)', 'KPM (Sekolah)')}</option>
-                <option value="unknown">{t('Other / Unknown', 'Lain-lain / Tidak Diketahui')}</option>
+                <option value="general">{t('Other / General', 'Lain-lain / Umum')}</option>
               </select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                 {t('Leave on Auto-detect unless detection picks the wrong schema. "Other" maps columns by best match across all schemas.',

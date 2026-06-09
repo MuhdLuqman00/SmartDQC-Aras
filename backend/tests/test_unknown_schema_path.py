@@ -1,28 +1,29 @@
-"""Phase G: unknown / near-known schemas must be mapped + cleaned honestly.
+"""Phase G: general / near-known schemas must be mapped + cleaned honestly.
 
-Covers: union-hints for unknown, generic cleaner never wipes rows,
-unknown routing to the generic cleaner, and kpi.py surfacing unavailable
-indicators.
+Covers: union-hints for general, general cleaner never wipes rows,
+general routing to the general cleaner, and kpi.py surfacing unavailable
+indicators. Also verifies that legacy values "unknown"/"generic" are
+normalised to "general" via the back-compat alias.
 """
 import numpy as np
 import pandas as pd
 
-from backend.config import auto_suggest_mapping
-from backend.eda.cleaning import clean_data, clean_generic
+from backend.config import auto_suggest_mapping, normalize_schema_type
+from backend.eda.cleaning import clean_data, clean_general
 from backend.eda.kpi import compute_kpi_dashboard
 
 
-def test_unknown_uses_union_of_supported_hints():
+def test_general_uses_union_of_supported_hints():
     # Previously AUTO_MAPPING_HINTS.get("unknown") == {} → all None.
     cols = ["jantina", "tarikh lahir", "negeri", "weird_extra_col"]
-    m = auto_suggest_mapping(cols, "unknown")
+    m = auto_suggest_mapping(cols, "general")
     assert m["jantina"] == "jantina"
     assert m["tarikh_lahir"] == "tarikh lahir"
     assert m["negeri"] == "negeri"
 
 
 def test_union_hints_never_double_assign_one_column():
-    m = auto_suggest_mapping(["jantina", "tarikh lahir"], "unknown")
+    m = auto_suggest_mapping(["jantina", "tarikh lahir"], "general")
     assigned = [v for v in m.values() if v is not None]
     assert len(assigned) == len(set(assigned))  # no raw column reused
 
@@ -31,7 +32,7 @@ def test_collision_guard_three_candidates_one_field_no_cross_assign():
     # "jantina"/"gender"/"sex" all alias the SAME canonical field. Exactly
     # one must win for `jantina`; the guard must not silently park the
     # leftovers under some other canonical field.
-    m = auto_suggest_mapping(["jantina", "gender", "sex"], "unknown")
+    m = auto_suggest_mapping(["jantina", "gender", "sex"], "general")
     assert m["jantina"] in ("jantina", "gender", "sex")
     assigned = [v for v in m.values() if v is not None]
     assert len(assigned) == len(set(assigned))   # invariant: no col reused
@@ -40,18 +41,18 @@ def test_collision_guard_three_candidates_one_field_no_cross_assign():
     assert not (set(non_gender.values()) & {"jantina", "gender", "sex"})
 
 
-def test_clean_generic_does_not_wipe_rows_when_fields_missing():
+def test_clean_general_does_not_wipe_rows_when_fields_missing():
     # No usable measurement/age/sex columns at all — must NOT drop every row.
     df = pd.DataFrame({"foo": [1, 2, 3], "bar": ["a", "b", "c"]})
-    out, stats = clean_generic(df)
+    out, stats = clean_general(df)
     assert len(out) == 3
-    assert stats["data_type"] == "generic"
+    assert stats["data_type"] == "general"
     assert "coverage" in stats and "indicators_unavailable" in stats
 
 
-def test_clean_generic_marks_indicators_unavailable_not_fabricated():
+def test_clean_general_marks_indicators_unavailable_not_fabricated():
     df = pd.DataFrame({"foo": [1, 2], "bar": ["x", "y"]})
-    out, stats = clean_generic(df)
+    out, stats = clean_general(df)
     # No Ind_* fabricated when inputs are absent.
     assert not [c for c in out.columns if c.startswith("Ind_")]
     assert set(stats["indicators_unavailable"]) >= {
@@ -59,7 +60,7 @@ def test_clean_generic_marks_indicators_unavailable_not_fabricated():
     }
 
 
-def test_clean_generic_preserves_rows_with_underscore_named_columns():
+def test_clean_general_preserves_rows_with_underscore_named_columns():
     # The drop-all bug: underscore date column + slightly-off names.
     df = pd.DataFrame({
         "Jantina": ["L", "P", "L"],
@@ -68,17 +69,30 @@ def test_clean_generic_preserves_rows_with_underscore_named_columns():
         "Berat_Kg": [12.0, 11.0, 9.0],
         "Tinggi_Cm": [85.0, 80.0, 75.0],
     })
-    out, stats = clean_generic(df)
+    out, stats = clean_general(df)
     assert len(out) == 3  # not wiped to 0
     assert stats["coverage"]["jantina"] and stats["coverage"]["tarikh_lahir"]
 
 
-def test_clean_data_routes_unknown_to_generic():
+def test_clean_data_routes_general_and_legacy_values():
     df = pd.DataFrame({"a": [1], "b": [2]})
-    for st in ("unknown", "something_new", "legacy_type"):
+    # New canonical value
+    out, stats = clean_data(df, "general")
+    assert stats["data_type"] == "general"
+    assert len(out) == 1
+    # Legacy back-compat aliases
+    for st in ("unknown", "generic", "something_new", "legacy_type"):
         out, stats = clean_data(df, st)  # must NOT raise ValueError
-        assert stats["data_type"] == "generic"
+        assert stats["data_type"] == "general"
         assert len(out) == 1
+
+
+def test_normalize_schema_type_aliases():
+    assert normalize_schema_type("unknown") == "general"
+    assert normalize_schema_type("generic") == "general"
+    assert normalize_schema_type("general") == "general"
+    assert normalize_schema_type("myvass") == "myvass"
+    assert normalize_schema_type("kpm") == "kpm"
 
 
 def test_kpi_surfaces_unavailable_indicators_without_crashing():

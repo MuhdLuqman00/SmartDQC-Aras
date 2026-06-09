@@ -33,7 +33,7 @@ from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from .config import STANDARD_SCHEMA, auto_suggest_mapping, detect_source_type
+from .config import STANDARD_SCHEMA, auto_suggest_mapping, detect_source_type, normalize_schema_type
 from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, run_eda_auto, json_safe
 from .eda.kkm_quality_rules import analyze_kkm_quality
@@ -1719,9 +1719,9 @@ async def clean_run_endpoint(
 
     # Drive the cleaner from the detected source_type (cached at upload),
     # not the hardcoded "myvass" default. An explicit non-default data_type
-    # from the caller still overrides. unknown/klinik → generic cleaner.
+    # from the caller still overrides. Unrecognised/legacy types → general cleaner.
     cached_st = _entry_stats.get("source_type")
-    effective_type = (
+    effective_type = normalize_schema_type(
         cached_st if (data_type == "myvass" and cached_st) else data_type
     )
 
@@ -1732,7 +1732,7 @@ async def clean_run_endpoint(
     except Exception as e:
         raise HTTPException(500, f"Cleaning error: {str(e)}")
 
-    summary = _summarise_cleaning(stats, len(df), len(cleaned_df))
+    summary = _summarise_cleaning(stats, len(df), stats.get("final_count", len(cleaned_df)))
 
     # Authoritative "Data Quality Score" = the 7-dimension rubric (the same
     # one the AI narrative and report use), NOT the row-survival ratio
@@ -1776,7 +1776,7 @@ async def clean_run_endpoint(
             cache_id=new_cache_id,
             filename=filename,
             source_type=effective_type,
-            row_count=len(cleaned_df),
+            row_count=stats.get("final_count", len(cleaned_df)),
             result={
                 **(stats or {}),
                 "quality_score": quality_score,
@@ -1796,7 +1796,7 @@ async def clean_run_endpoint(
 
     # Build the full evaluated-rule set for this cleaner type so Quality
     # Report can show all checks including ones that passed (count=0).
-    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["generic"])
+    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["general"])
     rules_evaluated = [
         {
             "code": c,
@@ -1817,11 +1817,11 @@ async def clean_run_endpoint(
                 "stats": stats,
                 "cleaned_columns": cleaned_df.columns.tolist(),
                 "cleaned_column_profile": _profile_columns(cleaned_df),
-                "cleaned_count": len(cleaned_df),
+                "cleaned_count": stats.get("final_count", len(cleaned_df)),
                 "preview": cleaned_records[:100],  # First 100 rows for preview
                 "cache_id": new_cache_id,
                 "rows_before": len(df),
-                "rows_after": len(cleaned_df),
+                "rows_after": stats.get("final_count", len(cleaned_df)),
                 "quality_score": quality_score,
                 "quality_grade": quality_grade,
                 "rules_applied": summary["rules_applied"],
@@ -1894,7 +1894,7 @@ async def clean_preview_impact(
         cleaned_df, stats = clean_data(df, effective_type, enabled)
     except Exception as e:
         raise HTTPException(500, f"Preview error: {str(e)}")
-    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["generic"])
+    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["general"])
     per_rule = [
         {
             "code": c,
@@ -1909,7 +1909,7 @@ async def clean_preview_impact(
         content=json_safe(
             {
                 "rows_before": rows_before,
-                "rows_after": len(cleaned_df),
+                "rows_after": stats.get("final_count", len(cleaned_df)),
                 "per_rule": per_rule,
                 "source_type": effective_type,
             }
@@ -1937,7 +1937,7 @@ async def clean_download_endpoint(
     except Exception as e:
         raise HTTPException(500, f"Cleaning error: {str(e)}")
 
-    if len(cleaned_df) == 0:
+    if stats.get("final_count", len(cleaned_df)) == 0:
         raise HTTPException(422, "No data after cleaning")
 
     base = filename.rsplit(".", 1)[0]
@@ -2086,7 +2086,7 @@ async def clean_run_multi_endpoint(
                 "stats": stats,
                 "cleaned_columns": cleaned_df.columns.tolist(),
                 "cleaned_column_profile": _profile_columns(cleaned_df),
-                "cleaned_count": len(cleaned_df),
+                "cleaned_count": stats.get("final_count", len(cleaned_df)),
                 "preview": cleaned_records[:100],
                 "cache_id": cache_id,
             }
@@ -2119,7 +2119,7 @@ async def clean_download_multi_endpoint(
     except Exception as e:
         raise HTTPException(500, f"Cleaning error: {str(e)}")
 
-    if len(cleaned_df) == 0:
+    if stats.get("final_count", len(cleaned_df)) == 0:
         raise HTTPException(422, "No data after cleaning")
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d")
@@ -3905,7 +3905,7 @@ async def datasets_compare(req: DatasetCompareRequest, db=Depends(get_db)):
             {
                 "dataset_id":    ds_id,
                 "name":          ds.name,
-                "source_type":   ds.source_type or "unknown",
+                "source_type":   normalize_schema_type(ds.source_type or "general"),
                 "quality_score": _coerce_float(ds.quality_score),
                 "indicators":    indicators,
                 "created_at":    ds.created_at.isoformat() if ds.created_at else None,
@@ -4046,7 +4046,7 @@ def _records_from_cached(
     for i in range(n):
         rec: dict = {
             "ic":           _str_or_none(df.iloc[i][ic_c]) or "",
-            "source_type":  source_type or "unknown",
+            "source_type":  normalize_schema_type(source_type or "general"),
             "dataset_id":   dataset_id,
             "name":         _str_or_none(df.iloc[i][name_c])     if name_c     else None,
             "dob":          _str_or_none(df.iloc[i][dob_c])      if dob_c      else None,
@@ -4108,7 +4108,7 @@ async def entity_link(req: EntityLinkRequest):
             records.append(
                 {
                     "ic": summary.get("ic", ""),
-                    "source_type": ds.source_type or "unknown",
+                    "source_type": normalize_schema_type(ds.source_type or "general"),
                     "dataset_id": ds_id,
                     "name": summary.get("name", ""),
                     "dob": summary.get("dob", ""),
@@ -4150,7 +4150,7 @@ def _run_v2_linkage(req: EntityLinkV2Request) -> dict:
             if ds is None:
                 continue
             recs = _records_from_cached(
-                ds_id, ds_id, ds.source_type or "unknown",
+                ds_id, ds_id, normalize_schema_type(ds.source_type or "general"),
                 dataset_created_at=ds.created_at,
             )
             if ds.created_at is not None:
@@ -4303,7 +4303,7 @@ def dashboard_summary(db=Depends(get_db)):
 
     source_breakdown: dict[str, int] = {}
     for d in datasets:
-        k = d.source_type or "unknown"
+        k = normalize_schema_type(d.source_type or "general")
         source_breakdown[k] = source_breakdown.get(k, 0) + 1
 
     latest = sorted(datasets, key=lambda d: d.created_at, reverse=True)[0]
