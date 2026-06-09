@@ -40,7 +40,7 @@ def test_worklist_conflicts_csv(client_with_db, test_cache_with_data):
 
     response = client_with_db.get("/entity/link/all/worklist?type=conflicts")
     assert response.status_code == 200
-    assert response.headers["content-type"] == "text/csv"
+    assert response.headers["content-type"].startswith("text/csv")
     content = response.content.decode()
     assert "group_index" in content or content == ""  # May be empty if no conflicts
 
@@ -56,7 +56,7 @@ def test_worklist_duplicates_csv(client_with_db, test_cache_with_data):
 
     response = client_with_db.get("/entity/link/all/worklist?type=duplicates")
     assert response.status_code == 200
-    assert response.headers["content-type"] == "text/csv"
+    assert response.headers["content-type"].startswith("text/csv")
     content = response.content.decode()
     assert "group_index" in content or content == ""  # May be empty if no conflicts
 
@@ -72,4 +72,4 @@ def test_worklist_duplicates_csv(client_with_db, test_cache_with_data):
 
     response = client_with_db.get("/entity/link/all/worklist?type=duplicates")
     assert response.status_code == 200
-    assert response.headers["content-type"] == "text/csv"
+    assert response.headers["content-type"].startswith("text/csv")

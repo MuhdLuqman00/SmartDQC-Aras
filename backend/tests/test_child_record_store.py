@@ -21,6 +21,7 @@ def test_child_record_create_and_query(db_session):
         created_at=now,
     )
     db_session.add(ds)
+    db_session.flush()  # parent before child (FK ordering)
 
     # Create child record
     rec = ChildRecord(
@@ -81,6 +82,7 @@ def test_child_record_query_by_ic_norm(db_session):
             created_at=now,
         )
     )
+    db_session.flush()  # parents before children (FK ordering)
 
     # Create child records with same IC
     db_session.add(
@@ -126,6 +128,7 @@ def test_child_record_cascade_delete(db_session):
             created_at=now,
         )
     )
+    db_session.flush()  # parent before child (FK ordering)
     db_session.add(
         ChildRecord(
             dataset_id=ds_id, source_type="myvass", ic_norm="900101010001", name="ALI"
