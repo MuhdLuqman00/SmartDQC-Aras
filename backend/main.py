@@ -461,6 +461,8 @@ class MappingBody(BaseModel):
     mapping: dict[str, str] = {}
     # E2: optional user-chosen dataset name (defaults to the filename when blank).
     dataset_name: Optional[str] = None
+    # B3: rule codes the user kept enabled. None ⇒ all rules (locked always run).
+    enabled_rules: Optional[List[str]] = None
 
 
 def _resolve_cached_df(cache_id: Optional[str]) -> pd.DataFrame:
@@ -1120,7 +1122,10 @@ async def download_cleaned_merged(
 
 import uuid as _uuid
 
-from .eda.cleaning import clean_data, detect_data_type, EVALUATED_RULES
+from .eda.cleaning import (
+    clean_data, detect_data_type, EVALUATED_RULES,
+    RULE_REGISTRY, LOCKED_RULES, rules_for_source,
+)
 
 # ── Cleaned-DataFrame cache: in-memory hot tier + durable disk tier ──────────
 # The v2 frontend references uploaded/cleaned data by cache_id across many
@@ -1720,8 +1725,10 @@ async def clean_run_endpoint(
         cached_st if (data_type == "myvass" and cached_st) else data_type
     )
 
+    # B3: thread the user's rule selection (None ⇒ all rules; locked always run).
+    enabled = set(body.enabled_rules) if (body and body.enabled_rules is not None) else None
     try:
-        cleaned_df, stats = clean_data(df, effective_type)
+        cleaned_df, stats = clean_data(df, effective_type, enabled)
     except Exception as e:
         raise HTTPException(500, f"Cleaning error: {str(e)}")
 
@@ -1791,7 +1798,13 @@ async def clean_run_endpoint(
     # Report can show all checks including ones that passed (count=0).
     _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["generic"])
     rules_evaluated = [
-        {"code": c, "count": int(stats.get(c, 0)), "fired": int(stats.get(c, 0)) > 0}
+        {
+            "code": c,
+            "count": int(stats.get(c, 0)),
+            "fired": int(stats.get(c, 0)) > 0,
+            "locked": c in LOCKED_RULES,
+            "enabled": (enabled is None) or (c in LOCKED_RULES) or (c in enabled),
+        }
         for c in _rule_codes
     ]
 
@@ -1817,6 +1830,77 @@ async def clean_run_endpoint(
                 "rules_evaluated": rules_evaluated,
                 "persisted": persisted,
                 "persist_error": persist_error,
+            }
+        )
+    )
+
+
+class PreviewImpactBody(BaseModel):
+    """B3: proposed mapping + the rule codes the user kept enabled."""
+    mapping: dict[str, str] = {}
+    enabled_rules: Optional[List[str]] = None
+
+
+def _resolve_effective_type(cache_id: Optional[str], data_type: str) -> str:
+    """Same precedence as /clean/run: cached detected type wins over the default
+    'myvass' query value; an explicit non-default caller value still overrides."""
+    cached_st = ((_cache_get(cache_id) or {}).get("stats", {}) or {}).get("source_type")
+    return cached_st if (data_type == "myvass" and cached_st) else data_type
+
+
+@app.get("/clean/rules")
+def clean_rules(data_type: str = Query("myvass")):
+    """Registry view of the REAL cleaning rules for a source type (B3 panel +
+    Settings). One vocabulary shared with /clean/run's rules_evaluated."""
+    return JSONResponse(
+        content=json_safe({"data_type": data_type, "rules": rules_for_source(data_type)})
+    )
+
+
+@app.post("/clean/preview-impact")
+async def clean_preview_impact(
+    cache_id: Optional[str] = Query(None),
+    data_type: str = Query("myvass"),
+    body: Optional[PreviewImpactBody] = None,
+):
+    """B3.2 live row-impact: run the real cleaner with the proposed enabled_rules
+    and report the TRUE resulting row count + per-rule drops. Honest (no z-score
+    short-cut that would overstate impact) and side-effect-free — never caches or
+    persists. Re-run per toggle; debounce on the client."""
+    df = _resolve_cached_df(cache_id)
+    if body and getattr(body, "mapping", None):
+        rename = {
+            raw: std
+            for raw, std in body.mapping.items()
+            if std and raw in df.columns and raw != std
+        }
+        if rename:
+            df = df.rename(columns=rename)
+    effective_type = _resolve_effective_type(cache_id, data_type)
+    enabled = set(body.enabled_rules) if (body and body.enabled_rules is not None) else None
+    rows_before = len(df)
+    try:
+        cleaned_df, stats = clean_data(df, effective_type, enabled)
+    except Exception as e:
+        raise HTTPException(500, f"Preview error: {str(e)}")
+    _rule_codes = EVALUATED_RULES.get(effective_type, EVALUATED_RULES["generic"])
+    per_rule = [
+        {
+            "code": c,
+            "count": int(stats.get(c, 0)),
+            "fired": int(stats.get(c, 0)) > 0,
+            "locked": c in LOCKED_RULES,
+            "enabled": (enabled is None) or (c in LOCKED_RULES) or (c in enabled),
+        }
+        for c in _rule_codes
+    ]
+    return JSONResponse(
+        content=json_safe(
+            {
+                "rows_before": rows_before,
+                "rows_after": len(cleaned_df),
+                "per_rule": per_rule,
+                "source_type": effective_type,
             }
         )
     )
