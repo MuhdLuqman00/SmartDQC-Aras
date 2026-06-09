@@ -82,6 +82,22 @@ def validate_ic(ic_val) -> dict:
         }
 
 
+def extract_ic_gender_digit(ic_val):
+    """Malaysian NRIC encodes sex in the final digit: odd = Male, even = Female.
+
+    Returns "Male"/"Female" (matching canonical Gender), or None when the value
+    is not a usable 12-digit NRIC. Reuses validate_ic for cleaning.
+    """
+    res = validate_ic(ic_val)
+    cleaned = res.get("cleaned")
+    if cleaned is None:
+        return None
+    s = str(cleaned)
+    if len(s) != 12 or not s.isdigit():
+        return None
+    return "Male" if int(s[-1]) % 2 == 1 else "Female"
+
+
 def analyze_and_deduplicate_ids(df: pd.DataFrame, report: dict):
     """
     Classify all IC values, add id_cleaned / id_type / is_valid_ic columns.

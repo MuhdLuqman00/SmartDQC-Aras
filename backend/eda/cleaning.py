@@ -20,6 +20,8 @@ try:
 except Exception:
     ZSCORE_AVAILABLE = False
 
+from ..utils.ic_validator import extract_ic_gender_digit
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -107,6 +109,105 @@ def _exclude(df: pd.DataFrame, mask: pd.Series, code: str) -> None:
     df.loc[mask, "exclude_reason"] = prev.apply(lambda r: f"{r}; {code}" if r else code)
 
 
+def _flag(df, mask, code):
+    """Tag rows for review without removing from analysis. review_reason must exist."""
+    if not mask.any():
+        return
+    prev = df.loc[mask, "review_reason"]
+    df.loc[mask, "review_reason"] = prev.apply(lambda r: f"{r}; {code}" if r else code)
+
+
+def _review_rule_on(code, enabled_rules) -> bool:
+    """Review-flag rules default ON. A caller selection only constrains them once
+    it actually manages review rules (contains at least one review_* code); a
+    drop-only or legacy selection leaves every review rule ON, so flags never
+    silently vanish when a user has saved a drop-rule selection."""
+    if enabled_rules is None:
+        return True
+    if any(str(c).startswith("review_") for c in enabled_rules):
+        return code in enabled_rules
+    return True
+
+
+def _apply_review_flags(df, source, src_cols, find_col, enabled_rules):
+    """Phase B review-for-review flags (Families 1-4).
+
+    Each block guards on the presence of its trigger column(s) so clean data
+    yields zero flags. Flags use _flag() (review_reason) and NEVER change
+    `analyzable`. Dual-column rules read raw source values via src_cols
+    (captured before canonical Gender/Tarikh_Lahir were derived).
+    """
+    def _on(code):
+        return _review_rule_on(code, enabled_rules)
+
+    # review_future_measure_date (Family 4): measurement dated after today.
+    _mcol = "Tarikh_Ukur" if "Tarikh_Ukur" in df.columns else "Tarikh_Pengukuran"
+    if _mcol in df.columns and _on("review_future_measure_date"):
+        _today = pd.Timestamp.now().normalize()
+        _flag(df, df[_mcol].notna() & (df[_mcol] > _today), "review_future_measure_date")
+    # review_duplicate_ic (Family 1, myvass): same IC across rows (flag, not drop).
+    if source == "myvass" and _on("review_duplicate_ic"):
+        _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
+        if _ic:
+            _icn = df[_ic].astype(str).str.strip()
+            _valid = (_icn != "") & (~_icn.str.lower().isin(["nan", "none", "<na>"]))
+            _flag(df, _valid & _icn.duplicated(keep=False), "review_duplicate_ic")
+    # review_ic_gender_mismatch (Family 1, myvass): IC final-digit sex != Gender.
+    if source == "myvass" and _on("review_ic_gender_mismatch") and "Gender" in df.columns:
+        _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
+        if _ic:
+            _icsex = df[_ic].apply(extract_ic_gender_digit)
+            _flag(
+                df,
+                _icsex.notna() & df["Gender"].notna() & (_icsex != df["Gender"]),
+                "review_ic_gender_mismatch",
+            )
+    # review_name_gender_mismatch (Family 2): name honorific contradicts Gender.
+    if _on("review_name_gender_mismatch") and "Gender" in df.columns:
+        _nm_col = find_col(["nama", "name"])
+        if _nm_col:
+            _nm = " " + df[_nm_col].astype(str).str.lower().str.strip() + " "
+            _fem = _nm.str.contains(r" binti | bt | a/p ", regex=True)
+            _mal = _nm.str.contains(r" bin | a/l ", regex=True) & ~_fem
+            _implied = pd.Series(pd.NA, index=df.index, dtype="object")
+            _implied[_mal] = "Male"
+            _implied[_fem] = "Female"
+            _nmask = (_implied.notna() & df["Gender"].notna() & (_implied != df["Gender"]))
+            _flag(df, _nmask.fillna(False).astype(bool), "review_name_gender_mismatch")
+    # review_gender_cols_disagree (Family 3): two raw gender columns conflict.
+    if _on("review_gender_cols_disagree"):
+        def _is_gender(c):
+            n = c.lower().replace("_", " ").replace("-", " ")
+            return any(k in n for k in ("jantina", "gender", "sex"))
+        _gcols = [c for c in src_cols if _is_gender(c) and c in df.columns]
+        if len(_gcols) >= 2:
+            _ga = df[_gcols[0]].astype(str).str.upper().str.strip().map(GENDER_MAP)
+            _gb = df[_gcols[1]].astype(str).str.upper().str.strip().map(GENDER_MAP)
+            _flag(df, _ga.notna() & _gb.notna() & (_ga != _gb), "review_gender_cols_disagree")
+    # review_year_mismatch (Family 4): stated year != measurement-date year.
+    _mcol2 = "Tarikh_Ukur" if "Tarikh_Ukur" in df.columns else "Tarikh_Pengukuran"
+    if source == "ncdc" and "Year" in df.columns:
+        _ycol = "Year"
+    else:
+        _ycol = find_col(["tahun ukur", "tahun_ukur", "tahun"])
+    if _mcol2 in df.columns and _ycol and _ycol in df.columns and _on("review_year_mismatch"):
+        _ystated = pd.to_numeric(df[_ycol], errors="coerce")
+        _ydate = df[_mcol2].dt.year
+        _flag(df, _ystated.notna() & _ydate.notna() & (_ystated != _ydate), "review_year_mismatch")
+    # review_dob_dual_mismatch (Family 4): two DOB columns disagree.
+    if _on("review_dob_dual_mismatch"):
+        def _is_dob(c):
+            n = c.lower().replace("_", " ").replace("-", " ")
+            return ("tarikh lahir" in n) or ("date of birth" in n) or (" dob" in (" " + n)) or n.endswith("birth")
+        _dcols = [c for c in src_cols if _is_dob(c) and c in df.columns]
+        if len(_dcols) >= 2:
+            _da = _parse_date(df[_dcols[0]])
+            _db = _parse_date(df[_dcols[1]])
+            _flag(df, _da.notna() & _db.notna() & (_da != _db), "review_dob_dual_mismatch")
+    # Phase C/D (Families 5-11) extend here, before return.
+    return
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MYVASS CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -126,6 +227,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
+    df["review_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
@@ -146,6 +248,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
                     return col
         return None
 
+    _src_cols = list(df.columns)
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "date_of_birth", "birth"])
     weight_col = find_col(["berat", "weight"])
@@ -325,8 +428,10 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
         )
 
     # Final stats — final_count = analyzable rows, not len(df)
+    _apply_review_flags(df, "myvass", _src_cols, find_col, enabled_rules)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
+    stats["review_count"] = int((df["review_reason"] != "").sum())
 
     # Gender breakdown over analyzable rows only
     if "Gender" in df.columns:
@@ -355,6 +460,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
+    df["review_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
@@ -426,10 +532,12 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
         df = pd.DataFrame(all_records)
         df["analyzable"] = True
         df["exclude_reason"] = ""
+        df["review_reason"] = ""
         stats["years_found"] = years
         stats["raw_count"] = len(df)
     else:
         df["Year"] = None
+    _src_cols = list(df.columns)
 
     # Rule 1: Standardize and filter gender
     if gender_col:
@@ -538,16 +646,30 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
     else:
         stats["dropped_bmi_outlier"] = 0
 
-    # Rule 8: Flag duplicate MyKid (keep most recent; flag older duplicates)
-    if mykid_col and "Tarikh_Pengukuran" in df.columns and _on("dropped_duplicate_mykid"):
-        df_sorted = df.sort_values("Tarikh_Pengukuran", ascending=False)
-        dup_mask = df_sorted.duplicated(subset=[mykid_col], keep="first")
-        # Map back to original index
-        dup_idx = df_sorted.index[dup_mask]
-        _mask = pd.Series(False, index=df.index)
-        _mask.loc[dup_idx] = True
-        stats["dropped_duplicate_mykid"] = int((_mask & df["analyzable"]).sum())
-        _exclude(df, _mask, "dropped_duplicate_mykid")
+    # Rule 8 + placeholder guard: duplicate MyKid handling.
+    # Same MyKid with the SAME DOB = one child re-measured -> keep most recent,
+    # drop the older record (dropped_duplicate_mykid). Same MyKid with DIFFERING
+    # DOB = a shared placeholder across different children -> flag every row,
+    # drop none (review_mykid_shared_placeholder). Prevents wrongly dropping
+    # placeholder rows (e.g. 12/13 rows sharing one stand-in MyKid).
+    if mykid_col and "Tarikh_Pengukuran" in df.columns:
+        _placeholder = pd.Series(False, index=df.index)
+        _dropdup = pd.Series(False, index=df.index)
+        for _key, _grp in df.groupby(mykid_col):
+            if len(_grp) < 2:
+                continue
+            if _grp["Tarikh_Lahir"].nunique(dropna=True) > 1:
+                _placeholder.loc[_grp.index] = True
+            else:
+                _order = _grp.sort_values("Tarikh_Pengukuran", ascending=False)
+                _dropdup.loc[_order.index[1:]] = True
+        if _on("dropped_duplicate_mykid"):
+            stats["dropped_duplicate_mykid"] = int((_dropdup & df["analyzable"]).sum())
+            _exclude(df, _dropdup, "dropped_duplicate_mykid")
+        else:
+            stats["dropped_duplicate_mykid"] = 0
+        if _review_rule_on("review_mykid_shared_placeholder", enabled_rules):
+            _flag(df, _placeholder, "review_mykid_shared_placeholder")
     else:
         stats["dropped_duplicate_mykid"] = 0
 
@@ -618,8 +740,10 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
         )
 
     # Final stats — final_count = analyzable rows, not len(df)
+    _apply_review_flags(df, "ncdc", _src_cols, find_col, enabled_rules)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
+    stats["review_count"] = int((df["review_reason"] != "").sum())
 
     if "Gender" in df.columns:
         gender_counts = df.loc[df["analyzable"], "Gender"].value_counts().to_dict()
@@ -1190,6 +1314,109 @@ def rules_for_source(data_type: str) -> list[dict]:
     Settings tab and the pipeline rule panel so both list the SAME real rules."""
     codes = EVALUATED_RULES.get(data_type, EVALUATED_RULES["general"])
     return [{"code": c, **RULE_REGISTRY[c]} for c in codes if c in RULE_REGISTRY]
+
+
+REVIEW_RULE_REGISTRY: dict[str, dict] = {
+    "review_ic_malformed": {"en": "Malformed IC", "bm": "IC tidak sah format"},
+    "review_ic_dob_mismatch": {"en": "IC birth date != DOB", "bm": "Tarikh IC != tarikh lahir"},
+    "review_ic_gender_mismatch": {"en": "IC gender digit != gender", "bm": "Digit jantina IC != jantina"},
+    "review_ic_age_contradiction": {"en": "IC implies adult", "bm": "IC menunjukkan dewasa"},
+    "review_duplicate_ic": {"en": "Duplicate IC", "bm": "IC berganda"},
+    "review_mykid_shared_placeholder": {"en": "Shared/placeholder MyKid", "bm": "MyKid kongsi/pemegang tempat"},
+    "review_mykid_invalid": {"en": "Invalid MyKid format", "bm": "Format MyKid tidak sah"},
+    "review_name_gender_mismatch": {"en": "Name honorific != gender", "bm": "Gelaran nama != jantina"},
+    "review_gender_cols_disagree": {"en": "Gender columns disagree", "bm": "Lajur jantina tidak sepadan"},
+    "review_future_measure_date": {"en": "Future measurement date", "bm": "Tarikh ukur akan datang"},
+    "review_year_mismatch": {"en": "Year != measurement year", "bm": "Tahun != tahun ukur"},
+    "review_dob_dual_mismatch": {"en": "DOB columns disagree", "bm": "Lajur tarikh lahir tidak sepadan"},
+    "review_dose_date_mismatch": {"en": "Dose date != measure date", "bm": "Tarikh dos != tarikh ukur"},
+    "review_age_source_mismatch": {"en": "Source age != computed", "bm": "Umur sumber != kiraan"},
+    "review_age_band_mismatch": {"en": "Age band label wrong", "bm": "Label kumpulan umur salah"},
+    "review_age_vacc_range": {"en": "Vaccination age out of range", "bm": "Umur vaksinasi luar julat"},
+    "review_daerah_null": {"en": "District missing", "bm": "Daerah hilang"},
+    "review_daerah_not_in_negeri": {"en": "District not in state", "bm": "Daerah bukan dalam negeri"},
+    "review_bahagian_null": {"en": "Division missing", "bm": "Bahagian hilang"},
+    "review_geo_out_of_bounds": {"en": "Coordinates outside Malaysia", "bm": "Koordinat luar Malaysia"},
+    "review_height_unit_suspect": {"en": "Height unit suspect", "bm": "Unit tinggi diragui"},
+    "review_ghost_bmi": {"en": "Unverifiable source BMI", "bm": "BMI sumber tak boleh sah"},
+    "review_dual_measure_mismatch": {"en": "Duplicate measurement cols disagree", "bm": "Lajur ukuran berganda tidak sepadan"},
+    "review_ghost_class": {"en": "Classification without score", "bm": "Klasifikasi tanpa skor"},
+    "review_class_range_mismatch": {"en": "Class != z-score range", "bm": "Kelas != julat z-skor"},
+    "review_zscore_biv": {"en": "Z-score out of range", "bm": "Z-skor luar julat"},
+    "review_indicator_class_mismatch": {"en": "Indicator != classification", "bm": "Penunjuk != klasifikasi"},
+    "review_pendapatan_null": {"en": "Income missing", "bm": "Pendapatan hilang"},
+    "review_pendapatan_invalid": {"en": "Unknown income group", "bm": "Kumpulan pendapatan tidak sah"},
+    "review_vaccine_unknown": {"en": "Unknown vaccine", "bm": "Vaksin tidak dikenali"},
+    "review_agensi_unknown": {"en": "Unknown agency", "bm": "Agensi tidak dikenali"},
+    "review_taska_blank": {"en": "TASKA name missing", "bm": "Nama taska hilang"},
+    "review_ethnicity_unknown": {"en": "Unknown ethnicity", "bm": "Etnik tidak dikenali"},
+    "review_facility_unknown": {"en": "Unknown facility type", "bm": "Jenis fasiliti tidak dikenali"},
+}
+
+REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
+    "myvass": [
+        "review_ic_malformed",
+        "review_ic_dob_mismatch",
+        "review_ic_gender_mismatch",
+        "review_ic_age_contradiction",
+        "review_duplicate_ic",
+        "review_name_gender_mismatch",
+        "review_gender_cols_disagree",
+        "review_future_measure_date",
+        "review_year_mismatch",
+        "review_dob_dual_mismatch",
+        "review_dose_date_mismatch",
+        "review_age_source_mismatch",
+        "review_age_band_mismatch",
+        "review_daerah_null",
+        "review_daerah_not_in_negeri",
+        "review_geo_out_of_bounds",
+        "review_height_unit_suspect",
+        "review_ghost_bmi",
+        "review_dual_measure_mismatch",
+        "review_ghost_class",
+        "review_class_range_mismatch",
+        "review_zscore_biv",
+        "review_indicator_class_mismatch",
+        "review_pendapatan_null",
+        "review_pendapatan_invalid",
+        "review_ethnicity_unknown",
+        "review_facility_unknown",
+    ],
+    "ncdc": [
+        "review_mykid_shared_placeholder",
+        "review_mykid_invalid",
+        "review_name_gender_mismatch",
+        "review_gender_cols_disagree",
+        "review_future_measure_date",
+        "review_year_mismatch",
+        "review_age_source_mismatch",
+        "review_age_band_mismatch",
+        "review_age_vacc_range",
+        "review_daerah_null",
+        "review_bahagian_null",
+        "review_height_unit_suspect",
+        "review_ghost_bmi",
+        "review_ghost_class",
+        "review_class_range_mismatch",
+        "review_zscore_biv",
+        "review_indicator_class_mismatch",
+        "review_pendapatan_null",
+        "review_pendapatan_invalid",
+        "review_vaccine_unknown",
+        "review_agensi_unknown",
+        "review_taska_blank",
+    ],
+    "general": [],
+}
+
+
+def review_rules_for_source(data_type: str) -> list[dict]:
+    """Registry view of review-flag rules for one source type.
+
+    Used by the Settings panel and Quality Report alongside rules_for_source()."""
+    codes = REVIEW_EVALUATED_RULES.get(data_type, REVIEW_EVALUATED_RULES["general"])
+    return [{"code": c, **REVIEW_RULE_REGISTRY[c]} for c in codes if c in REVIEW_RULE_REGISTRY]
 
 
 def _rule_on(code: str, enabled_rules) -> bool:
