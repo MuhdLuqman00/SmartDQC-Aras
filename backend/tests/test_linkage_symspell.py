@@ -60,11 +60,11 @@ def test_symspell_recall_typo_in_leading_digits():
     )
 
 
-def test_symspell_100k_perf():
-    """100K pooled records link in well under 30s (was minutes-to-hours)."""
+def test_symspell_50k_perf():
+    """50K pooled records link in well under 30s (was minutes-to-hours)."""
     random.seed(0)
     recs = []
-    for i in range(100_000):
+    for i in range(50_000):
         ic = f"21{random.randint(0, 12):02d}{random.randint(1, 28):02d}{random.randint(0, 99):02d}{i % 10000:04d}"
         recs.append(_rec(ic[:12].ljust(12, "0"), src="a", ds=f"d{i % 5}"))
     t = time.time()

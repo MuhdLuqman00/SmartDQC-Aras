@@ -504,6 +504,8 @@ def link_records_v2(
     by_name_dob_exact: dict[tuple[str, str], dict] = {}  # (name, dob)  → group
     # bucketed index for fuzzy-name pass: (dob_year_month) → list[group]
     by_dob_window: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    # Parallel set index for O(1) membership check (avoids O(N) list scan)
+    _dob_window_ids: dict[tuple[int, int], set[int]] = defaultdict(set)
 
     def _dob_window_key(rec_dob: Any) -> tuple[int, int] | None:
         d = _parse_dob(rec_dob)
@@ -515,7 +517,8 @@ def link_records_v2(
         if nd[0] and nd[1]:
             by_name_dob_exact.setdefault(nd, g)
         win = _dob_window_key(rec.get("dob"))
-        if win and g not in by_dob_window[win]:
+        if win and id(g) not in _dob_window_ids[win]:
+            _dob_window_ids[win].add(id(g))
             by_dob_window[win].append(g)
 
     def _new_group(
@@ -566,18 +569,15 @@ def link_records_v2(
             _attach(g, rec)
 
     # ── Pass 2: fuzzy IC ────────────────────────────────────────────────────
-    # Pass 1 created a separate group for every distinct IC, so by_ic now
-    # contains both sides of any fuzzy-near pair. Walk all currently-known
-    # ICs, find pairs within fuzzy_ic_max_distance, and merge the later
-    # group into the earlier one. Bounded O(N²) on group count — fine for
-    # the typical 100-1000 group sizes we see in practice.
+    # SymSpell symmetric-delete: replace O(G^2) candidate enumeration with
+    # O(1) delete-neighborhood lookup, then verify with Levenshtein.
     fuzzy_unmatched: list[dict] = [
         r for r in records if not _normalise_ic(r.get("ic", ""))
     ]
     if fuzzy_ic and len(by_ic) > 1:
         merged_targets: dict[int, dict] = {}  # id(losing_group) → winner
         ic_keys = list(by_ic.keys())
-        # Build symmetric-delete index over current IC keys (replaces O(G^2) scan).
+        # Build symmetric-delete index over current IC keys
         delete_index: dict[str, list[str]] = defaultdict(list)
         for key in ic_keys:
             for variant in _deletes_within(key, fuzzy_ic_max_distance):
@@ -586,7 +586,7 @@ def link_records_v2(
             g_i = by_ic[key_i]
             if id(g_i) in merged_targets:
                 continue
-            # Candidate partners = ICs sharing any delete-variant with key_i.
+            # Candidate partners = ICs sharing any delete-variant with key_i
             cand: set[str] = set()
             for variant in _deletes_within(key_i, fuzzy_ic_max_distance):
                 cand.update(delete_index.get(variant, ()))
