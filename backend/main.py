@@ -1978,29 +1978,7 @@ async def clean_run_endpoint(
     _raw_body_rules = (
         set(body.enabled_rules) if (body and body.enabled_rules is not None) else None
     )
-    try:
-        _persisted_stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
-    except Exception:
-        _persisted_stored = {}
-    _review_managed = any(k.startswith("review_") for k in _persisted_stored)
-    _review_enabled = {
-        k for k, v in _persisted_stored.items() if k.startswith("review_") and v
-    }
-    if _raw_body_rules is None and not _review_managed:
-        enabled = None  # legacy all-on: both drops and reviews default ON
-    else:
-        if _raw_body_rules is not None:
-            base = _raw_body_rules  # body provides the drop selection explicitly
-        else:
-            # No body override but review is managed: load full persisted drop state
-            try:
-                _drop_state = _load_rule_state(db)
-            except Exception:
-                _drop_state = {}
-            base = {c for c, en in _drop_state.items() if en}
-        enabled = base | _review_enabled
-        if _review_managed:
-            enabled |= {_REVIEW_MANAGED_SENTINEL}
+    enabled = _effective_enabled_rules(_raw_body_rules, db)
     try:
         cleaned_df, stats = clean_data(df, effective_type, enabled)
     except Exception as e:
@@ -5240,6 +5218,45 @@ def _load_review_rule_state(db) -> dict:
         v = stored.get(code)
         state[code] = True if v is None else bool(v)
     return state
+
+
+def _effective_enabled_rules(raw_body_rules, db):
+    """Build the effective enabled-rules set passed to the cleaner for a run (D2).
+
+    = (drop selection from the request, or the persisted drop state if the request
+    omits it) UNION the persisted ENABLED review codes. The _REVIEW_MANAGED_SENTINEL
+    is added whenever review rules are managed, so an all-disabled review selection
+    is honoured (no review_* codes would otherwise read as "unmanaged -> all on").
+    Returns None for the legacy all-on default (nothing passed AND reviews unmanaged).
+    """
+    try:
+        persisted_stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
+    except Exception:
+        persisted_stored = {}
+    review_managed = any(k.startswith("review_") for k in persisted_stored)
+    if raw_body_rules is None and not review_managed:
+        return None  # legacy all-on: drops and reviews both default ON
+    # Drop selection: from the request if given, else the persisted drop state.
+    # Strip any review_* the body carried — the review portion is owned SOLELY by
+    # persisted Settings, so a request can never re-enable a disabled review rule.
+    if raw_body_rules is not None:
+        base = {c for c in raw_body_rules if not str(c).startswith("review_")}
+    else:
+        try:
+            base = {c for c, en in _load_rule_state(db).items() if en}
+        except Exception:
+            base = set()
+    if not review_managed:
+        return base  # reviews unmanaged -> cleaner leaves them all ON by default
+    # Reviews managed: the resolved review selection (every active rule default-on,
+    # overlaid with the stored disables) is authoritative — NOT the sparse store.
+    # Sentinel marks "reviews managed" so an all-disabled selection is honoured
+    # rather than read as unmanaged (which would default them all back ON).
+    try:
+        review_enabled = {c for c, en in _load_review_rule_state(db).items() if en}
+    except Exception:
+        review_enabled = set()
+    return base | review_enabled | {_REVIEW_MANAGED_SENTINEL}
 
 
 def _rule_source_types(code: str) -> list[str]:

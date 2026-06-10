@@ -222,3 +222,46 @@ def test_review_rule_suppressed_when_disabled_via_sentinel():
     rules = {_REVIEW_MANAGED_SENTINEL, "dropped_no_dob"}
     cleaned, _ = clean_myvass(df, enabled_rules=rules)
     assert "review_future_measure_date" not in str(cleaned.loc[0, "review_reason"])
+
+
+# ── Regression: disabling ONE review rule must NOT disable the others ─────────
+# The unit tests above hand-build the enabled set; these exercise main's actual
+# construction of that set from the SPARSE persisted store (the real bug: the
+# toggle persists only the changed key, so a one-rule disable left the merged
+# review set empty and the sentinel turned EVERY review rule off).
+
+def test_effective_rules_disabling_one_keeps_others(db_session):
+    # Persist a sparse disable exactly like POST /settings/rules/toggle does.
+    main._set_setting("cleaning.enabled_rules", {"review_daerah_null": False}, db_session)
+    eff = main._effective_enabled_rules(None, db_session)
+    assert eff is not None
+    assert main._REVIEW_MANAGED_SENTINEL in eff
+    assert "review_daerah_null" not in eff            # the one the user disabled
+    assert "review_pendapatan_null" in eff            # an untouched rule stays ON
+    assert "review_future_measure_date" in eff
+
+
+def test_disable_one_review_rule_others_still_fire(db_session):
+    import os
+    main._set_setting("cleaning.enabled_rules", {"review_daerah_null": False}, db_session)
+    eff = main._effective_enabled_rules(None, db_session)
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "test", "smartdqc_test_myvass.csv"
+    )
+    if not os.path.exists(path):
+        pytest.skip("fixture missing")
+    df = pd.read_csv(path)
+    c, _ = clean_myvass(df, enabled_rules=eff)
+    rr = c["review_reason"].astype(str)
+    assert rr.str.contains("review_daerah_null").sum() == 0      # disabled -> silent
+    assert rr.str.contains("review_pendapatan_null").sum() > 0   # others still fire
+
+
+def test_body_cannot_reenable_persisted_disabled_review(db_session):
+    # Settings disabled review_daerah_null; a request body must NOT re-enable it.
+    main._set_setting("cleaning.enabled_rules", {"review_daerah_null": False}, db_session)
+    eff = main._effective_enabled_rules(
+        {"review_daerah_null", "dropped_age_over5"}, db_session
+    )
+    assert "review_daerah_null" not in eff   # persisted disable wins over the body
+    assert "dropped_age_over5" in eff         # body's drop selection is preserved
