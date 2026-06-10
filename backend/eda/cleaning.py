@@ -21,6 +21,7 @@ except Exception:
     ZSCORE_AVAILABLE = False
 
 from ..utils.ic_validator import extract_ic_gender_digit, validate_ic, extract_ic_birthdate
+from ..config import INCOME_VALID
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -129,16 +130,36 @@ def _review_rule_on(code, enabled_rules) -> bool:
     return True
 
 
-def _apply_review_flags(df, source, src_cols, find_col, enabled_rules):
-    """Phase B review-for-review flags (Families 1-4).
+def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=None):
+    """Review-for-review flags (Families 1-11).
 
     Each block guards on the presence of its trigger column(s) so clean data
     yields zero flags. Flags use _flag() (review_reason) and NEVER change
     `analyzable`. Dual-column rules read raw source values via src_cols
     (captured before canonical Gender/Tarikh_Lahir were derived).
+
+    `src_raw` is a copy of the frame taken BEFORE recompute overwrites the
+    source BMI / z-score / status columns — Families 7-8 (source-integrity
+    flags) must read the uploaded values, not the recomputed canonical ones.
     """
     def _on(code):
         return _review_rule_on(code, enabled_rules)
+
+    # Normalised lookup of the pre-recompute source columns (Families 7-9).
+    def _norm(s):
+        return s.lower().replace("-", " ").replace("_", " ").strip()
+    _rawmap = {}
+    if src_raw is not None:
+        for _c in src_raw.columns:
+            _rawmap.setdefault(_norm(_c), src_raw[_c])
+
+    def _raw(*names):
+        """First raw source Series matching any normalised name, else None."""
+        for n in names:
+            s = _rawmap.get(_norm(n))
+            if s is not None:
+                return s
+        return None
 
     # review_future_measure_date (Family 4): measurement dated after today.
     _mcol = "Tarikh_Ukur" if "Tarikh_Ukur" in df.columns else "Tarikh_Pengukuran"
@@ -257,7 +278,165 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules):
                 _dd.notna() & df["Tarikh_Ukur"].notna() & (_dd.dt.normalize() != df["Tarikh_Ukur"].dt.normalize()),
                 "review_dose_date_mismatch",
             )
-    # Phase C/D (Families 5-11) extend here, before return.
+    # ── Phase C: Families 5-9 (source-integrity / geographic / socioeconomic) ──
+
+    # Family 5 — AGE (source vs recomputed; recompute is canonical, source = flag)
+    if "Age_Months" in df.columns:
+        _src_age = _raw("age_months_computed", "age_months")
+        if _src_age is not None and _on("review_age_source_mismatch"):
+            _sa = pd.to_numeric(_src_age, errors="coerce")
+            _ra = pd.to_numeric(df["Age_Months"], errors="coerce")
+            _flag(df, _sa.notna() & _ra.notna() & ((_sa - _ra).abs() > 1.0),
+                  "review_age_source_mismatch")
+        _src_band = _raw("kategori_umur", "kumpulan_umur")
+        if _src_band is not None and _on("review_age_band_mismatch"):
+            def _band_from_months(m):
+                if pd.isna(m):
+                    return None
+                return "u2" if m < 24 else ("u5" if m < AGE_MAX_MONTHS_INFANT else "o5")
+            def _band_from_label(v):
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return None
+                t = str(v).lower().replace("-", " ")
+                if "bawah 2" in t or "0 2" in t or "bawah dua" in t:
+                    return "u2"
+                if "bawah 5" in t or "2 5" in t or "bawah lima" in t:
+                    return "u5"
+                if "5" in t and ("atas" in t or "ke atas" in t):
+                    return "o5"
+                return None
+            # Internal-consistency check: does the source band label match the
+            # source's OWN age figure? (audit measured 19/14 on source age, not
+            # the recomputed canonical age — using the latter conflates label
+            # errors with date-recompute drift.)
+            _age_for_band = _raw("age_months_computed", "age_months")
+            if _age_for_band is None:
+                _age_for_band = df["Age_Months"]
+            _exp = pd.to_numeric(_age_for_band, errors="coerce").apply(_band_from_months)
+            _got = _src_band.apply(_band_from_label)
+            _flag(df, (_exp.notna() & _got.notna() & (_exp != _got)).fillna(False).astype(bool),
+                  "review_age_band_mismatch")
+        # AGE_AT_VACCINATION (MyVASS contoh). Unit is ASSUMED completed years
+        # (contoh values are 0-3, consistent with an under-5 cohort) — not
+        # independently confirmed. [0,5] is the plausible band; revisit if a
+        # source documents the unit as months or dose-count.
+        _vacc = _raw("age_at_vaccination")
+        if _vacc is not None and _on("review_age_vacc_range"):
+            _v = pd.to_numeric(_vacc, errors="coerce")
+            _flag(df, _v.notna() & ((_v < 0) | (_v > 5)), "review_age_vacc_range")
+
+    # Family 6 — GEOGRAPHIC
+    if _on("review_daerah_null"):
+        _dcol = find_col(["daerah", "district"])
+        if _dcol and _dcol in df.columns:
+            _dv = df[_dcol].astype(str).str.strip()
+            _flag(df, df[_dcol].isna() | _dv.isin(["", "nan", "none", "<NA>", "<na>"]),
+                  "review_daerah_null")
+    if source == "ncdc" and _on("review_bahagian_null"):
+        _bcol = find_col(["bahagian", "division"])
+        if _bcol and _bcol in df.columns:
+            _bv = df[_bcol].astype(str).str.strip()
+            _flag(df, df[_bcol].isna() | _bv.isin(["", "nan", "none", "<NA>", "<na>"]),
+                  "review_bahagian_null")
+    if _on("review_geo_out_of_bounds"):
+        _lat = _raw("latitude", "lat")
+        _lon = _raw("longitude", "lon", "long")
+        if _lat is not None and _lon is not None:
+            _la = pd.to_numeric(_lat, errors="coerce")
+            _lo = pd.to_numeric(_lon, errors="coerce")
+            _oob = (_la.notna() & ((_la < 1.0) | (_la > 7.5))) | \
+                   (_lo.notna() & ((_lo < 99.5) | (_lo > 119.5)))
+            _flag(df, _oob.fillna(False).astype(bool), "review_geo_out_of_bounds")
+
+    # Family 7 — MEASUREMENTS (source-integrity; recompute owns the canonical value)
+    if _on("review_height_unit_suspect"):
+        _h = _raw("tinggi_cm", "tinggi", "height", "panjang", "length", "length_height_cm")
+        if _h is not None:
+            _hv = pd.to_numeric(_h, errors="coerce")
+            _flag(df, _hv.notna() & (_hv > 200), "review_height_unit_suspect")
+    if _on("review_ghost_bmi"):
+        _b = _raw("bmi", "bmi_kg_m2")
+        _w = _raw("berat_kg", "berat", "weight", "weight_kg")
+        _h2 = _raw("tinggi_cm", "tinggi", "height", "length_height_cm")
+        if _b is not None and (_w is not None or _h2 is not None):
+            _bv = pd.to_numeric(_b, errors="coerce")
+            _wn = pd.to_numeric(_w, errors="coerce") if _w is not None else None
+            _hn = pd.to_numeric(_h2, errors="coerce") if _h2 is not None else None
+            _wmiss = _wn.isna() if _wn is not None else True
+            _hmiss = _hn.isna() if _hn is not None else True
+            _flag(df, (_bv.notna() & (_wmiss | _hmiss)).fillna(False).astype(bool),
+                  "review_ghost_bmi")
+    if _on("review_dual_measure_mismatch"):
+        _pairs = [("length_height_cm", "tinggi_cm"), ("weight_kg", "berat_kg"), ("bmi_kg_m2", "bmi")]
+        _dual = pd.Series(False, index=df.index)
+        _any_dual = False
+        for _a_name, _b_name in _pairs:
+            _ca, _cb = _raw(_a_name), _raw(_b_name)
+            if _ca is not None and _cb is not None:
+                _any_dual = True
+                _na = pd.to_numeric(_ca, errors="coerce")
+                _nb = pd.to_numeric(_cb, errors="coerce")
+                _dual = _dual | (_na.notna() & _nb.notna() & ((_na - _nb).abs() > 0.01))
+        if _any_dual:
+            _flag(df, _dual.fillna(False).astype(bool), "review_dual_measure_mismatch")
+
+    # Family 8 — Z-SCORES & CLASSIFICATIONS (all source-integrity flags)
+    _zaxes = [("waz", "waz_class"), ("haz", "haz_class"), ("baz", "baz_class")]
+    if _on("review_ghost_class"):
+        _ghost = pd.Series(False, index=df.index)
+        for _z, _cls in _zaxes:
+            _zv, _cv = _raw(_z), _raw(_cls)
+            if _zv is not None and _cv is not None:
+                _zn = pd.to_numeric(_zv, errors="coerce")
+                _cvalid = _cv.notna() & ~_cv.astype(str).str.strip().str.lower().isin(["", "nan", "none"])
+                _ghost = _ghost | (_zn.isna() & _cvalid)
+        _flag(df, _ghost.fillna(False).astype(bool), "review_ghost_class")
+    if _on("review_zscore_biv"):
+        _biv = pd.Series(False, index=df.index)
+        for _z, _ in _zaxes:
+            _zv = _raw(_z)
+            if _zv is not None:
+                _zn = pd.to_numeric(_zv, errors="coerce")
+                _biv = _biv | (_zn.notna() & (_zn.abs() > 6))
+        _flag(df, _biv.fillna(False).astype(bool), "review_zscore_biv")
+    # review_class_range_mismatch is DEFERRED: it needs the source's exact
+    # per-axis z-score->label cutoff system (WAZ/HAZ/BAZ "high" boundaries differ
+    # and are unspecified). Guessing the cutoffs silently false-flags valid rows
+    # (clinical-safety: never mis-flag a real record). Removed from
+    # REVIEW_EVALUATED_RULES so it is not a ghost toggle; revisit once the
+    # canonical cutoff table is confirmed.
+    if _on("review_indicator_class_mismatch"):
+        # Indicator (ind_*_zscore 0/1) must agree with the corresponding WHO
+        # _class column. Missing class with a positive indicator counts as a
+        # mismatch (the row asserts a condition the classification doesn't show).
+        _ind_pairs = [
+            ("ind_bantut_zscore", "haz_class", "stunted"),
+            ("ind_obes_zscore", "baz_class", "obese"),
+            ("ind_kurang_berat_zscore", "waz_class", "underweight"),
+            ("ind_susut_zscore", "baz_class", "wasted"),
+        ]
+        _imm = pd.Series(False, index=df.index)
+        for _flagc, _clsc, _kw in _ind_pairs:
+            _fv, _cv = _raw(_flagc), _raw(_clsc)
+            if _fv is not None and _cv is not None:
+                _fb = pd.to_numeric(_fv, errors="coerce") == 1
+                _pos = _cv.astype(str).str.lower().str.contains(_kw, na=False)
+                _imm = _imm | (_fv.notna() & (_fb != _pos))
+        _flag(df, _imm.fillna(False).astype(bool), "review_indicator_class_mismatch")
+
+    # Family 9 — SOCIOECONOMIC
+    _inc = find_col(["pendapatan", "income", "pendapatan_keluarga"])
+    if _inc and _inc in df.columns:
+        _iv = df[_inc].astype(str).str.strip()
+        _imiss = df[_inc].isna() | _iv.isin(["", "nan", "none", "<NA>", "<na>"])
+        if _on("review_pendapatan_null"):
+            _flag(df, _imiss, "review_pendapatan_null")
+        if _on("review_pendapatan_invalid"):
+            _norm_inc = _iv.str.upper().str.replace(" ", "", regex=False)
+            _flag(df, (~_imiss) & (~_norm_inc.isin(INCOME_VALID)) & (_norm_inc != "X"),
+                  "review_pendapatan_invalid")
+
+    # Phase D (Families 10-11) extend here, before return.
     return
 
 
@@ -302,6 +481,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
         return None
 
     _src_cols = list(df.columns)
+    _src_raw = df.copy()  # pre-recompute snapshot for source-integrity flags (Fam 7-8)
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "date_of_birth", "birth"])
     weight_col = find_col(["berat", "weight"])
@@ -481,7 +661,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
         )
 
     # Final stats — final_count = analyzable rows, not len(df)
-    _apply_review_flags(df, "myvass", _src_cols, find_col, enabled_rules)
+    _apply_review_flags(df, "myvass", _src_cols, find_col, enabled_rules, src_raw=_src_raw)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
     stats["review_count"] = int((df["review_reason"] != "").sum())
@@ -591,6 +771,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
     else:
         df["Year"] = None
     _src_cols = list(df.columns)
+    _src_raw = df.copy()  # pre-recompute snapshot for source-integrity flags (Fam 7-8)
 
     # Rule 1: Standardize and filter gender
     if gender_col:
@@ -793,7 +974,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
         )
 
     # Final stats — final_count = analyzable rows, not len(df)
-    _apply_review_flags(df, "ncdc", _src_cols, find_col, enabled_rules)
+    _apply_review_flags(df, "ncdc", _src_cols, find_col, enabled_rules, src_raw=_src_raw)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
     stats["review_count"] = int((df["review_reason"] != "").sum())
@@ -1421,14 +1602,15 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         "review_dose_date_mismatch",
         "review_age_source_mismatch",
         "review_age_band_mismatch",
+        "review_age_vacc_range",
         "review_daerah_null",
-        "review_daerah_not_in_negeri",
+        # review_daerah_not_in_negeri — DEFERRED (no authoritative district->state map)
         "review_geo_out_of_bounds",
         "review_height_unit_suspect",
         "review_ghost_bmi",
         "review_dual_measure_mismatch",
         "review_ghost_class",
-        "review_class_range_mismatch",
+        # review_class_range_mismatch — DEFERRED (unspecified per-axis z->label cutoffs)
         "review_zscore_biv",
         "review_indicator_class_mismatch",
         "review_pendapatan_null",
@@ -1451,7 +1633,7 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         "review_height_unit_suspect",
         "review_ghost_bmi",
         "review_ghost_class",
-        "review_class_range_mismatch",
+        # review_class_range_mismatch — DEFERRED (unspecified per-axis z->label cutoffs)
         "review_zscore_biv",
         "review_indicator_class_mismatch",
         "review_pendapatan_null",
