@@ -20,7 +20,7 @@ try:
 except Exception:
     ZSCORE_AVAILABLE = False
 
-from ..utils.ic_validator import extract_ic_gender_digit
+from ..utils.ic_validator import extract_ic_gender_digit, validate_ic, extract_ic_birthdate
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -204,6 +204,59 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules):
             _da = _parse_date(df[_dcols[0]])
             _db = _parse_date(df[_dcols[1]])
             _flag(df, _da.notna() & _db.notna() & (_da != _db), "review_dob_dual_mismatch")
+    # review_ic_* (Family 1, myvass): one validate_ic pass feeds three flags.
+    if source == "myvass":
+        _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
+        _need_ic = _ic and (
+            _on("review_ic_malformed")
+            or _on("review_ic_dob_mismatch")
+            or _on("review_ic_age_contradiction")
+        )
+        if _need_ic:
+            _icres = df[_ic].apply(validate_ic)
+            if _on("review_ic_malformed"):
+                _bad = _icres.apply(lambda r: (not r["valid"]) and r["type"] != "missing")
+                _flag(df, _bad.astype(bool), "review_ic_malformed")
+            if _on("review_ic_dob_mismatch") or _on("review_ic_age_contradiction"):
+                _icdob = pd.to_datetime(
+                    _icres.apply(lambda r: extract_ic_birthdate(r.get("cleaned"))), errors="coerce"
+                )
+                if _on("review_ic_dob_mismatch") and "Tarikh_Lahir" in df.columns:
+                    _mm = _icdob.notna() & df["Tarikh_Lahir"].notna() & (
+                        _icdob.dt.normalize() != df["Tarikh_Lahir"].dt.normalize()
+                    )
+                    _flag(df, _mm.fillna(False).astype(bool), "review_ic_dob_mismatch")
+                if _on("review_ic_age_contradiction") and "Age_Months" in df.columns:
+                    _mref = df["Tarikh_Ukur"] if "Tarikh_Ukur" in df.columns else None
+                    if _mref is not None:
+                        _ic_age_yrs = (_mref - _icdob).dt.days / 365.25
+                    else:
+                        _now = pd.Timestamp.now().normalize()
+                        _ic_age_yrs = (_now - _icdob).dt.days / 365.25
+                    _contra = (
+                        _icdob.notna()
+                        & (_ic_age_yrs >= 18)
+                        & df["Age_Months"].notna()
+                        & (df["Age_Months"] < AGE_MAX_MONTHS_INFANT)
+                    )
+                    _flag(df, _contra.fillna(False).astype(bool), "review_ic_age_contradiction")
+    # review_mykid_invalid (Family 1, ncdc): MyKid uses the 12-digit format too.
+    if source == "ncdc" and _on("review_mykid_invalid"):
+        _mk = find_col(["mykid", "no. mykid", "no mykid"])
+        if _mk:
+            _mkres = df[_mk].apply(validate_ic)
+            _mkbad = _mkres.apply(lambda r: (not r["valid"]) and r["type"] != "missing")
+            _flag(df, _mkbad.astype(bool), "review_mykid_invalid")
+    # review_dose_date_mismatch (Family 4, contoh-only): DOSE_DATE != measure date.
+    if source == "myvass" and _on("review_dose_date_mismatch") and "Tarikh_Ukur" in df.columns:
+        _dose = next((c for c in src_cols if c.lower().replace("-", "_") == "dose_date"), None)
+        if _dose and _dose in df.columns:
+            _dd = _parse_date(df[_dose])
+            _flag(
+                df,
+                _dd.notna() & df["Tarikh_Ukur"].notna() & (_dd.dt.normalize() != df["Tarikh_Ukur"].dt.normalize()),
+                "review_dose_date_mismatch",
+            )
     # Phase C/D (Families 5-11) extend here, before return.
     return
 

@@ -98,6 +98,32 @@ def extract_ic_gender_digit(ic_val):
     return "Male" if int(s[-1]) % 2 == 1 else "Female"
 
 
+def extract_ic_birthdate(ic_val):
+    """Malaysian NRIC encodes the birth date in the first six digits (YYMMDD).
+
+    Returns a pd.Timestamp (date) or None when the value is not a usable
+    12-digit NRIC with a valid embedded date. Century is inferred with a pivot
+    at the current 2-digit year (00..pivot -> 2000s, else 1900s) — correct for
+    an under-5 cohort whose ICs are issued in the 2000s/2010s/2020s.
+    """
+    res = validate_ic(ic_val)
+    cleaned = res.get("cleaned")
+    if cleaned is None:
+        return None
+    s = str(cleaned)
+    if len(s) != 12 or not s.isdigit():
+        return None
+    yy, mm, dd = int(s[0:2]), int(s[2:4]), int(s[4:6])
+    if not (1 <= mm <= 12 and 1 <= dd <= 31):
+        return None
+    pivot = pd.Timestamp.now().year % 100
+    year = 2000 + yy if yy <= pivot else 1900 + yy
+    try:
+        return pd.Timestamp(year=year, month=mm, day=dd)
+    except ValueError:
+        return None
+
+
 def analyze_and_deduplicate_ids(df: pd.DataFrame, report: dict):
     """
     Classify all IC values, add id_cleaned / id_type / is_valid_ic columns.
