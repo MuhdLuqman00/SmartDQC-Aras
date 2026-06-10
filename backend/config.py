@@ -106,6 +106,29 @@ STATUS_BMI_VALID = {
 INCOME_VALID = {"B40", "M40", "T20"}
 GENDER_VALID = {"M", "F"}
 
+# ─── C4 CATEGORICAL VALIDATION SETS (Families 10-11) ──────────────────────────
+# Membership is tested case-insensitively (source value is lower()-cased first).
+# Generous on known synonyms so genuine values are never flagged "unknown" — a
+# flag here means a value outside the recognised KKM vocabulary, for review.
+
+KKM_VACCINE_SET = {
+    "bcg", "hib", "polio", "opv", "ipv", "dtap", "dpt", "mmr",
+    "hepatitis b", "hep b", "rotavirus", "pneumococcal", "pcv",
+}
+AGENSI_SET = {
+    "jkm", "jkmm", "permata", "ypkt", "kemas", "taska", "tabika",
+    "jabatan kebajikan masyarakat",
+}
+FACILITY_SET = {
+    "klinik kesihatan", "klinik mindef", "klinik desa", "klinik 1malaysia",
+    "kkia", "klinik kesihatan ibu dan anak", "hospital", "pusat kesihatan",
+}
+ETHNIC_VALID = {
+    "melayu", "malay", "cina", "chinese", "india", "indian",
+    "bumiputera sabah", "bumiputra sabah", "bumiputera sarawak", "bumiputra sarawak",
+    "orang asli", "lain-lain", "lain lain", "other", "others",
+}
+
 # ─── NORMALISATION MAPS ───────────────────────────────────────────────────────
 
 GENDER_MAP = {

@@ -21,7 +21,7 @@ except Exception:
     ZSCORE_AVAILABLE = False
 
 from ..utils.ic_validator import extract_ic_gender_digit, validate_ic, extract_ic_birthdate
-from ..config import INCOME_VALID
+from ..config import INCOME_VALID, KKM_VACCINE_SET, AGENSI_SET, FACILITY_SET, ETHNIC_VALID
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -436,7 +436,46 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
             _flag(df, (~_imiss) & (~_norm_inc.isin(INCOME_VALID)) & (_norm_inc != "X"),
                   "review_pendapatan_invalid")
 
-    # Phase D (Families 10-11) extend here, before return.
+    # ── Phase D: Families 10-11 (categorical vocabularies) ────────────────────
+
+    def _unknown_mask(col_series, valid_set):
+        """True where a non-blank value is outside valid_set (case-insensitive)."""
+        _s = col_series.astype(str).str.strip()
+        _present = col_series.notna() & ~_s.str.lower().isin(["", "nan", "none", "<na>"])
+        _known = _s.str.lower().isin(valid_set)
+        return _present & ~_known
+
+    # Family 10 — NCDC-SPECIFIC
+    if source == "ncdc":
+        if _on("review_vaccine_unknown"):
+            _vc = find_col(["vaccine_name", "vaksin", "vaccine"])
+            if _vc and _vc in df.columns:
+                _flag(df, _unknown_mask(df[_vc], KKM_VACCINE_SET), "review_vaccine_unknown")
+        if _on("review_agensi_unknown"):
+            _ac = find_col(["agensi", "agency"])
+            if _ac and _ac in df.columns:
+                _flag(df, _unknown_mask(df[_ac], AGENSI_SET), "review_agensi_unknown")
+        if _on("review_taska_blank"):
+            _ac = find_col(["agensi", "agency"])
+            _tc = find_col(["nama_taska", "taska", "nama taska"])
+            if _ac and _tc and _ac in df.columns and _tc in df.columns:
+                _av = df[_ac].astype(str).str.strip()
+                _ap = df[_ac].notna() & ~_av.str.lower().isin(["", "nan", "none", "<na>"])
+                _tv = df[_tc].astype(str).str.strip()
+                _tblank = df[_tc].isna() | _tv.str.lower().isin(["", "nan", "none", "<na>"])
+                _flag(df, _ap & _tblank, "review_taska_blank")
+
+    # Family 11 — MyVASS-SPECIFIC
+    if source == "myvass":
+        if _on("review_ethnicity_unknown"):
+            _ec = find_col(["ethnicity", "etnik", "kaum", "bangsa"])
+            if _ec and _ec in df.columns:
+                _flag(df, _unknown_mask(df[_ec], ETHNIC_VALID), "review_ethnicity_unknown")
+        if _on("review_facility_unknown"):
+            _fc = find_col(["kategori_fasiliti", "fasiliti", "facility", "kategori fasiliti"])
+            if _fc and _fc in df.columns:
+                _flag(df, _unknown_mask(df[_fc], FACILITY_SET), "review_facility_unknown")
+
     return
 
 
