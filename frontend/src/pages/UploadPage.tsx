@@ -42,11 +42,13 @@ interface ActionableFinding {
   severity: 'critical' | 'warning' | 'info'; count: number; pct?: number | null;
 }
 
-/* B3 — interactive cleaning rules (registry-driven, shared with Settings). */
+/* B3 — interactive cleaning rules (registry-driven, shared with Settings).
+   kind: "drop" removes rows from analysis; "review" flags rows for human review. */
 interface CleanRule {
   code: string; en: string; bm: string;
   desc_en: string; desc_bm: string;
   locked: boolean; enabled: boolean;
+  kind: 'drop' | 'review';
 }
 interface RuleImpactRow { code: string; count: number; fired: boolean; locked: boolean; enabled: boolean; }
 interface RuleImpact { rows_before: number; rows_after: number; per_rule: RuleImpactRow[]; }
@@ -950,58 +952,93 @@ export function UploadPage() {
             );
           })}
 
-          {/* ── B3 Review Cleaning Rules — toggle + live row impact ───────── */}
-          {rules.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {t('Review cleaning rules', 'Semak peraturan pembersihan')}
-                </div>
-                {impact && (
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {impactLoading
-                      ? t('Calculating…', 'Mengira…')
-                      : t(`Keeps ${Number(impact.rows_after).toLocaleString()} of ${Number(impact.rows_before).toLocaleString()} rows`,
-                          `Kekal ${Number(impact.rows_after).toLocaleString()} daripada ${Number(impact.rows_before).toLocaleString()} baris`)}
-                  </span>
-                )}
-              </div>
-              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                {rules.map((rule, i) => {
-                  const per = impact?.per_rule.find(p => p.code === rule.code);
-                  return (
-                    <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: i < rules.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                      <label style={{ position: 'relative', width: 40, height: 22, flexShrink: 0, marginTop: 1, opacity: rule.locked ? 0.55 : 1 }}>
-                        <input type="checkbox" checked={rule.enabled} disabled={rule.locked} onChange={() => toggleCleanRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                        <div style={{ position: 'absolute', inset: 0, borderRadius: 11, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
-                          <div style={{ position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 21 : 3, transition: 'left var(--transition)' }} />
-                        </div>
-                      </label>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2 }}>{t(rule.desc_en, rule.desc_bm)}</div>
-                      </div>
-                      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 84, marginTop: 1 }}>
-                        {rule.locked ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Always on', 'Sentiasa aktif')}</span>
-                        ) : !rule.enabled ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Off', 'Mati')}</span>
-                        ) : per && per.count > 0 ? (
-                          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--danger)' }}>−{Number(per.count).toLocaleString()}</span>
-                        ) : (
-                          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>0</span>
-                        )}
-                      </div>
+          {/* ── B3 Cleaning rules — two groups: Exclusion Rules + Review Flags ── */}
+          {rules.length > 0 && (() => {
+            const dropRules = rules.filter(r => r.kind === 'drop');
+            const reviewRules = rules.filter(r => r.kind === 'review');
+
+            const renderRuleRow = (rule: CleanRule, i: number, list: CleanRule[]) => {
+              const per = impact?.per_rule.find(p => p.code === rule.code);
+              return (
+                <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <label style={{ position: 'relative', width: 40, height: 22, flexShrink: 0, marginTop: 1, opacity: rule.locked ? 0.55 : 1 }}>
+                    <input type="checkbox" checked={rule.enabled} disabled={rule.locked} onChange={() => toggleCleanRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 11, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
+                      <div style={{ position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 21 : 3, transition: 'left var(--transition)' }} />
                     </div>
-                  );
-                })}
+                  </label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2 }}>{t(rule.desc_en, rule.desc_bm)}</div>
+                  </div>
+                  {rule.kind === 'drop' && (
+                    <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 84, marginTop: 1 }}>
+                      {rule.locked ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Always on', 'Sentiasa aktif')}</span>
+                      ) : !rule.enabled ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('Off', 'Mati')}</span>
+                      ) : per && per.count > 0 ? (
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--danger)' }}>−{Number(per.count).toLocaleString()}</span>
+                      ) : (
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>0</span>
+                      )}
+                    </div>
+                  )}
+                  {rule.kind === 'review' && !rule.enabled && (
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', flexShrink: 0, marginTop: 1 }}>{t('Off', 'Mati')}</span>
+                  )}
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Group 1: Exclusion Rules (drop) — live row-impact counter */}
+                {dropRules.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        {t('Exclusion Rules', 'Peraturan Pengecualian')}
+                      </div>
+                      {impact && (
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          {impactLoading
+                            ? t('Calculating…', 'Mengira…')
+                            : t(`Keeps ${Number(impact.rows_after).toLocaleString()} of ${Number(impact.rows_before).toLocaleString()} rows`,
+                                `Kekal ${Number(impact.rows_after).toLocaleString()} daripada ${Number(impact.rows_before).toLocaleString()} baris`)}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                      {dropRules.map((rule, i) => renderRuleRow(rule, i, dropRules))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Group 2: Review Flags — static caption (no live count; flags never remove rows) */}
+                {reviewRules.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        {t('Review Flags', 'Bendera Semak')}
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        {t('flags rows — never removed', 'menanda baris — tidak pernah dibuang')}
+                      </span>
+                    </div>
+                    <div style={{ border: '1px solid var(--border)', borderLeft: '3px solid var(--warning)', borderRadius: 8, overflow: 'hidden' }}>
+                      {reviewRules.map((rule, i) => renderRuleRow(rule, i, reviewRules))}
+                    </div>
+                  </div>
+                )}
+
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  {t('Toggle a rule to preview its row impact before cleaning. Locked rules are required for valid indicators. Choices are saved to Settings.',
+                     'Togol peraturan untuk pratonton kesan baris sebelum pembersihan. Peraturan terkunci diperlukan untuk penunjuk sah. Pilihan disimpan ke Tetapan.')}
+                </p>
               </div>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                {t('Toggle a rule to preview its row impact before cleaning. Locked rules are required for valid indicators. Choices are saved to Settings.',
-                   'Togol peraturan untuk pratonton kesan baris sebelum pembersihan. Peraturan terkunci diperlukan untuk penunjuk sah. Pilihan disimpan ke Tetapan.')}
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           {error && <div style={{ marginTop: 12, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
 

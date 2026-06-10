@@ -118,14 +118,22 @@ def _flag(df, mask, code):
     df.loc[mask, "review_reason"] = prev.apply(lambda r: f"{r}; {code}" if r else code)
 
 
+# Sentinel added to enabled_rules when the caller has explicitly configured review
+# rules (even if all are disabled). Without it, an empty review selection looks
+# identical to a drop-only selection and _review_rule_on would default all ON.
+_REVIEW_MANAGED_SENTINEL = "__reviews_managed"
+
+
 def _review_rule_on(code, enabled_rules) -> bool:
     """Review-flag rules default ON. A caller selection only constrains them once
-    it actually manages review rules (contains at least one review_* code); a
-    drop-only or legacy selection leaves every review rule ON, so flags never
-    silently vanish when a user has saved a drop-rule selection."""
+    it actually manages review rules (contains at least one review_* code OR the
+    sentinel); a drop-only or legacy selection leaves every review rule ON, so
+    flags never silently vanish when a user has saved a drop-rule selection."""
     if enabled_rules is None:
         return True
-    if any(str(c).startswith("review_") for c in enabled_rules):
+    if _REVIEW_MANAGED_SENTINEL in enabled_rules or any(
+        str(c).startswith("review_") for c in enabled_rules
+    ):
         return code in enabled_rules
     return True
 
@@ -1590,40 +1598,176 @@ def rules_for_source(data_type: str) -> list[dict]:
 
 
 REVIEW_RULE_REGISTRY: dict[str, dict] = {
-    "review_ic_malformed": {"en": "Malformed IC", "bm": "IC tidak sah format"},
-    "review_ic_dob_mismatch": {"en": "IC birth date != DOB", "bm": "Tarikh IC != tarikh lahir"},
-    "review_ic_gender_mismatch": {"en": "IC gender digit != gender", "bm": "Digit jantina IC != jantina"},
-    "review_ic_age_contradiction": {"en": "IC implies adult", "bm": "IC menunjukkan dewasa"},
-    "review_duplicate_ic": {"en": "Duplicate IC", "bm": "IC berganda"},
-    "review_mykid_shared_placeholder": {"en": "Shared/placeholder MyKid", "bm": "MyKid kongsi/pemegang tempat"},
-    "review_mykid_invalid": {"en": "Invalid MyKid format", "bm": "Format MyKid tidak sah"},
-    "review_name_gender_mismatch": {"en": "Name honorific != gender", "bm": "Gelaran nama != jantina"},
-    "review_gender_cols_disagree": {"en": "Gender columns disagree", "bm": "Lajur jantina tidak sepadan"},
-    "review_future_measure_date": {"en": "Future measurement date", "bm": "Tarikh ukur akan datang"},
-    "review_year_mismatch": {"en": "Year != measurement year", "bm": "Tahun != tahun ukur"},
-    "review_dob_dual_mismatch": {"en": "DOB columns disagree", "bm": "Lajur tarikh lahir tidak sepadan"},
-    "review_dose_date_mismatch": {"en": "Dose date != measure date", "bm": "Tarikh dos != tarikh ukur"},
-    "review_age_source_mismatch": {"en": "Source age != computed", "bm": "Umur sumber != kiraan"},
-    "review_age_band_mismatch": {"en": "Age band label wrong", "bm": "Label kumpulan umur salah"},
-    "review_age_vacc_range": {"en": "Vaccination age out of range", "bm": "Umur vaksinasi luar julat"},
-    "review_daerah_null": {"en": "District missing", "bm": "Daerah hilang"},
-    "review_daerah_not_in_negeri": {"en": "District not in state", "bm": "Daerah bukan dalam negeri"},
-    "review_bahagian_null": {"en": "Division missing", "bm": "Bahagian hilang"},
-    "review_geo_out_of_bounds": {"en": "Coordinates outside Malaysia", "bm": "Koordinat luar Malaysia"},
-    "review_height_unit_suspect": {"en": "Height unit suspect", "bm": "Unit tinggi diragui"},
-    "review_ghost_bmi": {"en": "Unverifiable source BMI", "bm": "BMI sumber tak boleh sah"},
-    "review_dual_measure_mismatch": {"en": "Duplicate measurement cols disagree", "bm": "Lajur ukuran berganda tidak sepadan"},
-    "review_ghost_class": {"en": "Classification without score", "bm": "Klasifikasi tanpa skor"},
-    "review_class_range_mismatch": {"en": "Class != z-score range", "bm": "Kelas != julat z-skor"},
-    "review_zscore_biv": {"en": "Z-score out of range", "bm": "Z-skor luar julat"},
-    "review_indicator_class_mismatch": {"en": "Indicator != classification", "bm": "Penunjuk != klasifikasi"},
-    "review_pendapatan_null": {"en": "Income missing", "bm": "Pendapatan hilang"},
-    "review_pendapatan_invalid": {"en": "Unknown income group", "bm": "Kumpulan pendapatan tidak sah"},
-    "review_vaccine_unknown": {"en": "Unknown vaccine", "bm": "Vaksin tidak dikenali"},
-    "review_agensi_unknown": {"en": "Unknown agency", "bm": "Agensi tidak dikenali"},
-    "review_taska_blank": {"en": "TASKA name missing", "bm": "Nama taska hilang"},
-    "review_ethnicity_unknown": {"en": "Unknown ethnicity", "bm": "Etnik tidak dikenali"},
-    "review_facility_unknown": {"en": "Unknown facility type", "bm": "Jenis fasiliti tidak dikenali"},
+    "review_ic_malformed": {
+        "en": "Malformed IC", "bm": "IC tidak sah format",
+        "desc_en": "IC number isn't a valid 12-digit NRIC (too short, contains letters, or malformed).",
+        "desc_bm": "Nombor IC bukan NRIC 12 digit yang sah (terlalu pendek, mengandungi huruf, atau tidak sah format).",
+    },
+    "review_ic_dob_mismatch": {
+        "en": "IC birth date != DOB", "bm": "Tarikh IC != tarikh lahir",
+        "desc_en": "Birth date encoded in the IC (YYMMDD) does not match the recorded Tarikh_Lahir.",
+        "desc_bm": "Tarikh lahir dalam IC (YYMMDD) tidak sepadan dengan Tarikh_Lahir yang direkod.",
+    },
+    "review_ic_gender_mismatch": {
+        "en": "IC gender digit != gender", "bm": "Digit jantina IC != jantina",
+        "desc_en": "IC's final-digit sex indicator (odd=M / even=F) contradicts the recorded gender.",
+        "desc_bm": "Penunjuk jantina digit terakhir IC (ganjil=L / genap=P) bercanggah dengan jantina yang direkod.",
+    },
+    "review_ic_age_contradiction": {
+        "en": "IC implies adult", "bm": "IC menunjukkan dewasa",
+        "desc_en": "IC implies the person is an adult (≥18 years) but the record is in a child dataset (<60 months).",
+        "desc_bm": "IC menunjukkan individu dewasa (≥18 tahun) tetapi rekod berada dalam set data kanak-kanak (<60 bulan).",
+    },
+    "review_duplicate_ic": {
+        "en": "Duplicate IC", "bm": "IC berganda",
+        "desc_en": "Same IC number appears on more than one row (possible revaccination or duplicate entry).",
+        "desc_bm": "Nombor IC yang sama muncul pada lebih daripada satu baris (kemungkinan vaksinasi semula atau entri berganda).",
+    },
+    "review_mykid_shared_placeholder": {
+        "en": "Shared/placeholder MyKid", "bm": "MyKid kongsi/pemegang tempat",
+        "desc_en": "One MyKid number is shared across rows with different names or birth dates (placeholder or data error).",
+        "desc_bm": "Satu nombor MyKid dikongsi pada baris dengan nama atau tarikh lahir yang berbeza (pemegang tempat atau ralat data).",
+    },
+    "review_mykid_invalid": {
+        "en": "Invalid MyKid format", "bm": "Format MyKid tidak sah",
+        "desc_en": "MyKid number isn't a valid 12-digit number.",
+        "desc_bm": "Nombor MyKid bukan nombor 12 digit yang sah.",
+    },
+    "review_name_gender_mismatch": {
+        "en": "Name honorific != gender", "bm": "Gelaran nama != jantina",
+        "desc_en": "Name honorific (bin / binti / a/l / a/p) contradicts the recorded gender.",
+        "desc_bm": "Gelaran nama (bin / binti / a/l / a/p) bercanggah dengan jantina yang direkod.",
+    },
+    "review_gender_cols_disagree": {
+        "en": "Gender columns disagree", "bm": "Lajur jantina tidak sepadan",
+        "desc_en": "Two gender columns in the file disagree after normalising to Male / Female.",
+        "desc_bm": "Dua lajur jantina dalam fail tidak sepadan selepas penormalan kepada Lelaki / Perempuan.",
+    },
+    "review_future_measure_date": {
+        "en": "Future measurement date", "bm": "Tarikh ukur akan datang",
+        "desc_en": "Measurement date is in the future (after today's date).",
+        "desc_bm": "Tarikh pengukuran adalah pada masa hadapan (selepas tarikh hari ini).",
+    },
+    "review_year_mismatch": {
+        "en": "Year != measurement year", "bm": "Tahun != tahun ukur",
+        "desc_en": "Stated year column does not match the year of the measurement date.",
+        "desc_bm": "Lajur tahun yang dinyatakan tidak sepadan dengan tahun tarikh pengukuran.",
+    },
+    "review_dob_dual_mismatch": {
+        "en": "DOB columns disagree", "bm": "Lajur tarikh lahir tidak sepadan",
+        "desc_en": "Two birth-date columns in the file disagree with each other.",
+        "desc_bm": "Dua lajur tarikh lahir dalam fail tidak sepadan antara satu sama lain.",
+    },
+    "review_dose_date_mismatch": {
+        "en": "Dose date != measure date", "bm": "Tarikh dos != tarikh ukur",
+        "desc_en": "DOSE_DATE does not match the measurement date (common in contoh exports).",
+        "desc_bm": "DOSE_DATE tidak sepadan dengan tarikh pengukuran (biasa dalam eksport contoh).",
+    },
+    "review_age_source_mismatch": {
+        "en": "Source age != computed", "bm": "Umur sumber != kiraan",
+        "desc_en": "File's own age figure differs by more than 1 month from the computed age.",
+        "desc_bm": "Angka umur dalam fail berbeza lebih daripada 1 bulan daripada umur yang dikira.",
+    },
+    "review_age_band_mismatch": {
+        "en": "Age band label wrong", "bm": "Label kumpulan umur salah",
+        "desc_en": "Age-band label (e.g. 'Bawah 2 Tahun') does not match the actual computed age.",
+        "desc_bm": "Label kumpulan umur (cth. 'Bawah 2 Tahun') tidak sepadan dengan umur sebenar yang dikira.",
+    },
+    "review_age_vacc_range": {
+        "en": "Vaccination age out of range", "bm": "Umur vaksinasi luar julat",
+        "desc_en": "AGE_AT_VACCINATION is outside the plausible range (0–5 years).",
+        "desc_bm": "AGE_AT_VACCINATION berada di luar julat yang munasabah (0–5 tahun).",
+    },
+    "review_daerah_null": {
+        "en": "District missing", "bm": "Daerah hilang",
+        "desc_en": "District (daerah) field is missing or blank.",
+        "desc_bm": "Medan daerah kosong atau hilang.",
+    },
+    "review_daerah_not_in_negeri": {
+        "en": "District not in state", "bm": "Daerah bukan dalam negeri",
+        "desc_en": "District name is not found in the recorded state (daerah not in negeri). Deferred — no authoritative district→state map yet.",
+        "desc_bm": "Nama daerah tidak ditemui dalam negeri yang direkod. Ditangguhkan — tiada peta daerah→negeri yang sah lagi.",
+    },
+    "review_bahagian_null": {
+        "en": "Division missing", "bm": "Bahagian hilang",
+        "desc_en": "Division (Bahagian) field is missing or blank.",
+        "desc_bm": "Medan Bahagian kosong atau hilang.",
+    },
+    "review_geo_out_of_bounds": {
+        "en": "Coordinates outside Malaysia", "bm": "Koordinat luar Malaysia",
+        "desc_en": "Latitude / longitude coordinates fall outside Malaysia's geographic bounding box.",
+        "desc_bm": "Koordinat latitud / longitud berada di luar kotak sempadan geografi Malaysia.",
+    },
+    "review_height_unit_suspect": {
+        "en": "Height unit suspect", "bm": "Unit tinggi diragui",
+        "desc_en": "Height exceeds 200 — likely recorded in cm instead of m, or vice versa.",
+        "desc_bm": "Ketinggian melebihi 200 — kemungkinan direkod dalam cm bukannya m, atau sebaliknya.",
+    },
+    "review_ghost_bmi": {
+        "en": "Unverifiable source BMI", "bm": "BMI sumber tak boleh sah",
+        "desc_en": "A source BMI value is present but weight or height is missing so it cannot be verified.",
+        "desc_bm": "Nilai BMI sumber ada tetapi berat atau tinggi hilang sehingga tidak dapat disahkan.",
+    },
+    "review_dual_measure_mismatch": {
+        "en": "Duplicate measurement cols disagree", "bm": "Lajur ukuran berganda tidak sepadan",
+        "desc_en": "Duplicate measurement columns (e.g. LENGTH_HEIGHT_CM and Tinggi_cm) disagree.",
+        "desc_bm": "Lajur pengukuran pendua (cth. LENGTH_HEIGHT_CM dan Tinggi_cm) tidak sepadan.",
+    },
+    "review_ghost_class": {
+        "en": "Classification without score", "bm": "Klasifikasi tanpa skor",
+        "desc_en": "A classification column is filled but the corresponding source z-score is blank.",
+        "desc_bm": "Lajur klasifikasi diisi tetapi z-skor sumber yang sepadan kosong.",
+    },
+    "review_class_range_mismatch": {
+        "en": "Class != z-score range", "bm": "Kelas != julat z-skor",
+        "desc_en": "Classification label does not match the z-score range. Deferred — per-axis cutoffs not confirmed.",
+        "desc_bm": "Label klasifikasi tidak sepadan dengan julat z-skor. Ditangguhkan — ambang setiap paksi belum disahkan.",
+    },
+    "review_zscore_biv": {
+        "en": "Z-score out of range", "bm": "Z-skor luar julat",
+        "desc_en": "Source z-score is biologically implausible (absolute value greater than 6).",
+        "desc_bm": "Z-skor sumber tidak munasabah secara biologi (nilai mutlak melebihi 6).",
+    },
+    "review_indicator_class_mismatch": {
+        "en": "Indicator != classification", "bm": "Penunjuk != klasifikasi",
+        "desc_en": "An indicator flag (e.g. stunted=1) disagrees with its corresponding classification column.",
+        "desc_bm": "Tanda penunjuk (cth. stunted=1) bercanggah dengan lajur klasifikasi yang sepadan.",
+    },
+    "review_pendapatan_null": {
+        "en": "Income missing", "bm": "Pendapatan hilang",
+        "desc_en": "Income group field is missing or blank.",
+        "desc_bm": "Medan kumpulan pendapatan kosong atau hilang.",
+    },
+    "review_pendapatan_invalid": {
+        "en": "Unknown income group", "bm": "Kumpulan pendapatan tidak sah",
+        "desc_en": "Income group value is not one of the recognised categories (B40 / M40 / T20).",
+        "desc_bm": "Nilai kumpulan pendapatan bukan salah satu kategori yang diiktiraf (B40 / M40 / T20).",
+    },
+    "review_vaccine_unknown": {
+        "en": "Unknown vaccine", "bm": "Vaksin tidak dikenali",
+        "desc_en": "Vaccine name is not in the KKM childhood immunisation schedule.",
+        "desc_bm": "Nama vaksin tidak terdapat dalam jadual imunisasi kanak-kanak KKM.",
+    },
+    "review_agensi_unknown": {
+        "en": "Unknown agency", "bm": "Agensi tidak dikenali",
+        "desc_en": "Agency code is not a recognised programme agency.",
+        "desc_bm": "Kod agensi bukan agensi program yang diiktiraf.",
+    },
+    "review_taska_blank": {
+        "en": "TASKA name missing", "bm": "Nama taska hilang",
+        "desc_en": "TASKA name is blank while an agency code is present.",
+        "desc_bm": "Nama TASKA kosong walaupun kod agensi ada.",
+    },
+    "review_ethnicity_unknown": {
+        "en": "Unknown ethnicity", "bm": "Etnik tidak dikenali",
+        "desc_en": "Ethnicity value is not a recognised Malaysian ethnic category.",
+        "desc_bm": "Nilai etnik bukan kategori etnik Malaysia yang diiktiraf.",
+    },
+    "review_facility_unknown": {
+        "en": "Unknown facility type", "bm": "Jenis fasiliti tidak dikenali",
+        "desc_en": "Facility type is not a recognised KKM facility type.",
+        "desc_bm": "Jenis fasiliti bukan jenis fasiliti KKM yang diiktiraf.",
+    },
 }
 
 REVIEW_EVALUATED_RULES: dict[str, list[str]] = {

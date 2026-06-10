@@ -1156,6 +1156,10 @@ from .eda.cleaning import (
     RULE_REGISTRY,
     LOCKED_RULES,
     rules_for_source,
+    REVIEW_RULE_REGISTRY,
+    REVIEW_EVALUATED_RULES,
+    review_rules_for_source,
+    _REVIEW_MANAGED_SENTINEL,
 )
 
 # ── Cleaned-DataFrame cache: in-memory hot tier + durable disk tier ──────────
@@ -1966,10 +1970,37 @@ async def clean_run_endpoint(
         cached_st if (data_type == "myvass" and cached_st) else data_type
     )
 
-    # B3: thread the user's rule selection (None ⇒ all rules; locked always run).
-    enabled = (
+    # D2: build effective rule set = body's drop selection UNION persisted review
+    # selection. The upload pipeline sends drop-only codes; review disables must
+    # always be merged from Settings so a disabled review rule suppresses its flag
+    # even during an upload run. Guard: nothing passed + no review settings = None
+    # (all-on default preserved). Best-effort: DB unavailable → all-on.
+    _raw_body_rules = (
         set(body.enabled_rules) if (body and body.enabled_rules is not None) else None
     )
+    try:
+        _persisted_stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
+    except Exception:
+        _persisted_stored = {}
+    _review_managed = any(k.startswith("review_") for k in _persisted_stored)
+    _review_enabled = {
+        k for k, v in _persisted_stored.items() if k.startswith("review_") and v
+    }
+    if _raw_body_rules is None and not _review_managed:
+        enabled = None  # legacy all-on: both drops and reviews default ON
+    else:
+        if _raw_body_rules is not None:
+            base = _raw_body_rules  # body provides the drop selection explicitly
+        else:
+            # No body override but review is managed: load full persisted drop state
+            try:
+                _drop_state = _load_rule_state(db)
+            except Exception:
+                _drop_state = {}
+            base = {c for c, en in _drop_state.items() if en}
+        enabled = base | _review_enabled
+        if _review_managed:
+            enabled |= {_REVIEW_MANAGED_SENTINEL}
     try:
         cleaned_df, stats = clean_data(df, effective_type, enabled)
     except Exception as e:
@@ -2126,26 +2157,39 @@ def _resolve_effective_type(cache_id: Optional[str], data_type: str) -> str:
 
 @app.get("/clean/rules")
 def clean_rules(data_type: str = Query("myvass")):
-    """Registry view of the REAL cleaning rules for a source type, annotated with
-    the user's persisted enabled state (B3 panel + Settings share one vocabulary).
-    Best-effort on the setting: defaults to all-enabled if the store is unavailable."""
-    state: dict = {}
+    """Registry view of drop + review rules for a source type, annotated with the
+    user's persisted enabled state. Both groups share a vocabulary with Settings."""
+    drop_state: dict = {}
+    review_state: dict = {}
     try:
         from .db.init_db import SessionLocal as _SessionLocal
 
         if _SessionLocal is not None:
             _db = _SessionLocal()
             try:
-                state = _load_rule_state(_db)
+                drop_state = _load_rule_state(_db)
+                review_state = _load_review_rule_state(_db)
             finally:
                 _db.close()
     except Exception:  # pragma: no cover - settings store unavailable
-        state = {}
-    rules = [
-        {**r, "enabled": state.get(r["code"], True)}
+        drop_state = {}
+        review_state = {}
+    drop_rules = [
+        {**r, "enabled": drop_state.get(r["code"], True), "kind": "drop"}
         for r in rules_for_source(data_type)
     ]
-    return JSONResponse(content=json_safe({"data_type": data_type, "rules": rules}))
+    review_rules = [
+        {
+            **r,
+            "enabled": review_state.get(r["code"], True),
+            "locked": False,
+            "kind": "review",
+        }
+        for r in review_rules_for_source(data_type)
+    ]
+    return JSONResponse(
+        content=json_safe({"data_type": data_type, "rules": drop_rules + review_rules})
+    )
 
 
 @app.post("/clean/preview-impact")
@@ -5168,7 +5212,7 @@ def post_thresholds(updates: dict, db=Depends(get_db)):
 
 
 def _load_rule_state(db) -> dict:
-    """{code: enabled} for every registry rule (B3). Default all-on; locked rules
+    """{code: enabled} for every drop registry rule (B3). Default all-on; locked rules
     forced on; overlaid with the stored cleaning.enabled_rules selection."""
     stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
     state = {}
@@ -5181,20 +5225,56 @@ def _load_rule_state(db) -> dict:
     return state
 
 
+def _load_review_rule_state(db) -> dict:
+    """{code: enabled} for every active review rule. Default all-on; overlaid with
+    stored cleaning.enabled_rules selection. Deferred rules (those with no source_types)
+    are excluded."""
+    stored = _get_setting("cleaning.enabled_rules", {}, db) or {}
+    state = {}
+    active_codes = {
+        c for codes in REVIEW_EVALUATED_RULES.values() for c in codes
+    }
+    for code in REVIEW_RULE_REGISTRY:
+        if code not in active_codes:
+            continue  # skip deferred rules
+        v = stored.get(code)
+        state[code] = True if v is None else bool(v)
+    return state
+
+
 def _rule_source_types(code: str) -> list[str]:
-    """Which source schemas actually run this rule (derived from EVALUATED_RULES),
-    so the Settings tab can grey out rules a given schema never applies."""
+    """Which source schemas actually run this drop rule (derived from EVALUATED_RULES)."""
     return [dt for dt, codes in EVALUATED_RULES.items() if code in codes]
 
 
+def _review_rule_source_types(code: str) -> list[str]:
+    """Which source schemas actually run this review rule (derived from REVIEW_EVALUATED_RULES)."""
+    return [dt for dt, codes in REVIEW_EVALUATED_RULES.items() if code in codes]
+
+
 def _rules_view(db) -> dict:
-    state = _load_rule_state(db)
-    return {
-        "rules": [
-            {"code": c, **m, "enabled": state[c], "source_types": _rule_source_types(c)}
-            for c, m in RULE_REGISTRY.items()
-        ]
-    }
+    drop_state = _load_rule_state(db)
+    review_state = _load_review_rule_state(db)
+    drop_rules = [
+        {
+            "code": c, **m,
+            "enabled": drop_state[c],
+            "source_types": _rule_source_types(c),
+            "kind": "drop",
+        }
+        for c, m in RULE_REGISTRY.items()
+    ]
+    review_rules = [
+        {
+            "code": c, **REVIEW_RULE_REGISTRY[c],
+            "enabled": review_state[c],
+            "source_types": _review_rule_source_types(c),
+            "locked": False,
+            "kind": "review",
+        }
+        for c in review_state  # already excludes deferred
+    ]
+    return {"rules": drop_rules + review_rules}
 
 
 @app.get("/settings/rules")
@@ -5208,7 +5288,11 @@ def get_rules(db=Depends(get_db)):
 def toggle_rule(body: dict, db=Depends(get_db)):
     rule = body.get("rule")
     enabled = bool(body.get("enabled", True))
-    if rule not in RULE_REGISTRY:
+    # Accept both drop rules and active review rules; reject unknown codes.
+    _active_review_codes = {
+        c for codes in REVIEW_EVALUATED_RULES.values() for c in codes
+    }
+    if rule not in RULE_REGISTRY and rule not in _active_review_codes:
         raise HTTPException(status_code=404, detail=f"Rule '{rule}' not found")
     if rule in LOCKED_RULES:
         raise HTTPException(

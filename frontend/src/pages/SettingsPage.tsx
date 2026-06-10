@@ -29,7 +29,8 @@ const DEFAULT_THRESHOLDS: Thresholds = {
 };
 
 /* B3: registry-driven cleaning rule — the SAME rule the pipeline runs.
-   source_types = the schemas that actually apply this rule (for the schema filter). */
+   source_types = the schemas that actually apply this rule (for the schema filter).
+   kind: "drop" removes rows from analysis; "review" flags rows for human review. */
 interface Rule {
   code: string;
   en: string; bm: string;
@@ -37,6 +38,7 @@ interface Rule {
   locked: boolean;
   enabled: boolean;
   source_types: string[];
+  kind: 'drop' | 'review';
 }
 
 type RuleSchema = 'myvass' | 'ncdc' | 'kpm' | 'general';
@@ -312,14 +314,15 @@ export function SettingsPage() {
         </div>
       )}
 
-      {/* Rules tab — registry-driven (B3): the SAME rules the pipeline runs. */}
+      {/* Rules tab — registry-driven (B3): the SAME rules the pipeline runs.
+          Two groups share one schema filter: Exclusion Rules (drop) + Review Flags. */}
       {tab === 'rules' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
             {t('These rules run during cleaning. Changes are saved and also apply in the upload pipeline. Locked rules are required for valid indicators and always run.',
                'Peraturan ini dijalankan semasa pembersihan. Perubahan disimpan dan turut digunakan dalam saluran muat naik. Peraturan terkunci diperlukan untuk penunjuk sah dan sentiasa dijalankan.')}
           </p>
-          {/* Schema filter — only the rules a schema actually runs are active. */}
+          {/* Schema filter — shared by both groups; greyed rules = not applicable to schema. */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>
               {t('Show rules for schema', 'Tunjuk peraturan untuk skema')}
@@ -348,45 +351,73 @@ export function SettingsPage() {
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
               {t('No rules found.', 'Tiada peraturan ditemui.')}
             </div>
-          ) : (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
-              <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
-                {t('Cleaning Rules', 'Peraturan Pembersihan')}
-              </div>
-              {rules.map((rule, i) => {
-                const applicable = rule.source_types.includes(ruleSchema);
-                const disabledToggle = rule.locked || !applicable;
-                return (
-                  <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < rules.length - 1 ? '1px solid var(--border)' : 'none', opacity: applicable ? 1 : 0.5 }}>
-                    <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2, opacity: disabledToggle ? 0.55 : 1 }}>
-                      <input type="checkbox" checked={rule.enabled} disabled={disabledToggle} onChange={() => toggleRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                      <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: disabledToggle ? 'not-allowed' : 'pointer' }}>
-                        <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
-                      </div>
-                    </label>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{t(rule.desc_en, rule.desc_bm)}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{rule.code}</div>
+          ) : (() => {
+            const dropRules = rules.filter(r => r.kind === 'drop');
+            const reviewRules = rules.filter(r => r.kind === 'review');
+
+            const renderRuleRow = (rule: Rule, i: number, list: Rule[], isReview: boolean) => {
+              const applicable = rule.source_types.includes(ruleSchema);
+              const disabledToggle = rule.locked || !applicable;
+              return (
+                <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none', opacity: applicable ? 1 : 0.5 }}>
+                  <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2, opacity: disabledToggle ? 0.55 : 1 }}>
+                    <input type="checkbox" checked={rule.enabled} disabled={disabledToggle} onChange={() => toggleRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: disabledToggle ? 'not-allowed' : 'pointer' }}>
+                      <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
                     </div>
-                    {!applicable ? (
-                      <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                        {t('Not used', 'Tidak digunakan')}
-                      </span>
-                    ) : rule.locked ? (
-                      <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                        {t('Always on', 'Sentiasa aktif')}
-                      </span>
-                    ) : !rule.enabled ? (
-                      <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                        {t('Disabled', 'Dilumpuhkan')}
-                      </span>
-                    ) : null}
+                  </label>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(rule.en, rule.bm)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{t(rule.desc_en, rule.desc_bm)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{rule.code}</div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  {!applicable ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                      {t('Not used', 'Tidak digunakan')}
+                    </span>
+                  ) : rule.locked ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      {t('Always on', 'Sentiasa aktif')}
+                    </span>
+                  ) : !rule.enabled ? (
+                    <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      {t('Disabled', 'Dilumpuhkan')}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {/* Group 1: Exclusion Rules (drop) */}
+                {dropRules.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                      <span>{t('Exclusion Rules', 'Peraturan Pengecualian')}</span>
+                      <span style={{ display: 'block', fontSize: 10.5, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {t('Removes rows from analysis (kept in the full export).', 'Mengeluarkan baris daripada analisis (disimpan dalam eksport penuh).')}
+                      </span>
+                    </div>
+                    {dropRules.map((rule, i) => renderRuleRow(rule, i, dropRules, false))}
+                  </div>
+                )}
+
+                {/* Group 2: Review Flags — gold keyline accent via --warning border-left */}
+                {reviewRules.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 20px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', borderLeft: '3px solid var(--warning)' }}>
+                      <span>{t('Review Flags', 'Bendera Semak')}</span>
+                      <span style={{ display: 'block', fontSize: 10.5, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {t('Marks rows for a human to review — never removed.', 'Menanda baris untuk disemak manusia — tidak pernah dibuang.')}
+                      </span>
+                    </div>
+                    {reviewRules.map((rule, i) => renderRuleRow(rule, i, reviewRules, true))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
