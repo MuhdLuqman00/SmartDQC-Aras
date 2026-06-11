@@ -1297,20 +1297,43 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     df["Berat_kg"] = pd.to_numeric(df[weight_col], errors="coerce") if weight_col else np.nan
     df["Tinggi_cm"] = pd.to_numeric(df[height_col], errors="coerce") if height_col else np.nan
 
-    # Null implausible values — keep the row. NOTE: still hardcoded to the
-    # infant profile here; Phase 3 selects the cohort from the data so
-    # school-age datasets are not mis-nulled against infant bounds.
-    profile = PROFILE_INFANT
-    if weight_col:
-        df.loc[
-            (df["Berat_kg"] < profile.berat_min) | (df["Berat_kg"] > profile.berat_max),
-            "Berat_kg",
-        ] = np.nan
-    if height_col:
-        df.loc[
-            (df["Tinggi_cm"] < profile.tinggi_min) | (df["Tinggi_cm"] > profile.tinggi_max),
-            "Tinggi_cm",
-        ] = np.nan
+    # Cohort detection (statistical, never LLM): choose plausibility bounds from
+    # the data's own age distribution so school-age datasets are not mis-nulled
+    # against infant bounds. median age < 5y -> infant; >= 5y -> school; no
+    # determinable age -> unknown (skip the cohort-dependent bounds rather than
+    # guess and reintroduce the infant-bounds mis-flagging bug).
+    _valid_age = df["Age_Months"].dropna()
+    if len(_valid_age) == 0:
+        cohort = "unknown"
+        cohort_profile = None
+    elif _valid_age.median() < AGE_MAX_MONTHS_INFANT:
+        cohort = "infant"
+        cohort_profile = PROFILE_INFANT
+    else:
+        cohort = "school"
+        cohort_profile = PROFILE_SCHOOL
+
+    # Null implausible weight/height against the detected cohort's bounds — keep
+    # the row. When the cohort is indeterminate this Class-B rule is skipped
+    # (values retained, gap recorded) so general stays honest, not wrong.
+    if cohort_profile is not None:
+        if weight_col:
+            df.loc[
+                (df["Berat_kg"] < cohort_profile.berat_min)
+                | (df["Berat_kg"] > cohort_profile.berat_max),
+                "Berat_kg",
+            ] = np.nan
+        if height_col:
+            df.loc[
+                (df["Tinggi_cm"] < cohort_profile.tinggi_min)
+                | (df["Tinggi_cm"] > cohort_profile.tinggi_max),
+                "Tinggi_cm",
+            ] = np.nan
+    elif weight_col or height_col:
+        assumptions.append(
+            "cohort indeterminate (no usable age) — measurement plausibility "
+            "bounds skipped; implausible values retained"
+        )
 
     valid_both = df["Berat_kg"].notna() & df["Tinggi_cm"].notna() & (df["Tinggi_cm"] > 0)
     df["BMI"] = np.where(
@@ -1318,8 +1341,14 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     )
     df.loc[df["BMI"] > BMI_MAX, "BMI"] = np.nan
 
-    # Gate indicator computation on its required inputs (dataset-level).
-    base_ok = ZSCORE_AVAILABLE and coverage["jantina"] and coverage["age"]
+    # Gate indicator computation on its required inputs (dataset-level). WHO
+    # z-scores are infant (0-5y) references, so they only apply to the infant
+    # cohort; school-age indicators come from BMI categories (Phase 4) and are
+    # honestly reported as unavailable until then rather than computed wrong.
+    base_ok = (
+        ZSCORE_AVAILABLE and coverage["jantina"] and coverage["age"]
+        and cohort == "infant"
+    )
     can_waz = base_ok and coverage["berat_kg"]
     can_haz = base_ok and coverage["tinggi_cm"]
     can_baz = base_ok and coverage["berat_kg"] and coverage["tinggi_cm"]
@@ -1333,6 +1362,8 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
             unavailable[name] = "missing/ambiguous field: jantina (sex)"
         elif not coverage["age"]:
             unavailable[name] = "missing/ambiguous field: age (tarikh_lahir/tarikh_ukur)"
+        elif cohort != "infant":
+            unavailable[name] = f"{cohort}-age cohort: WHO infant z-scores not applicable"
         else:
             unavailable[name] = "missing/ambiguous measurement input"
 
@@ -1384,6 +1415,7 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
 
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
+    stats["cohort"] = cohort
     stats["coverage"] = coverage
     stats["assumptions"] = assumptions
     stats["indicators_available"] = indicators_available
