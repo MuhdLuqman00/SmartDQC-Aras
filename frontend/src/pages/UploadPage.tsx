@@ -20,6 +20,7 @@ interface Rule { code?: string; description: string; }
 interface EvaluatedRule { code: string; count: number; fired: boolean; enabled?: boolean; locked?: boolean; }
 interface CleanStats {
   rows_before: number; rows_after: number;
+  data_type?: string;                  // effective cleaner type — drives download filenames
   quality_score: number; rules_applied: string[];
   rules?: Rule[];
   top_issues: Issue[];
@@ -1255,28 +1256,36 @@ export function UploadPage() {
           {/* Two views: "Cleaned" = analyzable rows only (what analytics use);
               "Full" = every row plus the flag columns for auditing exclusions.
               NB: the cached endpoint reads `fmt` (not `format`) and `view`. */}
+          {(() => {
+            const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            // Pass the effective cleaner type so download filenames reflect the
+            // real schema (klinik/general) instead of always defaulting to MYVASS.
+            const dt = encodeURIComponent(cleanStats.data_type || detectedType || 'general');
+            return (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/clean/download-cached/${cacheId}?fmt=csv&view=analysis`}
+            <a href={`${apiBase}/clean/download-cached/${cacheId}?fmt=csv&view=analysis&data_type=${dt}`}
               target="_blank" rel="noreferrer"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               ↓ {t('Cleaned CSV', 'CSV Bersih')}
             </a>
-            <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/clean/download-cached/${cacheId}?fmt=xlsx&view=analysis`}
+            <a href={`${apiBase}/clean/download-cached/${cacheId}?fmt=xlsx&view=analysis&data_type=${dt}`}
               target="_blank" rel="noreferrer"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               ↓ {t('Cleaned XLSX', 'XLSX Bersih')}
             </a>
-            <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/clean/download-cached/${cacheId}?fmt=xlsx&view=full`}
+            <a href={`${apiBase}/clean/download-cached/${cacheId}?fmt=xlsx&view=full&data_type=${dt}`}
               target="_blank" rel="noreferrer"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
               ↓ {t('Full + flagged (XLSX)', 'Penuh + ditanda (XLSX)')}
             </a>
-            <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/clean/download-report/${cacheId}`}
+            <a href={`${apiBase}/clean/download-report/${cacheId}`}
               target="_blank" rel="noreferrer"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               ↓ {t('Quality Report (XLSX)', 'Laporan Kualiti (XLSX)')}
             </a>
           </div>
+            );
+          })()}
 
           <button
             onClick={() => nav('/')}

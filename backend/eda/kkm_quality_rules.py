@@ -345,17 +345,20 @@ class KKMQualityChecker:
     def check_br09_suspicious_dates(self):
         """BR-09: Check for suspicious historical or future dates"""
         date_cols = [c for c in self.df.columns if 'tarikh' in c.lower()]
-        
-        current_year = 2026
-        
+
+        # Reference is the run-time clock, not a hardcoded literal, so the
+        # future-date check stays correct every year without a code edit.
+        current_year = pd.Timestamp.now().year
+
         for col in date_cols:
             if col not in self.df.columns:
                 continue
-            
+
             dates = pd.to_datetime(self.df[col], errors='coerce')
-            
-            # Check for dates before 2008 (20 years before collection) or after current year
-            too_old = dates < pd.Timestamp('2008-01-01')
+
+            # Check for dates before ~20 years before the run year (clearly too
+            # old for this cohort) or after the current year (a future date).
+            too_old = dates < pd.Timestamp(f'{current_year - 20}-01-01')
             too_new = dates > pd.Timestamp(f'{current_year}-12-31')
             suspicious = too_old | too_new
             
@@ -366,7 +369,7 @@ class KKMQualityChecker:
                 description = []
                 if old_count > 0:
                     min_date = dates[too_old].min()
-                    description.append(f"{old_count} record(s) before 30/08/2005- 20 years before data collection year")
+                    description.append(f"{old_count} record(s) dated before {current_year - 20} — over 20 years before the data collection year")
                 if new_count > 0:
                     max_date = dates[too_new].max()
                     description.append(f"{new_count} record(s) in future dates")
@@ -379,7 +382,7 @@ class KKMQualityChecker:
                     "row_count": suspicious.sum(),
                     "pct_total": round(suspicious.sum() / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "ERROR",
-                    "recommended_fix": "Set to NULL. Cannot be a valid measurement date for a 2025 school cohort.",
+                    "recommended_fix": f"Set to NULL. Cannot be a valid measurement date for a {current_year} cohort.",
                 })
                 self.affected_rows["BR-09"] = self.df[suspicious].head(100).to_dict('records')
 

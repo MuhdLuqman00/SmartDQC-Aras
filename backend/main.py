@@ -1487,6 +1487,17 @@ def _download_view(df: "pd.DataFrame", view: str) -> "pd.DataFrame":
     return df if view == "full" else _analysis_view(df)
 
 
+def _view_label(view: str) -> str:
+    """Filename infix that distinguishes the two download views so the files
+    don't collide on disk (both used to be named ``..._Cleaned_...``)."""
+    return "Full_Flagged" if view == "full" else "Cleaned"
+
+
+def _view_sheet(view: str) -> str:
+    """Excel sheet name matching the download view."""
+    return "Full + Flagged" if view == "full" else "Cleaned Data"
+
+
 def _explorer_view(df: "pd.DataFrame") -> "pd.DataFrame":
     """Explorer projection: keep ALL rows (Trust→Correct→Export, and because
     row-edit ids are positional into the cached frame — dropping rows would
@@ -2280,7 +2291,7 @@ async def clean_download_endpoint(
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             # Cleaned data sheet
-            cleaned_df.to_excel(writer, sheet_name="Cleaned Data", index=False)
+            cleaned_df.to_excel(writer, sheet_name=_view_sheet(view), index=False)
 
             # Stats sheet
             stats_df = pd.DataFrame(
@@ -2297,7 +2308,7 @@ async def clean_download_endpoint(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_{_view_label(view)}_{timestamp}.xlsx"'
             },
         )
     else:
@@ -2305,7 +2316,7 @@ async def clean_download_endpoint(
             _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_{_view_label(view)}_{timestamp}.csv"'
             },
         )
 
@@ -2465,7 +2476,7 @@ async def clean_download_multi_endpoint(
     if fmt == "xlsx":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            cleaned_df.to_excel(writer, sheet_name="Cleaned Data", index=False)
+            cleaned_df.to_excel(writer, sheet_name=_view_sheet(view), index=False)
             stats_rows = [
                 {"Metric": k, "Value": v}
                 for k, v in stats.items()
@@ -2484,7 +2495,7 @@ async def clean_download_multi_endpoint(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.xlsx"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_{_view_label(view)}_{timestamp}.xlsx"'
             },
         )
     else:
@@ -2492,7 +2503,7 @@ async def clean_download_multi_endpoint(
             _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_Cleaned_{timestamp}.csv"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Merged_{_view_label(view)}_{timestamp}.csv"'
             },
         )
 
@@ -2522,13 +2533,13 @@ async def download_cached_endpoint(
     if fmt == "xlsx":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            cleaned_df.to_excel(writer, sheet_name="Cleaned Data", index=False)
+            cleaned_df.to_excel(writer, sheet_name=_view_sheet(view), index=False)
         output.seek(0)
         return StreamingResponse(
             iter([output.read()]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.xlsx"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_{_view_label(view)}_{timestamp}.xlsx"'
             },
         )
     else:
@@ -2536,7 +2547,7 @@ async def download_cached_endpoint(
             _csv_stream(cleaned_df),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f'attachment; filename="{data_type.upper()}_Cleaned_{timestamp}.csv"'
+                "Content-Disposition": f'attachment; filename="{data_type.upper()}_{_view_label(view)}_{timestamp}.csv"'
             },
         )
 
@@ -2671,7 +2682,7 @@ async def download_xlsx_endpoint(
         iter([xlsx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": f'attachment; filename="SmartDQC_Cleaned_{timestamp}.xlsx"'
+            "Content-Disposition": f'attachment; filename="SmartDQC_{_view_label(view)}_{timestamp}.xlsx"'
         },
     )
 
@@ -5042,15 +5053,23 @@ async def entity_link_v2_export(req: EntityLinkV2Request):
 
 
 @app.get("/dashboard/summary")
-def dashboard_summary(db=Depends(get_db)):
-    """Aggregate stats across all persisted datasets for the dashboard landing."""
+def dashboard_summary(owner: str | None = Depends(_identity), db=Depends(get_db)):
+    """Aggregate stats for the dashboard landing, scoped to the current identity.
+
+    Same owner contract as /datasets and /sessions: with an X-User header only
+    that owner's datasets (plus legacy un-owned rows) are counted, so switching
+    names yields that name's own latest_session/counts. No header = unscoped
+    (no regression)."""
     from .db.models import Dataset
 
     # Exclude the placeholder dataset created by /ai/narrative — it has a
     # nil-UUID id and would otherwise surface as latest_session, causing the
     # frontend to request /kpi/dashboard?cache_id=0000... → 404.
     PLACEHOLDER_DATASET_ID = "00000000-0000-0000-0000-000000000000"
-    datasets = [d for d in db.query(Dataset).all() if d.id != PLACEHOLDER_DATASET_ID]
+    q = db.query(Dataset)
+    if owner is not None:
+        q = q.filter((Dataset.owner == owner) | (Dataset.owner.is_(None)))
+    datasets = [d for d in q.all() if d.id != PLACEHOLDER_DATASET_ID]
     if not datasets:
         return {
             "total_children": 0,

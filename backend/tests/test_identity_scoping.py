@@ -65,6 +65,26 @@ def test_sessions_scoped_by_identity(client_with_db, db_session):
     assert "sess-bob" not in alice
 
 
+def test_dashboard_summary_scoped_by_identity(client_with_db, db_session):
+    # alice owns two, bob one, plus a legacy un-owned row visible to all.
+    _seed(db_session, "dash-alice-1", "alice")
+    _seed(db_session, "dash-alice-2", "alice")
+    _seed(db_session, "dash-bob-1", "bob")
+    _seed(db_session, "dash-legacy", None)
+
+    alice = client_with_db.get("/dashboard/summary", headers={"X-User": "alice"}).json()
+    assert alice["session_count"] == 3            # 2 own + 1 legacy
+    assert "bob" not in alice["latest_session"]["cache_id"]
+
+    bob = client_with_db.get("/dashboard/summary", headers={"X-User": "bob"}).json()
+    assert bob["session_count"] == 2              # 1 own + 1 legacy
+    assert bob["latest_session"]["cache_id"] in {"dash-bob-1", "dash-legacy"}
+
+    # No identity header → unscoped (no regression): every row counts.
+    unscoped = client_with_db.get("/dashboard/summary").json()
+    assert unscoped["session_count"] == 4
+
+
 def test_persist_session_stamps_owner(db_session):
     main._persist_session(
         cache_id="cid-owner-1",

@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, User as UserIcon, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LanguageContext';
@@ -10,7 +9,6 @@ export function LoginPage() {
   // follows them across devices. Access is controlled at the network layer.
   const { identify } = useAuth();
   const { t } = useLang();
-  const nav = useNavigate();
   const [name, setName] = useState('');
   const [fieldErr, setFieldErr] = useState<string | undefined>();
   const nameRef = useRef<HTMLInputElement>(null);
@@ -24,7 +22,10 @@ export function LoginPage() {
     }
     setFieldErr(undefined);
     identify(name);
-    nav('/', { replace: true });
+    // Full reload (not SPA nav) so all in-memory state — notably SessionContext's
+    // cacheId — resets for the new identity. Otherwise a stale cacheId from the
+    // previous name would keep driving the dashboard/Explorer after switching.
+    window.location.assign('/');
   };
 
   const field = (
