@@ -18,6 +18,11 @@ class Dataset(Base):
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Anonymous named-identity owner (the name the user typed; sent as the
+    # X-User header). Scopes the dataset library / sessions list per person so
+    # the same name on any device sees the same history. Nullable: rows created
+    # before this column existed stay un-owned and remain visible to everyone.
+    owner: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
     sessions: Mapped[list["Session"]] = relationship(back_populates="dataset")
 

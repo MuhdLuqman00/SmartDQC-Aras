@@ -57,9 +57,6 @@ from .auth import (
     hash_password,
     verify_password,
     create_access_token,
-    decode_access_token,
-    TokenExpiredError,
-    InvalidTokenError,
 )
 from .db.init_db import init_db, get_db
 from .db.models import Dataset, Session as DBSession, AnalysisResult, User
@@ -177,23 +174,35 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 
 
-def _current_user(authorization: str = Header(...), db=Depends(get_db)):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
-    try:
-        payload = decode_access_token(authorization[7:])
-    except (TokenExpiredError, InvalidTokenError) as exc:
-        raise HTTPException(status_code=401, detail=str(exc))
-    user = db.query(User).filter_by(username=payload["sub"], is_active=True).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
+def _identity(x_user: str | None = Header(None, alias="X-User")) -> str | None:
+    """Anonymous named-identity: the name the user typed, sent as the X-User
+    header. There is no password/token — access control is the deployment's
+    network perimeter (office LAN + Tailscale/ZeroTier). Used to scope the
+    dataset library / sessions per person and to attribute audit entries.
+
+    Normalized to lowercase so the same person typing "Ben" on one device and
+    "ben" on another resolves to the same owner — cross-device history is the
+    whole point, and case-sensitivity would silently split it. The frontend
+    keeps the original casing in localStorage for display. Returns None when
+    the header is absent or blank."""
+    v = (x_user or "").strip().lower()
+    return v or None
+
+
+def _current_user(x_user: str | None = Header(None, alias="X-User")):
+    """Back-compat shim after the password login was removed. Returns a synthetic
+    identity built from the X-User name; no token required. Everyone is treated
+    as admin (see require_admin) because access is gated at the network layer."""
+    from types import SimpleNamespace
+
+    name = (x_user or "").strip() or "anonymous"
+    return SimpleNamespace(username=name, role="admin", id=None)
 
 
 def require_admin(user=Depends(_current_user)):
-    """Dependency guarding admin-only endpoints. 403 for non-admin users."""
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin role required")
+    """Formerly an admin-only gate. With the password login removed and access
+    controlled at the network layer, every identified user is allowed. Kept as a
+    pass-through so endpoints depending on it keep working without a token."""
     return user
 
 
@@ -620,6 +629,7 @@ async def run_eda_endpoint(
     source_type: str = "myvass",
     sheet: Optional[str] = None,
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
+    owner: str | None = Depends(_identity),
     db=Depends(get_db),
 ):
     content = await file.read()
@@ -653,6 +663,7 @@ async def run_eda_endpoint(
             row_count=len(cleaned_df),
             result=report,
             db=db,
+            owner=owner,
         )
     except Exception as exc:  # best-effort — never fail the EDA run on a DB error
         persisted = False
@@ -665,7 +676,7 @@ async def run_eda_endpoint(
             persist_error,
         )
 
-    _log_audit(action="eda.run", detail=f"cache_id={cache_id}")
+    _log_audit(action="eda.run", detail=f"cache_id={cache_id}", actor=owner)
 
     # Strip private / large keys from public response
     for key in ["_cleaned_data", "_cleaned_columns", "_aggregated_full"]:
@@ -1560,6 +1571,7 @@ def _persist_session(
     result: dict,
     db,
     name: str | None = None,
+    owner: str | None = None,
 ) -> None:
     """Upsert Dataset + Session + AnalysisResult so session data survives server restart."""
     from .db.models import Dataset, Session as _Session, AnalysisResult
@@ -1580,6 +1592,7 @@ def _persist_session(
             row_count=row_count,
             quality_score=quality,
             created_at=now,
+            owner=owner,
         )
         db.add(ds)
         db.flush()
@@ -1618,13 +1631,21 @@ def _log_audit(
     dataset_id: str | None = None,
     detail: str | None = None,
     user_id: int | None = None,
+    actor: str | None = None,
 ) -> None:
     """Best-effort audit write — logs a warning if it fails but never raises.
 
     Previously imported from a non-existent `db.session` module so every
     call silently no-op'd — the audit table stayed empty regardless of
     activity. Fixed to use the real SessionLocal from db.init_db.
+
+    `actor` is the anonymous named-identity (X-User) of whoever performed the
+    action. With the password login removed there is no users-table user_id to
+    attribute by, so the actor name is folded into `detail` (self-asserted —
+    accountability, not proof of identity).
     """
+    if actor:
+        detail = f"actor={actor}" + (f"; {detail}" if detail else "")
     try:
         from .db.init_db import SessionLocal
         from .db.models import AuditLog
@@ -1939,6 +1960,7 @@ async def clean_run_endpoint(
     cache_id: Optional[str] = Query(None),
     data_type: str = Query("myvass"),
     body: Optional[MappingBody] = None,
+    owner: str | None = Depends(_identity),
     db=Depends(get_db),
 ):
     """Run the cleaning process and return cleaned data with statistics.
@@ -2048,6 +2070,7 @@ async def clean_run_endpoint(
             },
             db=db,
             name=(body.dataset_name if body else None),
+            owner=owner,
         )
     except Exception as exc:  # best-effort — never fail the clean run on a DB error
         persisted = False
@@ -2091,7 +2114,7 @@ async def clean_run_endpoint(
         for c in _rule_codes
     ]
 
-    _log_audit(action="clean.run", detail=f"cache_id={new_cache_id}")
+    _log_audit(action="clean.run", detail=f"cache_id={new_cache_id}", actor=owner)
     return JSONResponse(
         content=json_safe(
             {
@@ -2773,6 +2796,7 @@ async def join_run_endpoint(
         None, description="Comma-separated key column names (horizontal joins)"
     ),
     dedup: bool = Query(False, description="Remove duplicate rows after union"),
+    owner: str | None = Depends(_identity),
     db=Depends(get_db),
 ):
     """Execute a full join, cache the result, and persist it as a library Dataset row."""
@@ -2836,6 +2860,7 @@ async def join_run_endpoint(
             row_count=len(result),
             result={"join_type": join_type, "join_stats": stats},
             db=db,
+            owner=owner,
         )
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("Joined-dataset persist failed for %s: %s", cache_id, exc)
@@ -2888,7 +2913,7 @@ def _parse_charts(charts: str | None) -> set[str] | None:
 
 
 @app.get("/report/pptx")
-async def report_pptx_endpoint(
+def report_pptx_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
     include_kpi: bool = Query(True, description="Embed KPI dashboard slides"),
     charts: str | None = Query(
@@ -2935,7 +2960,7 @@ async def report_pptx_endpoint(
 
 
 @app.get("/report/pdf")
-async def report_pdf_endpoint(
+def report_pdf_endpoint(
     cache_id: str = Query(..., description="UUID from /clean/run or /join/run"),
     include_kpi: bool = Query(True, description="Embed KPI dashboard section"),
     charts: str | None = Query(
@@ -3936,7 +3961,7 @@ def _format_narrative(n: dict) -> str:
 
 
 @app.post("/ai/narrative")
-async def ai_narrative(
+def ai_narrative(
     cache_id: str = Query(...),
     chat_id: str | None = Query(
         None, description="Optional chat session to persist this exchange into."
@@ -3982,7 +4007,7 @@ async def ai_narrative(
 
 
 @app.post("/ai/nlq")
-async def ai_nlq(
+def ai_nlq(
     cache_id: str = Query(...),
     chat_id: str | None = Query(
         None, description="Optional chat session to persist this exchange into."
@@ -4236,13 +4261,21 @@ from backend.eda.compare import compare_datasets
 
 
 @app.get("/datasets")
-async def list_datasets():
-    """List all datasets in the library."""
+async def list_datasets(owner: str | None = Depends(_identity)):
+    """List datasets in the library, scoped to the current identity.
+
+    When an identity (X-User) is present, only that owner's datasets — plus
+    legacy un-owned rows created before per-person scoping — are returned, so
+    each person sees their own history across devices. With no identity header
+    the full library is returned (no regression for un-headered callers)."""
     from backend.db.models import Dataset
     from backend.db.init_db import SessionLocal
 
     with SessionLocal() as db:
-        datasets = db.query(Dataset).order_by(Dataset.created_at.desc()).all()
+        q = db.query(Dataset)
+        if owner is not None:
+            q = q.filter((Dataset.owner == owner) | (Dataset.owner.is_(None)))
+        datasets = q.order_by(Dataset.created_at.desc()).all()
         return [
             {
                 "id": ds.id,
@@ -4371,7 +4404,9 @@ async def datasets_compare(req: DatasetCompareRequest, db=Depends(get_db)):
 
 
 @app.post("/datasets/delete")
-async def datasets_delete(req: DatasetDeleteRequest):
+async def datasets_delete(
+    req: DatasetDeleteRequest, owner: str | None = Depends(_identity)
+):
     """Permanently delete datasets: DB rows + sessions/analysis + cache."""
     from backend.db.init_db import SessionLocal
 
@@ -4383,7 +4418,7 @@ async def datasets_delete(req: DatasetDeleteRequest):
         except Exception as e:
             db.rollback()
             raise HTTPException(500, f"Delete failed: {e}")
-    _log_audit(action="dataset.delete", detail=f"ids={result['deleted']}")
+    _log_audit(action="dataset.delete", detail=f"ids={result['deleted']}", actor=owner)
     return result
 
 
@@ -5054,11 +5089,17 @@ def dashboard_summary(db=Depends(get_db)):
 
 
 @app.get("/sessions")
-def list_sessions(db=Depends(get_db)):
-    """List the 100 most recent cleaned sessions persisted to the database."""
+def list_sessions(owner: str | None = Depends(_identity), db=Depends(get_db)):
+    """List the 100 most recent cleaned sessions, scoped to the current identity.
+
+    Legacy un-owned rows stay visible; with no identity header the list is
+    unscoped (no regression)."""
     from .db.models import Dataset
 
-    rows = db.query(Dataset).order_by(Dataset.created_at.desc()).limit(100).all()
+    q = db.query(Dataset)
+    if owner is not None:
+        q = q.filter((Dataset.owner == owner) | (Dataset.owner.is_(None)))
+    rows = q.order_by(Dataset.created_at.desc()).limit(100).all()
     return [
         {
             "cache_id": r.id,

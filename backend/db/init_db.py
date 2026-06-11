@@ -39,6 +39,19 @@ def init_db() -> None:
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("create_all() failed: %s", exc)
 
+    # create_all() only creates missing *tables*, never adds columns to an
+    # existing one. The anonymous-identity `owner` column must be backfilled
+    # onto an already-deployed `datasets` table. Postgres supports
+    # ADD COLUMN IF NOT EXISTS, so this is idempotent and safe on every boot.
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE datasets ADD COLUMN IF NOT EXISTS owner VARCHAR")
+            )
+        logger.info("Migration ensured: datasets.owner column.")
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("datasets.owner migration failed: %s", exc)
+
 
 def get_db():
     db = SessionLocal()

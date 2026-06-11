@@ -1,42 +1,30 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Lock, User as UserIcon, ArrowRight } from 'lucide-react';
+import { ShieldCheck, User as UserIcon, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LanguageContext';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  // Anonymous named-identity: no password. The user types a name; it is stored
+  // and sent as X-User so their dataset library / history is scoped to them and
+  // follows them across devices. Access is controlled at the network layer.
+  const { identify } = useAuth();
   const { t } = useLang();
   const nav = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [fieldErr, setFieldErr] = useState<{ username?: string; password?: string }>({});
-  const [loading, setLoading] = useState(false);
-  const userRef = useRef<HTMLInputElement>(null);
-  const passRef = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState('');
+  const [fieldErr, setFieldErr] = useState<string | undefined>();
+  const nameRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    /* Field-level validation first: empty fields get an inline message and
-       focus moves to the first offender (rather than relying on the native
-       required-bubble, which the form suppresses via noValidate). */
-    const errs: { username?: string; password?: string } = {};
-    if (!username.trim()) errs.username = t('Username is required.', 'Nama pengguna diperlukan.');
-    if (!password) errs.password = t('Password is required.', 'Kata laluan diperlukan.');
-    if (errs.username || errs.password) {
-      setFieldErr(errs);
-      (errs.username ? userRef : passRef).current?.focus();
+    if (!name.trim()) {
+      setFieldErr(t('Your name is required.', 'Nama anda diperlukan.'));
+      nameRef.current?.focus();
       return;
     }
-    setFieldErr({}); setError(''); setLoading(true);
-    try {
-      await login(username, password);
-      nav('/', { replace: true });
-    } catch {
-      setError(t('Invalid username or password.', 'Nama pengguna atau kata laluan tidak sah.'));
-      userRef.current?.focus();
-    } finally { setLoading(false); }
+    setFieldErr(undefined);
+    identify(name);
+    nav('/', { replace: true });
   };
 
   const field = (
@@ -167,47 +155,31 @@ export function LoginPage() {
             <ShieldCheck size={22} />
           </div>
           <h2 style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 6 }}>
-            {t('Sign In', 'Log Masuk')}
+            {t('Welcome', 'Selamat Datang')}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28 }}>
-            {t('Enter your credentials to access the system.', 'Masukkan maklumat akaun anda untuk akses sistem.')}
+            {t('Enter your name to continue. Your datasets and history are saved under this name across devices.',
+               'Masukkan nama anda untuk teruskan. Set data dan sejarah anda disimpan di bawah nama ini merentas peranti.')}
           </p>
 
           <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {field(<UserIcon size={15} />, {
-              type: 'text', value: username,
-              onChange: e => { setUsername(e.target.value); if (fieldErr.username) setFieldErr(f => ({ ...f, username: undefined })); },
-              placeholder: t('Enter username', 'Masukkan nama pengguna'), required: true, autoComplete: 'username',
-            }, t('Username', 'Nama Pengguna'), { id: 'login-username', error: fieldErr.username, inputRef: userRef })}
+              type: 'text', value: name,
+              onChange: e => { setName(e.target.value); if (fieldErr) setFieldErr(undefined); },
+              placeholder: t('e.g. your name or email', 'cth. nama atau emel anda'), required: true, autoComplete: 'name', autoFocus: true,
+            }, t('Your name', 'Nama anda'), { id: 'login-name', error: fieldErr, inputRef: nameRef })}
 
-            {field(<Lock size={15} />, {
-              type: 'password', value: password,
-              onChange: e => { setPassword(e.target.value); if (fieldErr.password) setFieldErr(f => ({ ...f, password: undefined })); },
-              placeholder: '••••••••', required: true, autoComplete: 'current-password',
-            }, t('Password', 'Kata Laluan'), { id: 'login-password', error: fieldErr.password, inputRef: passRef })}
-
-            {error && (
-              <div role="alert" style={{
-                background: 'var(--danger-bg)', border: '1px solid var(--danger)',
-                borderRadius: 'var(--radius-btn)', padding: '10px 14px', color: 'var(--danger)', fontSize: 13,
-              }}>
-                {error}
-              </div>
-            )}
-
-            <button type="submit" disabled={loading} className="btn-primary"
+            <button type="submit" className="btn-primary"
               style={{ marginTop: 4, padding: '13px 16px', fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              {loading ? t('Signing in…', 'Sedang log masuk…') : <>{t('Sign In', 'Log Masuk')} <ArrowRight size={16} /></>}
+              {t('Continue', 'Teruskan')} <ArrowRight size={16} />
             </button>
           </form>
 
           <div style={{
             marginTop: 26, paddingTop: 18, borderTop: '1px solid var(--border)',
-            /* --text-secondary (not --text-muted): muted-grey on the white card
-               fails 4.5:1. Local fix only; the token-wide question is WS7. */
             fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', letterSpacing: '0.02em',
           }}>
-            {t('Authorised users only.', 'Pengguna yang sah sahaja.')}
+            {t('Access is restricted to the ministry network.', 'Akses terhad kepada rangkaian kementerian.')}
           </div>
         </div>
       </div>

@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api } from '../api/client';
+import React, { createContext, useContext, useState } from 'react';
 
 export interface User { username: string; role: string; }
 
@@ -7,43 +6,45 @@ interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  identify: (name: string) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
 
+// Anonymous named-identity (no password). The user types a name once; we store
+// it in localStorage and send it as the X-User header (see api/client.ts) so
+// the backend can scope each person's history. The same name on any device
+// resolves to the same history — that's the cross-device behaviour. Access
+// control is the deployment's network perimeter (office LAN + Tailscale), not a
+// password. Everyone is treated as 'admin' since there are no roles to gate.
+function readIdentity(): User | null {
+  const name = (localStorage.getItem('identity') || '').trim();
+  return name ? { username: name, role: 'admin' } : null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  // Identity lives in localStorage, so init is synchronous — no /auth/me round
+  // trip, no isInitializing flicker. The flag is kept (always false) so the
+  // existing AuthGuard interface is unchanged.
+  const [user, setUser] = useState<User | null>(readIdentity);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { setIsInitializing(false); return; }
-    api.get<User>('/auth/me')
-      .then(r => setUser(r.data))
-      .catch(() => localStorage.removeItem('token'))
-      .finally(() => setIsInitializing(false));
-  }, []);
-
-  const login = async (username: string, password: string) => {
-    const fd = new FormData();
-    fd.append('username', username);
-    fd.append('password', password);
-    const r = await api.post<{ access_token: string }>('/auth/login', fd);
-    localStorage.setItem('token', r.data.access_token);
-    const me = await api.get<User>('/auth/me');
-    setUser(me.data);
+  const identify = (name: string) => {
+    const clean = name.trim();
+    if (!clean) return;
+    localStorage.setItem('identity', clean);
+    setUser({ username: clean, role: 'admin' });
   };
 
   const logout = () => {
-    api.post('/auth/logout').catch(() => {});
-    localStorage.removeItem('token');
+    localStorage.removeItem('identity');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isInitializing, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isAuthenticated: !!user, isInitializing: false, identify, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
