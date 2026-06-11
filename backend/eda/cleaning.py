@@ -7,6 +7,7 @@ Integrates with WHO z-score calculations using daily LMS tables.
 
 import io
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -53,6 +54,39 @@ BIV = {
     "HAZ": (-6.0, +6.0),
     "BAZ": (-5.0, +5.0),
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COHORT PROFILES
+# ═══════════════════════════════════════════════════════════════════════════════
+# Class-B (cohort-dependent) cleaning rules — weight/height plausibility bounds —
+# read from a CohortProfile rather than module-level constants so one shared rule
+# battery can serve infants (0-5y, WHO z-scores) and school-age children
+# (6-10y, BMI categories). Named cleaners use a fixed preset; the general
+# cleaner selects/builds its profile from the data (Phase 3+). The min/max
+# values are unchanged from the original constants — extracting them here is a
+# behaviour-preserving refactor (golden snapshots pin this).
+
+@dataclass(frozen=True)
+class CohortProfile:
+    """Population-dependent plausibility bounds for one cohort."""
+    name: str
+    berat_min: float
+    berat_max: float
+    tinggi_min: float
+    tinggi_max: float
+
+
+PROFILE_INFANT = CohortProfile(
+    name="infant",
+    berat_min=BERAT_MIN_INFANT, berat_max=BERAT_MAX_INFANT,
+    tinggi_min=TINGGI_MIN_INFANT, tinggi_max=TINGGI_MAX_INFANT,
+)
+PROFILE_SCHOOL = CohortProfile(
+    name="school",
+    berat_min=BERAT_MIN_SCHOOL, berat_max=BERAT_MAX_SCHOOL,
+    tinggi_min=TINGGI_MIN_SCHOOL, tinggi_max=TINGGI_MAX_SCHOOL,
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -598,9 +632,10 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, di
     else:
         df["Tinggi_cm"] = np.nan
 
-    # Rule 2: Flag measurement outliers
-    berat_bad = (df["Berat_kg"] < BERAT_MIN_INFANT) | (df["Berat_kg"] > BERAT_MAX_INFANT)
-    tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_INFANT) | (df["Tinggi_cm"] > TINGGI_MAX_INFANT)
+    # Rule 2: Flag measurement outliers (infant cohort bounds)
+    profile = PROFILE_INFANT
+    berat_bad = (df["Berat_kg"] < profile.berat_min) | (df["Berat_kg"] > profile.berat_max)
+    tinggi_bad = (df["Tinggi_cm"] < profile.tinggi_min) | (df["Tinggi_cm"] > profile.tinggi_max)
 
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
@@ -891,9 +926,10 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict
     df["Berat_kg"] = pd.to_numeric(df.get("Berat_kg"), errors="coerce")
     df["Tinggi_cm"] = pd.to_numeric(df.get("Tinggi_cm"), errors="coerce")
 
-    # Rule 2: Flag measurement outliers
-    berat_bad = (df["Berat_kg"] < BERAT_MIN_INFANT) | (df["Berat_kg"] > BERAT_MAX_INFANT)
-    tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_INFANT) | (df["Tinggi_cm"] > TINGGI_MAX_INFANT)
+    # Rule 2: Flag measurement outliers (infant cohort bounds)
+    profile = PROFILE_INFANT
+    berat_bad = (df["Berat_kg"] < profile.berat_min) | (df["Berat_kg"] > profile.berat_max)
+    tinggi_bad = (df["Tinggi_cm"] < profile.tinggi_min) | (df["Tinggi_cm"] > profile.tinggi_max)
 
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
@@ -1164,9 +1200,10 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, dict]
     else:
         df["Tinggi_cm"] = np.nan
 
-    # Rule 6 & 7: Flag measurement outliers
-    berat_bad = (df["Berat_kg"] < BERAT_MIN_SCHOOL) | (df["Berat_kg"] > BERAT_MAX_SCHOOL)
-    tinggi_bad = (df["Tinggi_cm"] < TINGGI_MIN_SCHOOL) | (df["Tinggi_cm"] > TINGGI_MAX_SCHOOL)
+    # Rule 6 & 7: Flag measurement outliers (school-age cohort bounds)
+    profile = PROFILE_SCHOOL
+    berat_bad = (df["Berat_kg"] < profile.berat_min) | (df["Berat_kg"] > profile.berat_max)
+    tinggi_bad = (df["Tinggi_cm"] < profile.tinggi_min) | (df["Tinggi_cm"] > profile.tinggi_max)
 
     outlier_mask = (berat_bad & df["Berat_kg"].notna()) | (tinggi_bad & df["Tinggi_cm"].notna())
     if _on("dropped_measurement_outlier"):
@@ -1319,15 +1356,18 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     df["Berat_kg"] = pd.to_numeric(df[weight_col], errors="coerce") if weight_col else np.nan
     df["Tinggi_cm"] = pd.to_numeric(df[height_col], errors="coerce") if height_col else np.nan
 
-    # Null implausible values — keep the row.
+    # Null implausible values — keep the row. NOTE: still hardcoded to the
+    # infant profile here; Phase 3 selects the cohort from the data so
+    # school-age datasets are not mis-nulled against infant bounds.
+    profile = PROFILE_INFANT
     if weight_col:
         df.loc[
-            (df["Berat_kg"] < BERAT_MIN_INFANT) | (df["Berat_kg"] > BERAT_MAX_INFANT),
+            (df["Berat_kg"] < profile.berat_min) | (df["Berat_kg"] > profile.berat_max),
             "Berat_kg",
         ] = np.nan
     if height_col:
         df.loc[
-            (df["Tinggi_cm"] < TINGGI_MIN_INFANT) | (df["Tinggi_cm"] > TINGGI_MAX_INFANT),
+            (df["Tinggi_cm"] < profile.tinggi_min) | (df["Tinggi_cm"] > profile.tinggi_max),
             "Tinggi_cm",
         ] = np.nan
 
