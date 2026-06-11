@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, X, ChevronDown, ChevronUp, TrendingUp, Maximize2 } from 'lucide-react';
 import { api } from '../api/client';
@@ -279,6 +279,24 @@ export function DashboardPage() {
   const [popOpen, setPopOpen] = useState(false);
   const [panelFocus, setPanelFocus] = useState(false);
   const [stateFilter, setStateFilter] = useState('');
+
+  /* Pin the By-State panel to the map card's *measured* height so the two
+     cards always line up exactly, at any viewport width. (Previously the
+     panel used a hand-tuned maxHeight:320 that only approximated the map's
+     fluid SVG height — see the layout comment on the panel card below.) */
+  const mapCardRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const el = mapCardRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      // offsetHeight is the border-box height (includes padding + border), so
+      // the panel card matches the map card's *outer* box exactly.
+      setPanelHeight(el.offsetHeight);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   /* fetch summary (always-on) */
   useEffect(() => {
@@ -614,8 +632,8 @@ export function DashboardPage() {
       </div>
 
       {/* ── Map + By-State ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <div style={{
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div ref={mapCardRef} style={{
           flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
         }}>
@@ -666,13 +684,13 @@ export function DashboardPage() {
         <div style={{
           flex: '1 1 360px', background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', padding: 20, boxShadow: 'var(--shadow-card)',
-          /* maxHeight is tuned just under the map card's natural height so this
-             panel never out-grows it and forces the map to stretch (which would
-             re-open the blank gap under the legend). The map card is fluid
-             (SVG width:100%/height:auto ≈ innerWidth×300/800 + chrome ≈ 305–342px
-             at typical widths), so this fixed cap is a best-fit, not exact —
-             nudge down if a gap reappears at narrow viewports. */
-          display: 'flex', flexDirection: 'column', maxHeight: 320,
+          /* Height is pinned to the map card's *measured* border-box height
+             (panelHeight, via ResizeObserver above) so the two cards line up
+             exactly at any viewport width. The list inside scrolls when it
+             overflows. 320 is only the first-paint fallback, before the
+             observer has measured the map. */
+          display: 'flex', flexDirection: 'column',
+          height: panelHeight ?? undefined, maxHeight: panelHeight ?? 320,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>

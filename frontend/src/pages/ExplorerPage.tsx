@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Download, Search, Pencil, AlertTriangle } from 'lucide-react';
+import { Download, Search, Pencil, AlertTriangle, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
@@ -42,6 +42,31 @@ export function ExplorerPage() {
 
   // ── Histogram state ────────────────────────────────────────────────────────
   const [histCol, setHistCol] = useState('');
+
+  // ── Fullscreen state ───────────────────────────────────────────────────────
+  // When the table is maximised it renders as a fixed overlay and the virtual
+  // scroll window grows to fill the viewport. viewportH tracks window height so
+  // the row math stays correct across resizes.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [viewportH, setViewportH] = useState(
+    typeof window !== 'undefined' ? window.innerHeight : 800,
+  );
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onResize = () => setViewportH(window.innerHeight);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false); };
+    onResize();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreen]);
+
+  // Visible scroll height: fills the viewport (minus toolbar/footer chrome) when
+  // maximised, otherwise the fixed inline height.
+  const containerHeight = fullscreen ? Math.max(360, viewportH - 150) : CONTAINER_HEIGHT;
 
   // ── Fetch all rows from the stable-key seam ────────────────────────────────
   const loadRows = useCallback(() => {
@@ -128,7 +153,7 @@ export function ExplorerPage() {
 
   // ── Virtual scroll window ──────────────────────────────────────────────────
   const visStart    = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - SCROLL_BUFFER);
-  const visEnd      = Math.min(filtered.length, Math.ceil((scrollTop + CONTAINER_HEIGHT) / ROW_HEIGHT) + SCROLL_BUFFER);
+  const visEnd      = Math.min(filtered.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + SCROLL_BUFFER);
   const visibleRows = filtered.slice(visStart, visEnd);
   const topPad      = visStart * ROW_HEIGHT;
   const bottomPad   = Math.max(0, (filtered.length - visEnd) * ROW_HEIGHT);
@@ -313,11 +338,98 @@ export function ExplorerPage() {
           </div>
         )}
 
+        {/* ── Column distribution ─────────────────────────────────────────── */}
+        {numericColumns.length > 0 && (
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {t('Column Distribution', 'Taburan Lajur')}
+              </span>
+              <select
+                value={activeHistCol}
+                onChange={e => setHistCol(e.target.value)}
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)' }}
+              >
+                {numericColumns.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <ColumnHistogram values={histValues} />
+          </div>
+        )}
+
         {/* ── Table with virtual scroll ───────────────────────────────────── */}
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden',
+          ...(fullscreen ? {
+            position: 'fixed', inset: 0, zIndex: 1000, borderRadius: 0,
+            display: 'flex', flexDirection: 'column',
+          } : {}),
         }}>
+          {/* ── Table toolbar (fullscreen toggle; search/flagged surfaced in overlay) ── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            padding: '8px 12px', borderBottom: '1px solid var(--border)',
+            background: 'var(--surface-2)', flexShrink: 0,
+          }}>
+            {fullscreen && (
+              <>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{filename}</span>
+                <div style={{ position: 'relative', maxWidth: 280, flex: '1 1 180px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder={t('Search all rows…', 'Cari semua baris…')}
+                    style={{
+                      width: '100%', padding: '6px 10px 6px 30px',
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-btn)', fontSize: 12.5, color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+                {flaggedCount > 0 && (
+                  <button
+                    onClick={() => setShowFlaggedOnly(v => !v)}
+                    aria-pressed={showFlaggedOnly}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      background: showFlaggedOnly ? 'var(--warning)' : 'var(--surface)',
+                      border: `1px solid ${showFlaggedOnly ? 'var(--warning)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-btn)', padding: '6px 12px',
+                      fontSize: 12.5, fontWeight: 600,
+                      color: showFlaggedOnly ? 'var(--text-on-navy)' : 'var(--warning)',
+                      cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                    }}
+                  >
+                    <AlertTriangle size={13} aria-hidden />
+                    {showFlaggedOnly
+                      ? t(`Flagged only (${flaggedCount})`, `Bermasalah sahaja (${flaggedCount})`)
+                      : t(`Show flagged (${flaggedCount})`, `Tunjuk bermasalah (${flaggedCount})`)}
+                  </button>
+                )}
+              </>
+            )}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => setFullscreen(v => !v)}
+              aria-pressed={fullscreen}
+              title={fullscreen ? t('Exit full screen (Esc)', 'Keluar skrin penuh (Esc)') : t('Full screen', 'Skrin penuh')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-btn)', padding: '6px 12px',
+                fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)',
+                cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {fullscreen ? t('Exit full screen', 'Keluar skrin penuh') : t('Full screen', 'Skrin penuh')}
+            </button>
+          </div>
           {fetchError ? (
             <ErrorRetry
               message={t('Could not load the data.', 'Tidak dapat memuatkan data.')}
@@ -336,7 +448,7 @@ export function ExplorerPage() {
               {/* Scrollable container — sticky thead + virtual tbody */}
               <div
                 ref={scrollRef}
-                style={{ height: CONTAINER_HEIGHT, overflowY: 'auto', overflowX: 'auto' }}
+                style={{ height: containerHeight, overflowY: 'auto', overflowX: 'auto' }}
                 onScroll={e => setScrollTop((e.currentTarget as HTMLDivElement).scrollTop)}
               >
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -496,28 +608,6 @@ export function ExplorerPage() {
             </>
           )}
         </div>
-
-        {/* ── Column distribution ─────────────────────────────────────────── */}
-        {numericColumns.length > 0 && (
-          <div style={{
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)', padding: '18px 20px', boxShadow: 'var(--shadow-card)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {t('Column Distribution', 'Taburan Lajur')}
-              </span>
-              <select
-                value={activeHistCol}
-                onChange={e => setHistCol(e.target.value)}
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)' }}
-              >
-                {numericColumns.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <ColumnHistogram values={histValues} />
-          </div>
-        )}
 
       </div>
     </SessionGuard>

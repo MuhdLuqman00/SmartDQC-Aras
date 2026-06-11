@@ -10,9 +10,18 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b-it-qat")
 # Keep the model resident in memory between requests so the first click after
 # an idle period doesn't pay a cold model-load (the root cause of the post-idle
-# "failed to generate narrative" 500). "-1" = keep loaded indefinitely (no
+# "failed to generate narrative" 500). -1 = keep loaded indefinitely (no
 # post-idle unload/CPU fallback); use a duration like "30m" only on a shared GPU.
-OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "-1")
+def _parse_keep_alive(val: str) -> "int | str":
+    """Ollama's keep_alive accepts an int (seconds; -1 = forever, 0 = unload now)
+    or a duration string WITH a unit ('30m'). A bare integer *string* like '-1'
+    is rejected by newer Ollama builds as `time: missing unit in duration "-1"`
+    and 400s every generate call, so coerce plain integers to a real int."""
+    s = (val or "").strip()
+    return int(s) if re.fullmatch(r"-?\d+", s) else s
+
+
+OLLAMA_KEEP_ALIVE = _parse_keep_alive(os.getenv("OLLAMA_KEEP_ALIVE", "-1"))
 # Thinking ("reasoning") models route their answer into a separate `thinking`
 # field and leave `response` empty — especially with format="json" — which
 # surfaced as "AI insight generation returned no output". We therefore DEFAULT
