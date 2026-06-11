@@ -1218,6 +1218,7 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
+    df["review_reason"] = ""
 
     def _on(code: str) -> bool:
         return _rule_on(code, enabled_rules)
@@ -1255,11 +1256,19 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
     }
     assumptions: list[str] = []
 
-    # Gender — never drop on missing.
+    # Gender (Class A universal): flag rows whose sex is present but unmappable.
+    # Never flag on a MISSING column — that is an honest gap, not bad data.
     if gender_col:
         df["Gender"] = df[gender_col].astype(str).str.upper().str.strip().map(GENDER_MAP)
+        if _on("dropped_invalid_gender"):
+            _gmask = df["Gender"].isna()
+            stats["dropped_invalid_gender"] = int((_gmask & df["analyzable"]).sum())
+            _exclude(df, _gmask, "dropped_invalid_gender")
+        else:
+            stats["dropped_invalid_gender"] = 0
     else:
         df["Gender"] = None
+        stats["dropped_invalid_gender"] = 0
 
     df["Tarikh_Lahir"] = _parse_date(df[dob_col]) if dob_col else pd.NaT
     df["Tarikh_Ukur"] = _parse_date(df[measure_date_col]) if measure_date_col else pd.NaT
@@ -1313,33 +1322,27 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
         cohort = "school"
         cohort_profile = PROFILE_SCHOOL
 
-    # Null implausible weight/height against the detected cohort's bounds — keep
-    # the row. When the cohort is indeterminate this Class-B rule is skipped
-    # (values retained, gap recorded) so general stays honest, not wrong.
+    # Implausible weight/height (Class B, cohort-dependent): flag the row out
+    # against the detected cohort's bounds — non-destructive, like the named
+    # cleaners (recoverable in the full download). Only fires on values that are
+    # PRESENT but out of range; a missing measurement is never flagged here.
+    # When the cohort is indeterminate this rule is skipped (values retained,
+    # gap recorded) so general stays honest rather than guessing.
     if cohort_profile is not None:
-        if weight_col:
-            df.loc[
-                (df["Berat_kg"] < cohort_profile.berat_min)
-                | (df["Berat_kg"] > cohort_profile.berat_max),
-                "Berat_kg",
-            ] = np.nan
-        if height_col:
-            df.loc[
-                (df["Tinggi_cm"] < cohort_profile.tinggi_min)
-                | (df["Tinggi_cm"] > cohort_profile.tinggi_max),
-                "Tinggi_cm",
-            ] = np.nan
-    elif weight_col or height_col:
-        assumptions.append(
-            "cohort indeterminate (no usable age) — measurement plausibility "
-            "bounds skipped; implausible values retained"
-        )
+        _apply_measurement_outlier(df, stats, cohort_profile, _on)
+    else:
+        stats["dropped_measurement_outlier"] = 0
+        if weight_col or height_col:
+            assumptions.append(
+                "cohort indeterminate (no usable age) — measurement plausibility "
+                "bounds skipped; implausible values retained"
+            )
 
-    valid_both = df["Berat_kg"].notna() & df["Tinggi_cm"].notna() & (df["Tinggi_cm"] > 0)
-    df["BMI"] = np.where(
-        valid_both, (df["Berat_kg"] / ((df["Tinggi_cm"] / 100) ** 2)).round(2), np.nan
-    )
-    df.loc[df["BMI"] > BMI_MAX, "BMI"] = np.nan
+    # BMI recompute (no raw-BMI column expected) + implausible-BMI exclusion
+    # (Class A universal): a BMI > BMI_MAX with present measurements is garbage,
+    # so flag the row out like the named cleaners instead of nulling the value.
+    df = _compute_bmi(df, drop_raw=False)
+    _apply_bmi_outlier(df, stats, _on)
 
     # Gate indicator computation on its required inputs (dataset-level). WHO
     # z-scores are infant (0-5y) references, so they only apply to the infant
@@ -1372,6 +1375,9 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
         df["HAZ"] = np.nan
         df["BAZ"] = np.nan
         for idx in df.index:
+            # Skip rows already flagged out — z-scores on junk are meaningless.
+            if not df.loc[idx, "analyzable"]:
+                continue
             ad = df.loc[idx, "Age_Days"]
             sx = df.loc[idx, "Gender"]
             if pd.isna(ad) or pd.isna(sx):
