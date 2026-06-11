@@ -1414,6 +1414,31 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
         _gap("wasting")
         _gap("overweight")
 
+    # School-age cohort: BMI categories (KPM-style) replace WHO infant z-scores.
+    # Emit the same Ind_* / BMI_Category columns clean_kpm produces so analytics
+    # treat general school-age data identically. Requires both measurements.
+    if cohort == "school" and coverage["berat_kg"] and coverage["tinggi_cm"]:
+        df["BMI_Category"] = df["BMI"].apply(_classify_bmi_school)
+        df["BMI_Category_EN"] = df["BMI_Category"].map({
+            "Kurus": "Underweight",
+            "Normal": "Normal",
+            "Berlebihan Berat Badan": "Overweight",
+            "Obes": "Obese",
+        })
+        df["Ind_Kurus"] = df["BMI_Category"] == "Kurus"
+        df["Ind_Normal"] = df["BMI_Category"] == "Normal"
+        df["Ind_Berlebihan"] = df["BMI_Category"] == "Berlebihan Berat Badan"
+        df["Ind_Obes"] = df["BMI_Category"] == "Obes"
+        # BMI categories cover under-/over-weight for this cohort; the
+        # weight/height-for-age z-score indicators stay unavailable.
+        for _n in ("underweight", "overweight"):
+            unavailable.pop(_n, None)
+        for _n in ("stunting", "wasting"):
+            unavailable[_n] = (
+                "school-age cohort: weight/height-for-age z-scores not "
+                "applicable (BMI categories used instead)"
+            )
+
     indicators_available = sorted(
         n for n in ("underweight", "stunting", "wasting", "overweight")
         if n not in unavailable

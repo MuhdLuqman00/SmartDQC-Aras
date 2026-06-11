@@ -65,17 +65,30 @@ def test_general_school_height_not_nulled_against_infant_bounds():
     assert (out["Tinggi_cm"] == pd.Series([140.0, 135.0, 138.0])).all()
 
 
-def test_general_school_indicators_unavailable_not_fabricated():
-    """WHO infant z-scores must not be computed for school-age children; the
-    indicators are honestly reported unavailable instead of computed wrong."""
+def test_general_school_uses_bmi_categories_not_infant_zscores():
+    """Phase 4b: school-age children get KPM-style BMI categories, not WHO
+    infant z-scores. under/overweight become available via BMI categories;
+    weight/height-for-age (stunting/wasting) stay unavailable; no infant
+    z-score columns are fabricated."""
     out, stats = clean_general(_school_df())
-    assert set(stats["indicators_unavailable"]) >= {
-        "underweight", "stunting", "wasting", "overweight"
-    }
-    for name, reason in stats["indicators_unavailable"].items():
-        assert "school-age cohort" in reason
+    # BMI-category indicator columns emitted (same as clean_kpm).
+    for col in ("BMI_Category", "Ind_Kurus", "Ind_Normal", "Ind_Berlebihan", "Ind_Obes"):
+        assert col in out.columns
     # No infant z-score indicator columns fabricated.
     assert "Ind_Bantut" not in out.columns
+    # z-score-only indicators remain unavailable with a clear reason.
+    assert set(stats["indicators_unavailable"]) == {"stunting", "wasting"}
+    for reason in stats["indicators_unavailable"].values():
+        assert "school-age cohort" in reason
+    # BMI-category-backed indicators are now reported available.
+    assert set(stats["indicators_available"]) == {"underweight", "overweight"}
+
+
+def test_general_school_bmi_category_values_match_classifier():
+    out, stats = clean_general(_school_df())
+    # 30kg/140cm -> BMI 15.3 -> Normal (school classifier: 13.5<=bmi<16.5).
+    assert out.loc[0, "BMI_Category"] == "Normal"
+    assert bool(out.loc[0, "Ind_Normal"]) is True
 
 
 def test_general_infant_implausible_height_excluded_not_nulled():
