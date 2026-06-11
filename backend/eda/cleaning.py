@@ -1235,6 +1235,9 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
                     return col
         return None
 
+    _src_cols = list(df.columns)
+    _src_raw = df.copy()  # pre-recompute snapshot for review-flag source-integrity checks
+
     gender_col = find_col(["jantina", "gender", "sex"])
     dob_col = find_col(["tarikh lahir", "dob", "date of birth", "birth"])
     measure_date_col = find_col(
@@ -1444,8 +1447,10 @@ def clean_general(df: pd.DataFrame, enabled_rules=None) -> tuple[pd.DataFrame, d
         if n not in unavailable
     )
 
+    _apply_review_flags(df, "general", _src_cols, find_col, enabled_rules, src_raw=_src_raw)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
+    stats["review_count"] = int((df["review_reason"] != "").sum())
     stats["cohort"] = cohort
     stats["coverage"] = coverage
     stats["assumptions"] = assumptions
@@ -1869,7 +1874,26 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         "review_agensi_unknown",
         "review_taska_blank",
     ],
-    "general": [],
+    "general": [
+        "review_future_measure_date",
+        "review_name_gender_mismatch",
+        "review_gender_cols_disagree",
+        "review_year_mismatch",
+        "review_dob_dual_mismatch",
+        "review_age_source_mismatch",
+        "review_age_band_mismatch",
+        "review_age_vacc_range",
+        "review_daerah_null",
+        "review_geo_out_of_bounds",
+        "review_height_unit_suspect",
+        "review_ghost_bmi",
+        "review_dual_measure_mismatch",
+        "review_ghost_class",
+        "review_zscore_biv",
+        "review_indicator_class_mismatch",
+        "review_pendapatan_null",
+        "review_pendapatan_invalid",
+    ],
 }
 
 
