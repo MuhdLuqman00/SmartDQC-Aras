@@ -236,7 +236,7 @@ function DaerahByIndicators({ rows, indicators, lang, unknownArea, dense }: {
               return (
                 <div key={`${key}:${label}`} style={{ marginBottom: dense ? 8 : 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: dense ? 12 : 13, color: 'var(--text-secondary)', marginBottom: dense ? 3 : 4 }}>
-                    <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{label}</span>
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={label}>{label}</span>
                     <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
                       <span style={{ fontSize: dense ? 10 : 11, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
                       <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
@@ -747,7 +747,7 @@ export function DashboardPage() {
                 return (
                   <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
-                      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{label}</span>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={label}>{label}</span>
                       <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
                         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
                         <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
@@ -810,7 +810,7 @@ export function DashboardPage() {
                 return (
                   <div key={`${breakdownKey}:${label}`} style={{ marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{label}</span>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={label}>{label}</span>
                       <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>n={s.n.toLocaleString()}</span>
                         <span style={{ fontWeight: 600 }}>{v.toFixed(2)}%</span>
