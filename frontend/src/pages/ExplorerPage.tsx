@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, Search, Pencil, AlertTriangle, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
@@ -58,9 +59,12 @@ export function ExplorerPage() {
     onResize();
     window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
     };
   }, [fullscreen]);
 
@@ -360,7 +364,13 @@ export function ExplorerPage() {
           </div>
         )}
 
-        {/* ── Table with virtual scroll ───────────────────────────────────── */}
+        {/* ── Table with virtual scroll. When fullscreen, the panel is rendered
+            through a portal to <body> so its position:fixed anchors to the real
+            viewport. Rendered inline, fixed positioning resolves against the
+            transformed .page-enter ancestor (a containing block), which shrinks
+            the overlay to the page content box — same trap FocusOverlay avoids. ── */}
+        {(() => {
+        const tablePanel = (
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden',
@@ -608,6 +618,9 @@ export function ExplorerPage() {
             </>
           )}
         </div>
+        );
+        return fullscreen ? createPortal(tablePanel, document.body) : tablePanel;
+        })()}
 
       </div>
     </SessionGuard>
