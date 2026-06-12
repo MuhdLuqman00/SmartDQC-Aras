@@ -32,7 +32,7 @@ services:
     environment:
       - WHO_ZSCORE_DIR=/app/data/zscore
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e2b-it-qat}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e4b-it-qat}
       - OLLAMA_THINK=${OLLAMA_THINK:-false}
       # Keep the model resident (no post-idle unload/CPU fallback); "-1" =
       # forever; use a duration like "30m" only on a shared GPU.
@@ -76,7 +76,7 @@ services:
     depends_on:
       - ollama
     environment:
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e2b-it-qat}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e4b-it-qat}
       # Keep the model resident (no post-idle unload/CPU fallback); "-1" =
       # forever; use a duration like "30m" only on a shared GPU.
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}

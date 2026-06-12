@@ -51,8 +51,7 @@ def add_age_columns(df: pd.DataFrame, report: dict, changes: list) -> pd.DataFra
         df["tarikh_lahir_dt"].notna() &
         (df["tarikh_ukur_dt"] < df["tarikh_lahir_dt"])
     )
-    # Flag future measurement dates (post today = April 2026)
-    today = pd.Timestamp("2026-04-17")
+    today = pd.Timestamp.today().normalize()
     df["flag_date_future"] = df["tarikh_ukur_dt"].notna() & (df["tarikh_ukur_dt"] > today)
 
     n_invalid_date = int(df["flag_date_invalid"].sum())

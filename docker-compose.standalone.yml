@@ -7,7 +7,7 @@
 # but lets you change the LLM model without editing this file — just edit the
 # .env next to it (copy from .env.standalone.example) or pass it inline:
 #
-#   OLLAMA_MODEL=gemma4:e2b-it-qat docker compose -f docker-compose.standalone.yml up -d
+#   OLLAMA_MODEL=gemma4:e4b-it-qat docker compose -f docker-compose.standalone.yml up -d
 #
 # Whatever model you set is pulled by Ollama on startup, so it must be a valid
 # Ollama tag (https://ollama.com/library), and the machine needs internet the first time
@@ -22,11 +22,11 @@ services:
       - "8080:80"     # web UI  ->  open http://localhost:8080
     environment:
       # ── The knob you wanted: change the model here (or in .env) ──────────
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e2b-it-qat}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e4b-it-qat}
       # Keep the model resident (no post-idle unload/CPU fallback); "-1" =
       # forever; use a duration like "30m" only on a shared GPU.
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
-      # Gemma 4 e2b is non-reasoning; OLLAMA_THINK has no effect.
+      # Gemma 4 e4b is non-reasoning; OLLAMA_THINK has no effect.
       - OLLAMA_THINK=${OLLAMA_THINK:-false}
       # Cap the context window. Reasoning models default to a huge (128K+)
       # context, so Ollama preallocates a multi-GB KV cache that dwarfs the

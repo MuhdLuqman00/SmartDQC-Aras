@@ -7,7 +7,7 @@ import httpx
 logger = logging.getLogger("smartdqc.ollama")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b-it-qat")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e4b-it-qat")
 # Keep the model resident in memory between requests so the first click after
 # an idle period doesn't pay a cold model-load (the root cause of the post-idle
 # "failed to generate narrative" 500). -1 = keep loaded indefinitely (no
@@ -26,7 +26,7 @@ OLLAMA_KEEP_ALIVE = _parse_keep_alive(os.getenv("OLLAMA_KEEP_ALIVE", "-1"))
 # field and leave `response` empty — especially with format="json" — which
 # surfaced as "AI insight generation returned no output". We therefore DEFAULT
 # to `think: false` so the model writes its answer straight to `response`.
-# Gemma 4 e2b is non-reasoning, so OLLAMA_THINK has no effect. Left model-
+# Gemma 4 e4b is non-reasoning, so OLLAMA_THINK has no effect. Left model-
 # agnostic: non-thinking models ignore the flag.
 OLLAMA_THINK = os.getenv("OLLAMA_THINK", "false").strip().lower() != "false"
 # How long warmup may spend waiting for Ollama + pulling the model on boot.

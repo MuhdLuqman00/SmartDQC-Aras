@@ -68,7 +68,7 @@ ENV DATABASE_URL=postgresql://smartdqc:smartdqc@localhost/smartdqc
 # registry on first container boot (see entrypoint-all.sh), then caches it in the
 # ollama_models volume for subsequent restarts. The deploy host therefore needs
 # internet access on first run. Override at run time with `-e OLLAMA_MODEL=...`.
-ENV OLLAMA_MODEL=gemma4:e2b-it-qat
+ENV OLLAMA_MODEL=gemma4:e4b-it-qat
 ENV OLLAMA_THINK=false
 
 VOLUME ["/var/lib/postgresql/data"]

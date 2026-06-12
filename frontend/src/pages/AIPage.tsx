@@ -13,6 +13,8 @@ interface Message {
   role: 'ai' | 'user' | 'narrative';
   content: string;
   data?: unknown;
+  reasoning?: string;
+  codeUsed?: string;
   raw?: NarrativeRaw;
 }
 
@@ -28,7 +30,7 @@ interface ServerMessage {
   id: number;
   role: 'user' | 'ai' | 'narrative';
   content: string;
-  data_json: { data?: unknown; chart_b64?: string; [k: string]: unknown } | null;
+  data_json: { data?: unknown; chart_b64?: string; reasoning?: string; code_used?: string; [k: string]: unknown } | null;
   created_at: string;
 }
 
@@ -62,6 +64,8 @@ export function AIPage() {
     role: m.role,
     content: m.content,
     data: m.data_json?.data,
+    reasoning: m.data_json?.reasoning,
+    codeUsed: m.data_json?.code_used,
     raw: m.role === 'narrative'
       ? ((m.data_json as unknown) as NarrativeRaw)
       : undefined,
@@ -199,11 +203,11 @@ export function AIPage() {
       const url = activeChat
         ? `/ai/nlq?cache_id=${cacheId}&chat_id=${activeChat}`
         : `/ai/nlq?cache_id=${cacheId}`;
-      const r = await api.post<{ answer: string; data?: unknown }>(url, { question });
+      const r = await api.post<{ answer: string; data?: unknown; reasoning?: string; code_used?: string }>(url, { question });
       const answerText = typeof r.data?.answer === 'string' && r.data.answer
         ? r.data.answer
         : t('No answer was returned.', 'Tiada jawapan dikembalikan.');
-      addLocalMessage({ role: 'ai', content: answerText, data: r.data?.data });
+      addLocalMessage({ role: 'ai', content: answerText, data: r.data?.data, reasoning: r.data?.reasoning, codeUsed: r.data?.code_used });
       if (activeChat) reloadChats();
     } catch {
       addLocalMessage({ role: 'ai', content: t('No response. Is Ollama running?', 'Tiada respons. Adakah Ollama berjalan?') });
@@ -377,8 +381,32 @@ export function AIPage() {
                         : <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>}
                     </div>
                   ) : (
-                    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '10px 14px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                      {msg.content}
+                    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '10px 14px', fontSize: 13, lineHeight: 1.7 }}>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                      {msg.reasoning && (
+                        <div style={{
+                          marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)',
+                          fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.6,
+                        }}>
+                          {t('How this was computed: ', 'Cara ia dikira: ')}{msg.reasoning}
+                        </div>
+                      )}
+                      {msg.codeUsed && (
+                        <details style={{ marginTop: 8 }}>
+                          <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
+                            {t('Technical details', 'Butiran teknikal')}
+                          </summary>
+                          <pre style={{
+                            margin: '6px 0 0', padding: '8px 10px', background: 'var(--surface)',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            fontSize: 11.5, lineHeight: 1.5, overflowX: 'auto',
+                            fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
+                            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          }}>
+                            {msg.codeUsed}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   )}
                 </div>
