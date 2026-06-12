@@ -14,7 +14,7 @@ import { suggestFix } from '../lib/issueFix';
 
 type Step = 1 | 2 | 3 | 4;
 
-interface MappingRow { raw_column: string; standard_field: string; confidence: number; }
+interface MappingRow { raw_column: string; standard_field: string; confidence: number; source?: string; }
 interface Issue { code?: string; description: string; severity: 'critical' | 'warning' | 'info'; count: number; field?: string; pct?: number; }
 interface Rule { code?: string; description: string; }
 interface EvaluatedRule { code: string; count: number; fired: boolean; enabled?: boolean; locked?: boolean; }
@@ -60,12 +60,13 @@ interface RuleImpact { rows_before: number; rows_after: number; per_rule: RuleIm
    as a flat { col: "field" }. This collapses either shape to safe strings so
    an object can never reach the render tree (was causing React #31). */
 
-function parseMapEntry(v: unknown): { standard: string; confidence: number } {
+function parseMapEntry(v: unknown): { standard: string; confidence: number; source?: string } {
   if (v && typeof v === 'object') {
-    const o = v as { standard?: unknown; confidence?: unknown };
+    const o = v as { standard?: unknown; confidence?: unknown; source?: unknown };
     return {
       standard: typeof o.standard === 'string' ? o.standard : '',
       confidence: Number(o.confidence) || 0,
+      source: typeof o.source === 'string' ? o.source : undefined,
     };
   }
   return { standard: typeof v === 'string' ? v : '', confidence: v ? 0.9 : 0 };
@@ -209,8 +210,8 @@ export function UploadPage() {
           })();
 
       const rows: MappingRow[] = Object.keys(am).map((c) => {
-        const { standard, confidence } = parseMapEntry(am[c]);
-        return { raw_column: c, standard_field: standard, confidence };
+        const { standard, confidence, source } = parseMapEntry(am[c]);
+        return { raw_column: c, standard_field: standard, confidence, source };
       });
       setMapping(rows);
       setAvailableFields(
@@ -714,15 +715,24 @@ export function UploadPage() {
                           {t('Ignored', 'Diabaikan')}
                         </div>
                       ) : (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          fontSize: 12, fontWeight: 600, color: confidenceColor(row.confidence),
-                        }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <div style={{
-                            width: 6, height: 6, borderRadius: '50%',
-                            background: confidenceColor(row.confidence),
-                          }} />
-                          {(Number(row.confidence) * 100).toFixed(0)}%
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            fontSize: 12, fontWeight: 600, color: confidenceColor(row.confidence),
+                          }}>
+                            <div style={{
+                              width: 6, height: 6, borderRadius: '50%',
+                              background: confidenceColor(row.confidence),
+                            }} />
+                            {(Number(row.confidence) * 100).toFixed(0)}%
+                          </div>
+                          {row.source === 'ai' && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: 'var(--kkm-blue)',
+                              background: 'rgba(0,100,180,0.1)', borderRadius: 4, padding: '1px 5px',
+                              letterSpacing: '0.05em',
+                            }}>AI</span>
+                          )}
                         </div>
                       )}
                     </td>

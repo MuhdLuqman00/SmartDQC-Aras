@@ -427,6 +427,7 @@ async def upload_preview(
 
     auto_map = auto_suggest_mapping(df.columns.tolist(), detected_source_type)
 
+    ai_filled: set = set()
     if _needs_ai_assist(auto_map):
         sample_values = {
             col: df[col].dropna().head(3).astype(str).tolist()
@@ -438,6 +439,7 @@ async def upload_preview(
         for field, val in ai_map.items():
             if auto_map.get(field) is None and val is not None:
                 auto_map[field] = val
+                ai_filled.add(field)
 
     # Cache the uploaded DataFrame for subsequent cleaning
     cache_id = _cache_cleaned(
@@ -453,12 +455,16 @@ async def upload_preview(
     page_data = page_data.replace(r"^\s*$", np.nan, regex=True)
     page_data = page_data.where(page_data.notna(), None)
 
-    # Build response matching frontend expectations
+    # Build response: heuristic=0.9, LLM-suggested=0.5, unmapped=0.0
     mapping_with_confidence: dict = {}
-    for col, standard in auto_map.items():
-        # Calculate confidence based on match quality
-        confidence = 0.95 if standard else 0.0
-        mapping_with_confidence[col] = {"standard": standard, "confidence": confidence}
+    for field, raw_col in auto_map.items():
+        if not raw_col:
+            confidence, source = 0.0, None
+        elif field in ai_filled:
+            confidence, source = 0.5, "ai"
+        else:
+            confidence, source = 0.9, "heuristic"
+        mapping_with_confidence[field] = {"standard": raw_col, "confidence": confidence, "source": source}
 
     return JSONResponse(
         content=json_safe(
@@ -4040,6 +4046,9 @@ def ai_nlq(
     except Exception as e:
         raise HTTPException(500, f"NLQ failed: {e}")
     answer = _localize(result.get("answer"))
+    reasoning_obj = result.get("reasoning")
+    reasoning = _localize(reasoning_obj) if reasoning_obj else ""
+    code_used = result.get("code_used") or ""
 
     if chat_id and question:
         _chat_append_message(chat_id, role="user", content=question)
@@ -4050,6 +4059,8 @@ def ai_nlq(
             data_json={
                 "data": result.get("result"),
                 "chart_b64": result.get("chart_b64"),
+                "reasoning": reasoning,
+                "code_used": code_used,
             },
         )
 
@@ -4057,6 +4068,8 @@ def ai_nlq(
         "answer": answer,
         "data": result.get("result"),
         "chart_b64": result.get("chart_b64"),
+        "reasoning": reasoning,
+        "code_used": code_used,
     }
 
 

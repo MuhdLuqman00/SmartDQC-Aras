@@ -2,16 +2,22 @@ import pytest
 from backend.ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 
 
-def test_needs_ai_assist_true_when_many_unmapped():
-    auto_map = {"id": "MyKid", "berat_kg": None, "tinggi_cm": None,
-                "negeri": None, "daerah": None, "tarikh_ukur": None}
-    assert _needs_ai_assist(auto_map, unmapped_threshold=3) is True
+def test_needs_ai_assist_fires_when_core_field_missing():
+    auto_map = {
+        "jantina": "Gender", "berat_kg": None,
+        "tinggi_cm": "Height", "tarikh_lahir": "DOB", "tarikh_ukur": "Msr_Date",
+    }
+    assert _needs_ai_assist(auto_map) is True
 
 
-def test_needs_ai_assist_false_when_mostly_mapped():
-    auto_map = {"id": "MyKid", "berat_kg": "Weight", "tinggi_cm": "Height",
-                "negeri": "State", "daerah": None, "tarikh_ukur": None}
-    assert _needs_ai_assist(auto_map, unmapped_threshold=3) is False
+def test_needs_ai_assist_skips_when_all_core_mapped():
+    # Optional fields unmapped (negeri, daerah) must NOT trigger the LLM.
+    auto_map = {
+        "jantina": "Gender", "berat_kg": "Weight",
+        "tinggi_cm": "Height", "tarikh_lahir": "DOB", "tarikh_ukur": "Msr_Date",
+        "negeri": None, "daerah": None,
+    }
+    assert _needs_ai_assist(auto_map) is False
 
 
 def test_ai_suggest_mapping_returns_dict_with_standard_keys():

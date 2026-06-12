@@ -22,10 +22,14 @@ Every standard field must appear as a key. Use null if no column matches."""
 _SCHEMA_MAP_TIMEOUT = 20.0
 
 
-def _needs_ai_assist(auto_map: dict, unmapped_threshold: int = 3) -> bool:
-    """Return True if enough fields are unmapped to justify an LLM call."""
-    unmapped = sum(1 for v in auto_map.values() if v is None)
-    return unmapped >= unmapped_threshold
+# Minimum field set to reliably run the cleaning engine. If any is unmapped,
+# heuristic matching alone isn't sufficient and the LLM should try to fill the gap.
+_CORE_FIELDS = frozenset({"jantina", "berat_kg", "tinggi_cm", "tarikh_lahir", "tarikh_ukur"})
+
+
+def _needs_ai_assist(auto_map: dict) -> bool:
+    """Return True when any core clinical field is unmapped."""
+    return any(auto_map.get(f) is None for f in _CORE_FIELDS)
 
 
 def ai_suggest_mapping(
