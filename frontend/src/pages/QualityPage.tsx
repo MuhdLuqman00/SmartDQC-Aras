@@ -252,7 +252,12 @@ export function QualityPage() {
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {rulesEvaluated
-                  ? rulesEvaluated.map((r) => (
+                  ? [...rulesEvaluated]
+                    // Active (fired) rules first so they sit next to the Issues
+                    // Detected list; within each group, higher counts lead. Passed
+                    // checks drop to the end as dimmed pills.
+                    .sort((a, b) => (Number(b.fired) - Number(a.fired)) || (b.count - a.count))
+                    .map((r) => (
                     <span key={r.code} style={{
                       fontSize: 12,
                       background: r.fired ? 'var(--surface-2)' : 'transparent',
@@ -355,48 +360,49 @@ export function QualityPage() {
               </div>
             )}
           </div>
-        </div>
 
-        {/* ── Classification breakdown ─────────────────────────────────────
-            WHO z-score classes (WAZ/HAZ/BAZ) are ordinal severity scales, so
-            they render as one stacked-bar card with a shared severity key
-            (C1 — same-coloured pie slices were unreadable). The BMI status
-            split stays a donut but with a diverging colour map so deficiency
-            and excess don't both read coral. Hidden when the dataset has none
-            of these columns. */}
-        {blocks && catalogByHome('quality').some(e => e.key in blocks) && (() => {
-          const classBars = catalogByHome('quality')
-            .filter(e => e.shape === 'donut_object' && isDonutObjectBlock(blocks[e.key]))
-            .map(e => {
-              const b = blocks[e.key] as { label: string; data: { label: string; count: number }[] };
-              return { key: e.key, titleEn: e.titleEn, titleBm: e.titleBm, data: b.data };
-            });
-          const bmiEntry = catalogByHome('quality')
-            .find(e => e.shape === 'pie_array' && isPieArrayBlock(blocks[e.key]));
-          return (
-            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>
-                {t('Classification breakdown', 'Pecahan klasifikasi')}
+          {/* ── Classification breakdown ─────────────────────────────────────
+              WHO z-score classes (WAZ/HAZ/BAZ) are ordinal severity scales, so
+              they render as one stacked-bar card with a shared severity key
+              (C1 — same-coloured pie slices were unreadable). The BMI status
+              split stays a donut but with a diverging colour map so deficiency
+              and excess don't both read coral. Hidden when the dataset has none
+              of these columns. Lives inside the right column (not a stray third
+              flex column) so it flows full-width beneath the cards above. */}
+          {blocks && catalogByHome('quality').some(e => e.key in blocks) && (() => {
+            const classBars = catalogByHome('quality')
+              .filter(e => e.shape === 'donut_object' && isDonutObjectBlock(blocks[e.key]))
+              .map(e => {
+                const b = blocks[e.key] as { label: string; data: { label: string; count: number }[] };
+                return { key: e.key, titleEn: e.titleEn, titleBm: e.titleBm, data: b.data };
+              });
+            const bmiEntry = catalogByHome('quality')
+              .find(e => e.shape === 'pie_array' && isPieArrayBlock(blocks[e.key]));
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {t('Classification breakdown', 'Pecahan klasifikasi')}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
+                  {classBars.length > 0 && (
+                    <StatusClassBars
+                      title={t('WHO nutrition status (WAZ / HAZ / BAZ)', 'Status pemakanan WHO (WAZ / HAZ / BAZ)')}
+                      bars={classBars}
+                      lang={lang}
+                    />
+                  )}
+                  {bmiEntry && (
+                    <DonutCard
+                      title={lang === 'en' ? bmiEntry.titleEn : bmiEntry.titleBm}
+                      data={blocks[bmiEntry.key] as { label: string; count: number }[]}
+                      colorFor={bmiStatusColor}
+                    />
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
-                {classBars.length > 0 && (
-                  <StatusClassBars
-                    title={t('WHO nutrition status (WAZ / HAZ / BAZ)', 'Status pemakanan WHO (WAZ / HAZ / BAZ)')}
-                    bars={classBars}
-                    lang={lang}
-                  />
-                )}
-                {bmiEntry && (
-                  <DonutCard
-                    title={lang === 'en' ? bmiEntry.titleEn : bmiEntry.titleBm}
-                    data={blocks[bmiEntry.key] as { label: string; count: number }[]}
-                    colorFor={bmiStatusColor}
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
+        </div>
       </div>
     </SessionGuard>
   );
