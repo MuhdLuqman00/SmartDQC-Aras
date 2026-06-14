@@ -447,6 +447,16 @@ async def upload_preview(
                 auto_map[field] = val
                 ai_filled.add(field)
 
+    # 5B: surface a re-route card when auto-detect falls to general but a known
+    # schema scores >= _REROUTE_MIN_SIGNALS distinctive signals. Gate on the
+    # preview's own detector (detect_source_type, col-only) for consistency with
+    # the cached source_type that drives cleaning. No drop-rule recs here.
+    preview_recommendations: list[dict] = []
+    if detected_source_type == "general":
+        c = _reroute_card(df)
+        if c:
+            preview_recommendations = [c]
+
     # Cache the uploaded DataFrame for subsequent cleaning
     cache_id = _cache_cleaned(
         df, {"filename": filename, "source_type": detected_source_type}
@@ -488,6 +498,7 @@ async def upload_preview(
                 "page": page,
                 "page_size": page_size,
                 "total_pages": max(1, (total_rows + page_size - 1) // page_size),
+                "recommendations": preview_recommendations,
             }
         )
     )
@@ -1894,6 +1905,34 @@ _REROUTE_RATIONALE: dict[str, tuple[str, str]] = {
 _REROUTE_MIN_SIGNALS = 1
 
 
+def _reroute_card(df) -> "dict | None":
+    """Return the best general→known re-route card, or None.
+
+    Shared by /upload/preview and /clean/detect-type. Only the reroute card —
+    no 5C drop-rule recs (those belong to /clean/detect-type only)."""
+    scores = score_source_types(df)
+    candidates = [s for s in scores if s["matched_count"] >= _REROUTE_MIN_SIGNALS]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda s: (s["matched_count"], s["type"] == "myvass"), reverse=True)
+    best = candidates[0]
+    schema = best["type"]
+    rationale_en, rationale_bm = _REROUTE_RATIONALE.get(
+        schema,
+        (f"Dataset signals resemble {schema}.", f"Isyarat set data menyerupai {schema}."),
+    )
+    return {
+        "kind": "reroute",
+        "type": schema,
+        "confidence": best["confidence"],
+        "matched_count": best["matched_count"],
+        "total_signals": best["total_signals"],
+        "signals": [s for s in best["signals"] if s["matched"]],
+        "rationale_en": rationale_en,
+        "rationale_bm": rationale_bm,
+    }
+
+
 @app.post("/clean/detect-type")
 async def detect_type_endpoint(
     file: UploadFile = File(...),
@@ -1914,43 +1953,13 @@ async def detect_type_endpoint(
 
     data_type = detect_data_type(df.columns.tolist(), filename)
 
-    # 5B: when auto-detect falls to general, surface AT MOST ONE re-route card.
-    #
-    # Gate on absolute matched-signal count (not a fraction): the hard detector
-    # fires at 1-2 absolute signals, so a fraction threshold over the multi-signal
-    # myvass list would sit ABOVE the hard bar and never trigger. The signals are
-    # distinctive (nama taska, ic no passport, …), so a generic file matches zero
-    # and never produces a card. Only ONE schema is recommended — ranked by
-    # matched_count, tie broken toward myvass (the auto-detectable canonical) so a
-    # column-identical myvass/ncdc pair can't throw two competing cards.
     recommendations: list[dict] = []
     if data_type == "general":
-        scores = score_source_types(df)
-        candidates = [s for s in scores if s["matched_count"] >= _REROUTE_MIN_SIGNALS]
-        if candidates:
-            candidates.sort(
-                key=lambda s: (s["matched_count"], s["type"] == "myvass"),
-                reverse=True,
-            )
-            best = candidates[0]
-            schema = best["type"]
-            rationale_en, rationale_bm = _REROUTE_RATIONALE.get(
-                schema,
-                (f"Dataset signals resemble {schema}.", f"Isyarat set data menyerupai {schema}."),
-            )
-            recommendations.append({
-                "kind": "reroute",
-                "type": schema,
-                "confidence": best["confidence"],
-                "matched_count": best["matched_count"],
-                "total_signals": best["total_signals"],
-                "signals": [s for s in best["signals"] if s["matched"]],
-                "rationale_en": rationale_en,
-                "rationale_bm": rationale_bm,
-            })
-
-        # 5C: per-rule portable recommendations — run trigger_fns against the raw
-        # frame and surface any schema-specific rules that would fire with count > 0.
+        # 5B: re-route card — at most one, no drop-rule recs.
+        c = _reroute_card(df)
+        if c:
+            recommendations.append(c)
+        # 5C: per-rule portable recommendations.
         recommendations.extend(recommend_drop_rules(df))
 
     return JSONResponse(

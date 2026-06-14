@@ -140,3 +140,71 @@ def test_detect_type_no_recommendation_when_already_detected(client):
     data = r.json()
     assert data["detected_type"] != "general"
     assert data["recommendations"] == []
+
+
+# ─── Track C: /upload/preview re-route recommendation ──────────────────────────
+# These tests use detect_source_type (col-only) which /upload/preview calls,
+# NOT detect_data_type (col+filename) used by /clean/detect-type. Fixtures are
+# verified for the right detector before being baked in.
+#
+# Fixture A: IC_NO_PASSPORT + anon cols — detect_source_type=='general',
+#   myvass matched_count==1 (sub-threshold for hard-detect, above reroute bar).
+# Fixture B: generic patient_id cols — all matched_count==0.
+# Fixture C: adds Nama TASKA + year-prefix col — detect_source_type=='myvass'.
+
+def _preview_upload(client, headers: list[str], filename: str = "data.csv"):
+    """POST a tiny CSV with the given headers to /upload/preview."""
+    csv = (",".join(headers) + "\n" + ",".join(["x"] * len(headers)) + "\n")
+    files = {"file": (filename, io.BytesIO(csv.encode()), "text/csv")}
+    return client.post("/upload/preview", files=files)
+
+
+def test_preview_reroute_card_for_general_myvass_file(client):
+    """General-bound file with one myvass signal → exactly one reroute card."""
+    headers = ["IC_NO_PASSPORT", "Nama", "Jantina", "Berat_kg",
+               "Tinggi_cm", "BMI", "Negeri", "Daerah", "Tahun_Ukur"]
+    r = _preview_upload(client, headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source_type"] == "general"
+    recs = data["recommendations"]
+    reroutes = [c for c in recs if c["kind"] == "reroute"]
+    assert len(reroutes) == 1, f"expected exactly one reroute card, got {recs}"
+    card = reroutes[0]
+    assert card["type"] == "myvass"
+    assert card["matched_count"] >= 1
+    assert card["signals"] and all(s["matched"] for s in card["signals"])
+    assert card["rationale_en"] and card["rationale_bm"]
+
+
+def test_preview_no_reroute_card_for_generic_file(client):
+    """Generic file → general detect, zero re-route cards (false-positive guard)."""
+    headers = ["patient_id", "name", "age", "weight", "height", "visit_date"]
+    r = _preview_upload(client, headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source_type"] == "general"
+    assert data["recommendations"] == []
+
+
+def test_preview_no_reroute_card_when_hard_detected(client):
+    """Hard-detected file → non-general source_type, no reroute card."""
+    headers = ["IC_NO_PASSPORT", "Nama", "Jantina", "Nama TASKA",
+               "Kumpulan Umur", "2024 Berat (kg)", "2024 Status Berat"]
+    r = _preview_upload(client, headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source_type"] != "general"
+    assert data["recommendations"] == []
+
+
+def test_preview_detect_type_endpoint_behavior_unchanged(client):
+    """Verify /clean/detect-type still produces its reroute card after refactor."""
+    r = _upload(client, ["No. MyKID", "Nama Anak", "Jantina", "Kumpulan Umur",
+                         "Pendapatan Keluarga", "Negeri", "Daerah"])
+    assert r.status_code == 200
+    data = r.json()
+    assert data["detected_type"] == "general"
+    reroutes = [c for c in data["recommendations"] if c["kind"] == "reroute"]
+    assert len(reroutes) == 1
+    assert reroutes[0]["type"] == "myvass"
