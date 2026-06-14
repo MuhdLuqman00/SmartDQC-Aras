@@ -178,7 +178,7 @@ export function ExplorerPage() {
     return analyzableFiltered.filter(r =>
       columns.some(c => String(r[c] ?? '').toLowerCase().includes(q))
     );
-  }, [flagFiltered, query, columns]);
+  }, [analyzableFiltered, query, columns]);
 
   const filtered = useMemo(() => {
     if (!sortCol) return searchFiltered;

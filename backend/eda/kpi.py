@@ -287,6 +287,13 @@ def compute_kpi_dashboard(
 
 
 _TAHUN_COLS = ["tahun_ukur", "Tahun_Ukur", "TAHUN_UKUR", "tahun", "year"]
+# Measurement-date columns to derive the year from when no explicit year column
+# exists (e.g. KPM carries Tarikh_Pengukuran, not Tahun_Ukur). Tried only after
+# _TAHUN_COLS. Matched case-insensitively via _resolve_col.
+_MEASURE_DATE_COLS = [
+    "tarikh_ukur", "tarikh_pengukuran", "tarikh antropometri",
+    "tarikh_antropometri", "measurement_date", "assessment_date", "dose_date",
+]
 
 
 def _resolve_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -310,7 +317,20 @@ def compute_district_period_snapshots(df: pd.DataFrame) -> list[dict]:
     if df is None or df.empty:
         return []
 
+    # Resolve the measurement-year column; if none exists, derive it from a
+    # measurement-date column. Owning this here (rather than having cleaners
+    # pre-bake a year column) keeps the derivation in one place and lets the
+    # snapshot work for any date-bearing frame. Copy first so we never mutate
+    # the caller's cached frame with the temp column.
     year_col = _resolve_col(df, _TAHUN_COLS)
+    if year_col is None:
+        date_col = _resolve_col(df, _MEASURE_DATE_COLS)
+        if date_col is not None:
+            df = df.copy()
+            df["__period_year__"] = (
+                pd.to_datetime(df[date_col], errors="coerce").dt.year.astype("Int64")
+            )
+            year_col = "__period_year__"
     district_col = _resolve_col(df, _DAERAH_COLS) or _resolve_col(df, _DISTRICT_COLS)
     if year_col is None or district_col is None:
         return []

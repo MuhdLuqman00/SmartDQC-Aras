@@ -78,8 +78,28 @@ def test_capital_Y_year_column_yields_snapshots():
     assert len(snaps) > 0
 
 
-def test_kpm_clean_derives_tahun_ukur():
-    """clean_kpm must derive Tahun_Ukur from Tarikh_Pengukuran for trajectory to work."""
+def test_snapshots_derive_year_from_date_column():
+    """When a frame has no year column, the snapshot layer derives the period from
+    a measurement-date column. Derivation lives in compute_district_period_snapshots,
+    not in the cleaners (B2 layering fix)."""
+    rows = []
+    for year in ["2023", "2024"]:
+        for district in ["Beaufort", "KK"]:
+            for _ in range(20):
+                rows.append({
+                    "Tarikh_Pengukuran": f"{year}-06-15",
+                    "daerah": district,
+                    "Ind_Bantut": 1,
+                })
+    df = pd.DataFrame(rows)  # no year column at all
+    snaps = compute_district_period_snapshots(df)
+    assert len(snaps) > 0
+    assert {s["period"] for s in snaps} == {"2023", "2024"}
+
+
+def test_kpm_clean_does_not_bake_year_column():
+    """Regression for the B2 layering fix: clean_kpm no longer adds Tahun_Ukur;
+    trajectories still work because the snapshot layer derives the year itself."""
     rows = []
     for year in [2023, 2024]:
         for district in ["Kuala Lumpur", "Selangor"]:
@@ -91,7 +111,7 @@ def test_kpm_clean_derives_tahun_ukur():
                 })
     df = pd.DataFrame(rows)
     cleaned, _ = clean_data(df, "kpm")
-    assert "Tahun_Ukur" in cleaned.columns
+    assert "Tahun_Ukur" not in cleaned.columns  # cleaner stays year-agnostic
     snaps = compute_district_period_snapshots(cleaned)
     assert len(snaps) > 0
 

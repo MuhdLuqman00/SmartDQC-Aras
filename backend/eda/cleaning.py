@@ -1211,8 +1211,6 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None
     else:
         df["Tarikh_Pengukuran"] = pd.NaT
 
-    df["Tahun_Ukur"] = df["Tarikh_Pengukuran"].dt.year.astype("Int64")
-
     # Rule 5: Flag invalid dates (future or before DOB)
     today = pd.Timestamp.now()
     invalid_date = (
