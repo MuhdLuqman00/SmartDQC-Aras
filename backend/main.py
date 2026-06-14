@@ -5728,7 +5728,7 @@ def post_kpi_targets(body: dict, user=Depends(require_admin), db=Depends(get_db)
     _log_audit(
         action="settings.kpi_targets",
         detail=";".join(f"{g}.{k}={v}" for g, d in out.items() for k, v in d.items()),
-        user_id=user.id,
+        actor=user.username,
     )
     return _kpi_targets_view(db)
 

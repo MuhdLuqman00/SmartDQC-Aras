@@ -35,24 +35,29 @@ def test_get_returns_official_defaults(client):
     assert body["source"]["who"] == "who_2025"
 
 
-def test_non_admin_cannot_update(client, db_session):
-    token = _token(client, db_session, "analyst1", "analyst")
+# Write authority (post d319dbf): the password/role gate was removed; writes are
+# gated at the network perimeter, so any identity may update and an absent X-User
+# header is treated as "anonymous". The audit attributes the X-User actor (folded
+# into detail) rather than a users-table user_id.
+def test_any_identity_can_update(client):
     resp = client.post(
         "/settings/kpi-targets",
         json={"npan": {"stunting_rate": 5.0}},
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"X-User": "analyst1"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 200
 
 
-def test_unauthenticated_cannot_update(client):
+def test_unauthenticated_update_allowed(client):
+    # No X-User header → treated as "anonymous"; the write still succeeds (no
+    # auth gate). Valid body, so no 422 from validation either.
     resp = client.post("/settings/kpi-targets", json={"npan": {"stunting_rate": 5.0}})
-    assert resp.status_code in (401, 422)  # missing Authorization header
+    assert resp.status_code == 200
 
 
-def test_admin_update_persists_and_audits(client, db_session, monkeypatch):
+def test_update_persists_and_audits_actor(client, monkeypatch):
     # _log_audit opens its own SessionLocal, not the test session, so capture
-    # the call directly to assert it records the acting user_id.
+    # the call directly to assert it records the acting X-User actor.
     calls = []
 
     def fake_audit(*args, **kwargs):
@@ -63,11 +68,10 @@ def test_admin_update_persists_and_audits(client, db_session, monkeypatch):
 
     monkeypatch.setattr(main, "_log_audit", fake_audit)
 
-    token = _token(client, db_session, "admin1", "admin")
     resp = client.post(
         "/settings/kpi-targets",
         json={"npan": {"stunting_rate": 5.0}},
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"X-User": "auditor"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -79,9 +83,8 @@ def test_admin_update_persists_and_audits(client, db_session, monkeypatch):
     # GET reflects the override.
     assert client.get("/settings/kpi-targets").json()["current"]["npan"]["stunting_rate"] == 5.0
 
-    # Audit recorded with the acting user_id.
-    admin = db_session.query(User).filter_by(username="admin1").first()
-    assert any(c.get("action") == "settings.kpi_targets" and c.get("user_id") == admin.id
+    # Audit recorded with the acting X-User actor (self-asserted identity).
+    assert any(c.get("action") == "settings.kpi_targets" and c.get("actor") == "auditor"
                for c in calls)
 
 
