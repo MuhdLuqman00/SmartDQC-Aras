@@ -54,6 +54,12 @@ interface CleanRule {
 interface RuleImpactRow { code: string; count: number; fired: boolean; locked: boolean; enabled: boolean; }
 interface RuleImpact { rows_before: number; rows_after: number; per_rule: RuleImpactRow[]; }
 
+interface RerouteSignal { name: string; evidence: string; matched: boolean; }
+interface RerouteCard {
+  kind: 'reroute'; type: string; confidence: number; matched_count: number;
+  total_signals: number; signals: RerouteSignal[]; rationale_en: string; rationale_bm: string;
+}
+
 /* ── Mapping normaliser ──────────────────────────────────────────────────
    The backend is inconsistent: /upload/preview returns auto_mapping as
    { col: { standard, confidence } } while /upload/merge-preview returns it
@@ -140,6 +146,7 @@ export function UploadPage() {
   const [activeSheet, setActiveSheet] = useState('');
   const [rowCount, setRowCount] = useState(0);
   const [wideFormat, setWideFormat] = useState(false);
+  const [rerouteCard, setRerouteCard] = useState<RerouteCard | null>(null);
 
   /* Step 2 state */
   const [mapping, setMapping] = useState<MappingRow[]>([]);
@@ -179,7 +186,7 @@ export function UploadPage() {
 
   /* ── Step 1 → 2: upload + preview ─────────────────────────────────── */
 
-  const handlePreview = async (sheetOverride?: string) => {
+  const handlePreview = async (sheetOverride?: string, sourceTypeOverride?: string) => {
     if (!files.length) return;
     setLoading(true); setError('');
     try {
@@ -191,11 +198,13 @@ export function UploadPage() {
             setCacheId(r.data.cache_id);
             setDetectedType(r.data.source_type || 'general');
             setRowCount(Number(r.data.total_rows ?? r.data.row_count) || 0);
+            setRerouteCard(null);
             return r.data.auto_mapping || {};
           })()
         : await (async () => {
             fd.append('file', files[0]);
-            if (chosenType !== 'auto') fd.append('source_type', chosenType);
+            const effectiveType = sourceTypeOverride ?? chosenType;
+            if (effectiveType !== 'auto') fd.append('source_type', effectiveType);
             const url = sheetOverride
               ? `/upload/preview?sheet=${encodeURIComponent(sheetOverride)}`
               : '/upload/preview';
@@ -206,6 +215,8 @@ export function UploadPage() {
             setWideFormat(r.data.is_wide_format || false);
             setSheets(r.data.sheets || []);
             setActiveSheet(r.data.active_sheet || sheetOverride || '');
+            const recs = (r.data.recommendations ?? []) as Array<{ kind: string } & Record<string, unknown>>;
+            setRerouteCard((recs.find(c => c.kind === 'reroute') as RerouteCard | undefined) ?? null);
             return r.data.auto_mapping || {};
           })();
 
@@ -251,6 +262,11 @@ export function UploadPage() {
       await api.post(`/transform/myvass-wide-to-long?cache_id=${cacheId}`);
     } catch { /* non-fatal */ }
     finally { setLoading(false); }
+  };
+
+  const handleAcceptReroute = (schema: string) => {
+    setChosenType(schema);
+    void handlePreview(undefined, schema);
   };
 
   /* ── B3: live row-impact preview + rule toggle (persist to Settings) ──── */
@@ -618,6 +634,60 @@ export function UploadPage() {
               >
                 {t('Convert to long format', 'Tukar ke format panjang')}
               </button>
+            </div>
+          )}
+
+          {rerouteCard && (
+            <div style={{
+              background: 'var(--info-bg)', border: '1px solid var(--info)',
+              borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 13,
+              color: 'var(--text-primary)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <Info size={16} style={{ color: 'var(--info)', flexShrink: 0, marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    {t('Schema advisory', 'Nasihat skema')}
+                    {' — '}
+                    {t(
+                      `File detected as "general" but resembles ${rerouteCard.type.toUpperCase()}.`,
+                      `Fail dikesan sebagai "Umum" tetapi menyerupai ${rerouteCard.type.toUpperCase()}.`,
+                    )}
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: rerouteCard.signals.length ? 6 : 0 }}>
+                    {lang === 'bm' ? rerouteCard.rationale_bm : rerouteCard.rationale_en}
+                  </div>
+                  {rerouteCard.signals.length > 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {t('Matched signals', 'Isyarat sepadan')}: {rerouteCard.signals.map(s => s.name).join(', ')}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleAcceptReroute(rerouteCard.type)}
+                    disabled={loading}
+                    style={{
+                      background: 'var(--kkm-blue)', color: '#fff',
+                      border: 'none', borderRadius: 6, padding: '4px 12px',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {t(`Re-route as ${rerouteCard.type.toUpperCase()}`, `Halakan semula sebagai ${rerouteCard.type.toUpperCase()}`)}
+                  </button>
+                  <button
+                    onClick={() => setRerouteCard(null)}
+                    disabled={loading}
+                    style={{
+                      background: 'var(--surface-2)', color: 'var(--text-secondary)',
+                      border: '1px solid var(--border)', borderRadius: 6, padding: '4px 12px',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {t('Keep as General', 'Kekal sebagai Umum')}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
