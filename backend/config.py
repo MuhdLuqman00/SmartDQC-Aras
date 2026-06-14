@@ -300,7 +300,7 @@ AUTO_MAPPING_HINTS = {
         "bmi":            ["bmi"],
         "status_bmi":     ["status bmi", "kategori bmi", "bmi category", "status_bmi"],
         "tarikh_ukur":    ["tarikh pengukuran", "tarikh ukur", "measurement date"],
-        "tahun_ukur":     ["thn_ting", "tahun", "year", "tahun ukur"],
+        "tahun_ukur":     ["tahun", "year", "tahun ukur"],
     },
 }
 
