@@ -114,11 +114,12 @@ def test_pptx_without_kpi_has_five_slides():
     assert len(prs.slides) == 5
 
 
-def test_pptx_with_kpi_has_six_slides():
-    """Adds Indicator Table slide when kpi_result is provided."""
+def test_pptx_with_kpi_has_seven_slides():
+    """Adds Indicator Table + Indicator Charts slides when kpi_result is provided
+    (5 base slides + 2 KPI slides = 7)."""
     data = build_pptx_bytes(_eda(), _narrative(), kpi_result=_kpi())
     prs  = Presentation(BytesIO(data))
-    assert len(prs.slides) == 6
+    assert len(prs.slides) == 7
 
 
 def test_pptx_cover_slide_has_text():
