@@ -3,8 +3,12 @@
 compute_district_period_snapshots turns a cleaned multi-year dataset into the
 per-district, per-period rate rows that compute_trajectory_narratives consumes.
 """
-import pandas as pd
+import os
 
+import pandas as pd
+import pytest
+
+from backend.eda.cleaning import clean_data
 from backend.eda.kpi import (
     compute_district_period_snapshots,
     compute_trajectory_narratives,
@@ -57,3 +61,58 @@ def test_rising_district_is_off_or_at_risk():
     )
     assert beaufort["trajectory_status"] in ("At Risk", "Off Track")
     assert beaufort["will_meet_target"] is False
+
+
+# ── B3 regression tests ───────────────────────────────────────────────────────
+
+
+def test_capital_Y_year_column_yields_snapshots():
+    """Regression: NCDC melt emits 'Year' (capital Y); resolver must match case-insensitively."""
+    rows = []
+    for year in ["2023", "2024"]:
+        for district in ["Beaufort", "KK"]:
+            for _ in range(20):
+                rows.append({"Year": year, "daerah": district, "Ind_Bantut": 1})
+    df = pd.DataFrame(rows)
+    snaps = compute_district_period_snapshots(df)
+    assert len(snaps) > 0
+
+
+def test_kpm_clean_derives_tahun_ukur():
+    """clean_kpm must derive Tahun_Ukur from Tarikh_Pengukuran for trajectory to work."""
+    rows = []
+    for year in [2023, 2024]:
+        for district in ["Kuala Lumpur", "Selangor"]:
+            for _ in range(20):
+                rows.append({
+                    "Tarikh_Pengukuran": f"{year}-06-15",
+                    "Daerah": district,
+                    "Negeri": "Wilayah",
+                })
+    df = pd.DataFrame(rows)
+    cleaned, _ = clean_data(df, "kpm")
+    assert "Tahun_Ukur" in cleaned.columns
+    snaps = compute_district_period_snapshots(cleaned)
+    assert len(snaps) > 0
+
+
+def test_ncdc_integration_smoke():
+    """Synthetic NCDC CSV must yield >0 trajectory snapshots after clean_data."""
+    path = "data/test/synthetic_ncdc_wide_4500.csv"
+    if not os.path.exists(path):
+        pytest.skip("Synthetic NCDC CSV not present")
+    df = pd.read_csv(path, dtype=str)
+    cleaned, _ = clean_data(df.copy(), "ncdc")
+    snaps = compute_district_period_snapshots(cleaned)
+    assert len(snaps) > 0, "NCDC must produce trajectory snapshots"
+
+
+def test_kpm_integration_smoke():
+    """Synthetic KPM CSV must yield >0 trajectory snapshots after clean_data."""
+    path = "data/test/synthetic_kpm_10000.csv"
+    if not os.path.exists(path):
+        pytest.skip("Synthetic KPM CSV not present")
+    df = pd.read_csv(path, dtype=str)
+    cleaned, _ = clean_data(df.copy(), "kpm")
+    snaps = compute_district_period_snapshots(cleaned)
+    assert len(snaps) > 0, "KPM must produce trajectory snapshots"

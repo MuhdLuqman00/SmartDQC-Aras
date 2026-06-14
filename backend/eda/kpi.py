@@ -209,14 +209,14 @@ def compute_kpi_dashboard(
         })
 
     # by_state — group on the first available state column
-    state_col = next((c for c in _DISTRICT_COLS if c in df.columns), None)
+    state_col = _resolve_col(df, _DISTRICT_COLS)
     by_state = _group_breakdown(df, state_col, "state", npan_t, amber_tolerance) if state_col else []
 
     # by_daerah — same shape as by_state, scoped to the district column
     # if present. When the endpoint is called with ?state=X the upstream
     # filter has already narrowed df to that state, so by_daerah here is
     # already state-scoped (or national when unfiltered).
-    daerah_col = next((c for c in _DAERAH_COLS if c in df.columns), None)
+    daerah_col = _resolve_col(df, _DAERAH_COLS)
     by_daerah = _group_breakdown(df, daerah_col, "district", npan_t, amber_tolerance) if daerah_col else []
 
     # by_gender — tolerant column detection
@@ -289,6 +289,16 @@ def compute_kpi_dashboard(
 _TAHUN_COLS = ["tahun_ukur", "Tahun_Ukur", "TAHUN_UKUR", "tahun", "year"]
 
 
+def _resolve_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Return the first candidate present in df.columns, matched case-insensitively."""
+    lower = {c.lower(): c for c in df.columns}
+    for cand in candidates:
+        hit = lower.get(cand.lower())
+        if hit is not None:
+            return hit
+    return None
+
+
 def compute_district_period_snapshots(df: pd.DataFrame) -> list[dict]:
     """Derive per-district, per-period indicator-rate snapshots from a cleaned
     dataset's measurement-year column, in the shape compute_trajectory_narratives
@@ -300,11 +310,8 @@ def compute_district_period_snapshots(df: pd.DataFrame) -> list[dict]:
     if df is None or df.empty:
         return []
 
-    year_col = next((c for c in _TAHUN_COLS if c in df.columns), None)
-    district_col = (
-        next((c for c in _DAERAH_COLS if c in df.columns), None)
-        or next((c for c in _DISTRICT_COLS if c in df.columns), None)
-    )
+    year_col = _resolve_col(df, _TAHUN_COLS)
+    district_col = _resolve_col(df, _DAERAH_COLS) or _resolve_col(df, _DISTRICT_COLS)
     if year_col is None or district_col is None:
         return []
 
