@@ -7,7 +7,7 @@ import { SessionGuard } from '../components/SessionGuard';
 import { ColumnHistogram } from '../components/ColumnHistogram';
 import { ErrorRetry } from '../components/ErrorRetry';
 import { CellFlagTooltip } from '../components/CellFlagTooltip';
-import { classifyCell, cellFlagStyle, validateEdit, describeCell, type CellReason, type ClinicalThresholds, DEFAULT_CELL_THRESHOLDS } from '../utils/cellFlags';
+import { classifyCell, cellFlagStyle, validateEdit, describeCell, isBmiCategoryCol, classifyBmiCategoryCell, describeBmiCategoryCell, type CellReason, type ClinicalThresholds, DEFAULT_CELL_THRESHOLDS } from '../utils/cellFlags';
 
 // Virtual scroll constants — only ~40 rows mounted at a time so edit re-renders stay fast.
 const ROW_HEIGHT       = 38;  // px; keep in sync with td height style below
@@ -275,6 +275,18 @@ export function ExplorerPage() {
               <Download size={14} /> {t('Download XLSX', 'Muat Turun XLSX')}
             </a>
             <a
+              href={`${BASE}/clean/download-xlsx/${cacheId}?view=full`}
+              target="_blank" rel="noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-btn)', padding: '7px 14px',
+                fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)',
+              }}
+            >
+              <Download size={14} /> {t('Full + flagged (XLSX)', 'Penuh + ditanda (XLSX)')}
+            </a>
+            <a
               href={`${BASE}/clean/download-cached/${cacheId}?fmt=csv`}
               target="_blank" rel="noreferrer"
               style={{
@@ -538,8 +550,12 @@ export function ExplorerPage() {
                         >
                           {columns.map(c => {
                             const isEditing = editing?.rowId === rowId && editing?.col === c;
-                            const flag      = classifyCell(c, row[c], cellThresholds);
-                            const reason    = flag === 'ok' ? null : describeCell(c, row[c], cellThresholds);
+                            const isBmiCat  = isBmiCategoryCol(c);
+                            const flag      = isBmiCat ? classifyBmiCategoryCell(row, cellThresholds)
+                                                       : classifyCell(c, row[c], cellThresholds);
+                            const reason    = flag === 'ok' ? null
+                                            : isBmiCat ? describeBmiCategoryCell(row, cellThresholds)
+                                                       : describeCell(c, row[c], cellThresholds);
                             const isNumeric = numericColumns.includes(c);
                             const flagLabel = reason ? t(reason.titleEN, reason.titleBM) : undefined;
                             const showTip = (el: HTMLElement) => {

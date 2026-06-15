@@ -56,8 +56,9 @@ function isTinggiCol(col: string): boolean {
   const c = col.toLowerCase();
   return c.includes('tinggi') && c.includes('cm');
 }
-function isBmiCol(col: string): boolean {
-  return col.toLowerCase().includes('bmi');
+export function isBmiCol(col: string): boolean {
+  const c = col.toLowerCase();
+  return c.includes('bmi') && !c.includes('category') && !c.includes('kategori');
 }
 function isDateCol(col: string): boolean {
   return col.toLowerCase().includes('tarikh');
@@ -210,6 +211,51 @@ export function describeCell(
   }
 
   return null;
+}
+
+// ── BMI_Category flag cascade ────────────────────────────────────────────────
+// A BMI category (Kurus/Obes/…) is derived from the numeric BMI cell. If that BMI
+// is out-of-band, the category it produced is equally suspect — so the category
+// cell mirrors the row's BMI flag instead of being treated as plain text.
+
+export function isBmiCategoryCol(col: string): boolean {
+  const c = col.toLowerCase();
+  return c.includes('bmi') && (c.includes('category') || c.includes('kategori'));
+}
+
+// The numeric BMI column is the one isBmiCol() matches (category cols excluded).
+function rowBmiValue(row: Record<string, unknown>): number | null {
+  for (const k of Object.keys(row)) {
+    if (k.startsWith('_')) continue;          // skip _row_id / _exclude_label
+    if (isBmiCol(k)) {
+      const n = Number(row[k]);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
+export function classifyBmiCategoryCell(
+  row: Record<string, unknown>,
+  t: ClinicalThresholds = DEFAULT_CELL_THRESHOLDS,
+): CellFlag {
+  const bmi = rowBmiValue(row);
+  if (bmi == null) return 'ok';               // nothing to mirror
+  return (bmi < t.bmiUnderweight || bmi > t.bmiObese) ? 'warn' : 'ok';
+}
+
+export function describeBmiCategoryCell(
+  row: Record<string, unknown>,
+  t: ClinicalThresholds = DEFAULT_CELL_THRESHOLDS,
+): CellReason | null {
+  const bmi = rowBmiValue(row);
+  if (bmi == null || (bmi >= t.bmiUnderweight && bmi <= t.bmiObese)) return null;
+  return {
+    flag: 'warn',
+    titleEN: 'Category from out-of-band BMI', titleBM: 'Kategori dari BMI luar julat',
+    detailEN: `Derived from BMI ${bmi}, outside the healthy ${t.bmiUnderweight}-${t.bmiObese} band - verify the source weight/height.`,
+    detailBM: `Terhasil daripada BMI ${bmi}, di luar julat sihat ${t.bmiUnderweight}-${t.bmiObese} - sahkan berat/tinggi sumber.`,
+  };
 }
 
 /** Client-side guardrail before persisting an edit. Backend still coerces on receipt. */

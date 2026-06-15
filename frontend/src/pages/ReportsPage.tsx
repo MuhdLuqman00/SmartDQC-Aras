@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, BarChart3, Table, Lock, ChevronDown, ChevronUp, Database, BookOpen } from 'lucide-react';
+import { FileText, Presentation, Table, Lock, ChevronDown, ChevronUp, Database, BookOpen } from 'lucide-react';
 import { api } from '../api/client';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
@@ -103,7 +103,7 @@ export function ReportsPage() {
   const cards: ReportCard[] = [
     {
       id: 'pptx',
-      icon: <BarChart3 size={28} style={{ color: 'var(--kkm-blue)' }} />,
+      icon: <Presentation size={28} style={{ color: 'var(--kkm-blue)' }} />,
       titleEn: 'PowerPoint Report', titleBm: 'Laporan PowerPoint',
       descEn: 'Full ministerial-grade slide deck with KPI charts and district breakdown.',
       descBm: 'Dekset slaid peringkat kementerian dengan carta KPI dan pecahan daerah.',
