@@ -147,12 +147,28 @@ def _flag(df, mask, code):
 # identical to a drop-only selection and _review_rule_on would default all ON.
 _REVIEW_MANAGED_SENTINEL = "__reviews_managed"
 
+# Vocabulary/whitelist review rules whose reference-set COMPLETENESS cannot be
+# grounded in the only authoritative sample we have (Docs/Contoh data.xlsx).
+# Disabled 2026-06-16 until KKM supplies the canonical lists. Keeping them on
+# produces false "needs review" flags on legitimate values — e.g. FACILITY_SET is
+# demonstrably missing real categories ("Hospital Kerajaan", "Klinik Swasta"), and
+# ETHNIC_VALID / AGENSI_SET completeness is unprovable from a 19+13-row sample.
+# Force-OFF on every path (incl. the legacy all-on default); also removed from
+# REVIEW_EVALUATED_RULES so they are not ghost toggles. Bodies kept for revival.
+_DISABLED_REVIEW_RULES = frozenset({
+    "review_facility_unknown",
+    "review_ethnicity_unknown",
+    "review_agensi_unknown",
+})
+
 
 def _review_rule_on(code, enabled_rules) -> bool:
     """Review-flag rules default ON. A caller selection only constrains them once
     it actually manages review rules (contains at least one review_* code OR the
     sentinel); a drop-only or legacy selection leaves every review rule ON, so
     flags never silently vanish when a user has saved a drop-rule selection."""
+    if code in _DISABLED_REVIEW_RULES:
+        return False
     if enabled_rules is None:
         return True
     if _REVIEW_MANAGED_SENTINEL in enabled_rules or any(
@@ -2103,8 +2119,8 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         "review_indicator_class_mismatch",
         "review_pendapatan_null",
         "review_pendapatan_invalid",
-        "review_ethnicity_unknown",
-        "review_facility_unknown",
+        # review_ethnicity_unknown — DISABLED 2026-06-16 (ETHNIC_VALID completeness unprovable from contoh)
+        # review_facility_unknown  — DISABLED 2026-06-16 (FACILITY_SET demonstrably incomplete; real categories missing)
     ],
     "ncdc": [
         "review_mykid_shared_placeholder",
@@ -2127,7 +2143,7 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         "review_pendapatan_null",
         "review_pendapatan_invalid",
         "review_vaccine_unknown",
-        "review_agensi_unknown",
+        # review_agensi_unknown — DISABLED 2026-06-16 (AGENSI_SET completeness unprovable from contoh)
         "review_taska_blank",
     ],
     "general": [

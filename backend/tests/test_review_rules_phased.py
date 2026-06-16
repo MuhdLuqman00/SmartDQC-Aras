@@ -49,11 +49,13 @@ def test_vaccine_unknown():
     assert _has(c.loc[1, "review_reason"], "review_vaccine_unknown")
 
 
-def test_agensi_unknown():
+def test_agensi_unknown_disabled():
+    # DISABLED 2026-06-16: AGENSI_SET completeness unprovable from contoh data.
+    # Even an obviously-unknown agency must NOT be flagged while the rule is dormant.
     df = _ncdc_base(Agensi=["PERMATA", "AcmeCorp"])
     c, _ = clean_ncdc(df)
     assert not _has(c.loc[0, "review_reason"], "review_agensi_unknown")
-    assert _has(c.loc[1, "review_reason"], "review_agensi_unknown")
+    assert not _has(c.loc[1, "review_reason"], "review_agensi_unknown")
 
 
 def test_taska_blank():
@@ -65,31 +67,31 @@ def test_taska_blank():
 
 # --- Family 11: MyVASS --------------------------------------------------------
 
-def test_ethnicity_unknown():
-    df = _myvass_base(ETHNICITY=["Melayu", "Klingon"])  # known, unknown
-    c, _ = clean_myvass(df)
-    assert not _has(c.loc[0, "review_reason"], "review_ethnicity_unknown")
-    assert _has(c.loc[1, "review_reason"], "review_ethnicity_unknown")
-
-
-def test_ethnicity_english_variant_not_flagged():
-    df = _myvass_base(ETHNICITY=["Malay", "Orang Asli"])  # both recognised synonyms
+def test_ethnicity_unknown_disabled():
+    # DISABLED 2026-06-16: ETHNIC_VALID completeness unprovable from contoh data.
+    # An unknown ethnicity must NOT be flagged while the rule is dormant.
+    df = _myvass_base(ETHNICITY=["Melayu", "Klingon"])
     c, _ = clean_myvass(df)
     assert not _has(c.loc[0, "review_reason"], "review_ethnicity_unknown")
     assert not _has(c.loc[1, "review_reason"], "review_ethnicity_unknown")
 
 
-def test_facility_unknown():
+def test_facility_unknown_disabled():
+    # DISABLED 2026-06-16: FACILITY_SET demonstrably incomplete (real categories like
+    # "Hospital Kerajaan"/"Klinik Swasta" missing). An unknown facility must NOT be
+    # flagged while the rule is dormant.
     df = _myvass_base(Kategori_Fasiliti=["Klinik Kesihatan", "Spaceport"])
     c, _ = clean_myvass(df)
     assert not _has(c.loc[0, "review_reason"], "review_facility_unknown")
-    assert _has(c.loc[1, "review_reason"], "review_facility_unknown")
+    assert not _has(c.loc[1, "review_reason"], "review_facility_unknown")
 
 
 # --- flag-not-drop invariant --------------------------------------------------
 
 def test_phased_flags_keep_analyzable_semantics():
-    df = _myvass_base(ETHNICITY=["Klingon", "Melayu"])
+    # Uses a still-active review rule (future measurement date) to assert the
+    # invariant that review flags land in review_reason, never exclude_reason.
+    df = _myvass_base(Tarikh_Pengukuran=["2099-01-01", "2023-01-01"])
     c, _ = clean_myvass(df)
-    assert _has(c.loc[0, "review_reason"], "review_ethnicity_unknown")
-    assert "review_ethnicity_unknown" not in str(c.loc[0, "exclude_reason"])
+    assert _has(c.loc[0, "review_reason"], "review_future_measure_date")
+    assert "review_future_measure_date" not in str(c.loc[0, "exclude_reason"])
