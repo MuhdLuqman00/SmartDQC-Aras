@@ -209,7 +209,7 @@ docker compose -f docker-compose.standalone.yml up -d
 
 > First startup takes a few minutes while the model initialises inside the container.
 
-> **Image tag note:** The published image is `luqmanzulkefli/smartdqc-standalone:v3.10`. The tag name does not determine the AI model — the model is pulled at runtime by Ollama according to `OLLAMA_MODEL` in your `.env` (default: `gemma4:e4b-it-qat`).
+> **Image tag note:** The published image is `luqmanzulkefli/smartdqc-standalone:v3.11`. The tag name does not determine the AI model — the model is pulled at runtime by Ollama according to `OLLAMA_MODEL` in your `.env` (default: `gemma4:e4b-it-qat`).
 
 ---
 
@@ -279,7 +279,7 @@ npm install
 npm run dev
 ```
 
-Frontend is now at `http://localhost:3000`. The dev server proxies `/api` requests to the backend on port 8000.
+Frontend is now at `http://localhost:3000`. It calls the backend directly at `http://localhost:8000` (the default in `frontend/src/api/client.ts`; override with the `VITE_API_BASE_URL` env var), and the backend allows cross-origin requests, so no proxy is needed.
 
 ### AI model (Ollama)
 
@@ -475,8 +475,8 @@ docker push luqmanzulkefli/smartdqc-frontend:latest
 The standalone image embeds the frontend build, backend, Postgres, and Nginx in one container. Tag it with the version number — do not add a `latest` tag.
 
 ```bash
-docker build -f Dockerfile.standalone -t luqmanzulkefli/smartdqc-standalone:v3.10 .
-docker push luqmanzulkefli/smartdqc-standalone:v3.10
+docker build -f Dockerfile.standalone -t luqmanzulkefli/smartdqc-standalone:v3.11 .
+docker push luqmanzulkefli/smartdqc-standalone:v3.11
 ```
 
 > The AI model is **not** baked into the standalone image. Ollama pulls `OLLAMA_MODEL` from the Ollama registry on first container boot and caches it in the `ollama_models` volume. The deploy host needs internet access on first run only.
