@@ -1,7 +1,7 @@
 """
 Data Cleaning Backend Module
 ================================
-Provides cleaning functions for KPM, MyVASS, and NCDC data.
+Provides cleaning functions for the school-age, wide multi-year and wide registry profiles.
 Integrates with WHO z-score calculations using daily LMS tables.
 """
 

@@ -11,7 +11,7 @@ SmartDQC ingests CSV/XLSX files from multiple health data sources, cleans and st
 **Core capabilities:**
 
 - AI-assisted schema mapping for known and unknown column layouts
-- Source-specific cleaning pipelines (MyVASS, NCDC/TASKA, KPM, Generic)
+- Source-specific cleaning profiles (wide multi-year, wide registry, school-age, generic)
 - WHO 2006 z-score computation (WAZ, HAZ, BAZ) with nutrition status classification (stunting, wasting, underweight, overweight)
 - KPI dashboard with RAG traffic-light indicators (Green/Amber/Red) vs. configurable national nutrition targets (e.g. NPAN 2021–2025)
 - District-level geo risk scoring and choropleth map by daerah
@@ -41,10 +41,9 @@ SmartDQC ingests CSV/XLSX files from multiple health data sources, cleans and st
 
 | Source | Description |
 |--------|-------------|
-| **MyVASS** | Clinic infant nutrition records (0–5 years), wide-format multi-year records |
-| **NCDC / TASKA** | Under-5 programme, multi-year wide format, auto-reshaped to long |
-| **KPM** | School-age data (Tahun Satu, ~7 years) |
-| **Weight/Height** | School-age weight/height (2024/2025 year-mode) |
+| **Wide multi-year** | Infant/child nutrition records (0–5 years), wide-format multi-year columns |
+| **Wide registry** | Under-5 programme, multi-year wide format, auto-reshaped to long |
+| **School age** | School-age data (~7 years), single-measurement BMI |
 | **Generic** | Any CSV/XLSX — AI infers and maps the schema dynamically |
 
 ---
@@ -327,7 +326,7 @@ SmartDQC/
 │   ├── auth.py                   # JWT auth + bcrypt, X-User named identity
 │   ├── clinical_ranges.py        # Machine-readable clinical range registry
 │   ├── ai/                       # Ollama client, schema mapper, NLQ, narrative
-│   ├── cleaning/                 # Source-specific cleaning (weight_height, school_age, wide_multiyear, wide_registry)
+│   ├── cleaning/                 # Shared clinical-bound constants (live cleaners are in eda/cleaning.py)
 │   ├── db/                       # SQLAlchemy models (14 tables), DB init
 │   ├── eda/                      # WHO z-score, indicators, quality rules, KPI, runner
 │   ├── export/                   # PDF/PPTX reports, Tableau export, data dictionary

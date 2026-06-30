@@ -421,11 +421,11 @@ def normalize_schema_type(t: str) -> str:
 def detect_source_type(columns: list) -> str:
     """Detect data source from column names (case-insensitive).
 
-    Returns one of: "school_age" (school), "wide_multiyear" (real MyVAS vaccination export OR
+    Returns one of: "school_age" (school), "wide_multiyear" (a vaccination-registry export OR
     the TASKA wide format), or "general" (conservative safe-mode cleaner).
-    NCDC is column-identical to the *TASKA wide* MyVASS variant (same schema) and
+    wide_registry is column-identical to the wide_multiyear variant (same schema) and
     is therefore not auto-distinguishable from it — it is chosen via the manual
-    source-type selector. The real MyVAS vaccination schema (IC_NO_PASSPORT /
+    source-type selector. The vaccination-registry schema (IC_NO_PASSPORT /
     DOSE_DATE / FACILITY_NAME …) IS distinguishable and detected directly.
     "general" routes to the merge-all-schemas best-match mapper.
     """
