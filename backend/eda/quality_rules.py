@@ -117,11 +117,11 @@ class QualityChecker:
                     "rule_id": "BR-02",
                     "column": col,
                     "issue_type": "Outlier: Impossible Values",
-                    "description": f"Min: {min_val:.1f} kg (physiologically impossible for a 7-year-old). Max: {max_val:.1f} kg (extremely high- likely entry error). Normal range for 7-year-olds: ~15-30 kg",
+                    "description": f"Min: {min_val:.1f} kg (below the configured plausible minimum). Max: {max_val:.1f} kg (above the configured plausible maximum — likely entry error). Configured plausible range: {self._br02[0]:.0f}-{self._br02[1]:.0f} kg",
                     "row_count": outliers.sum(),
                     "pct_total": round(outliers.sum() / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "ERROR",
-                    "recommended_fix": "Exclude BERAT < 12 kg or > 50 kg before z-score computation. Apply WHO BIV cutoffs.",
+                    "recommended_fix": f"Exclude BERAT < {self._br02[0]:.0f} kg or > {self._br02[1]:.0f} kg before z-score computation. Apply WHO BIV cutoffs.",
                 })
                 self.affected_rows["BR-02"] = self.df[outliers].head(100).to_dict('records')
     
@@ -148,11 +148,11 @@ class QualityChecker:
                     "rule_id": "BR-03",
                     "column": col,
                     "issue_type": "Outlier: Suspect Values",
-                    "description": f"Min: {min_val:.1f} cm (very low- could be infant data entered in wrong cohort or keyboard error). Max: {max_val:.1f} cm (impossible for a 7-year-old). Normal range for 7-year-olds: ~110-135 cm",
+                    "description": f"Min: {min_val:.1f} cm (below the configured plausible minimum — could be infant data in the wrong cohort or a keyboard error). Max: {max_val:.1f} cm (above the configured plausible maximum). Configured plausible range: {self._br03[0]:.0f}-{self._br03[1]:.0f} cm",
                     "row_count": outliers.sum(),
                     "pct_total": round(outliers.sum() / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "ERROR",
-                    "recommended_fix": "Exclude TINGGI < 100 cm or > 160 cm. Flag as BIV (Biologically Implausible Values).",
+                    "recommended_fix": f"Exclude TINGGI < {self._br03[0]:.0f} cm or > {self._br03[1]:.0f} cm. Flag as BIV (Biologically Implausible Values).",
                 })
                 self.affected_rows["BR-03"] = self.df[outliers].head(100).to_dict('records')
     
@@ -241,7 +241,7 @@ class QualityChecker:
                 continue
             
             # Expected: Tahun 1-7 (primary school)
-            # But dataset is for 7-year-olds specifically, so expect Tahun 1-2 mostly
+            # Generic primary-school range (1-7); tighten per deployment if needed.
             values = pd.to_numeric(self.df[col], errors='coerce')
             
             # Flag unusual year levels
@@ -255,11 +255,11 @@ class QualityChecker:
                     "rule_id": "BR-06",
                     "column": col,
                     "issue_type": "Students Outside Expected Year Level",
-                    "description": f"Distribution: {value_dist}. Dataset intended for 7-year-old cohort (Tahun Satu + Kelas Khas Rendah)",
+                    "description": f"Distribution: {value_dist}. Year levels outside the expected 1-7 range.",
                     "row_count": unusual.sum(),
                     "pct_total": round(unusual.sum() / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "INFO",
-                    "recommended_fix": "Clarify with the data provider: include or exclude non-Tahun Satu records? Age-validate against Tarikh Lahir.",
+                    "recommended_fix": "Clarify with the data provider whether out-of-range year levels should be included; age-validate against date of birth.",
                 })
                 self.affected_rows["BR-06"] = self.df[unusual].head(100).to_dict('records')
     
