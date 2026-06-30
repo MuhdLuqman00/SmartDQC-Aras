@@ -2,7 +2,7 @@
 
 NCDC: vaccine / agensi / taska.  MyVASS: ethnicity / facility type.
 Validated case-insensitively against the canonical sets in config.py; a flag
-means "value outside the recognised KKM vocabulary, for review". Each test pins
+means "value outside the recognised default vocabulary, for review". Each test pins
 fire-on-unknown / silent-on-known.
 """
 import pandas as pd

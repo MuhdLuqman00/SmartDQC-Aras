@@ -517,7 +517,7 @@ export function UploadPage() {
           borderRadius: 'var(--radius-card)', padding: '24px 22px',
           display: 'flex', flexDirection: 'column', gap: 20,
         }}>
-          <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+          <div className="brand-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
             {t("What you'll need", 'Apa yang diperlukan')}
           </div>
 
@@ -872,7 +872,7 @@ export function UploadPage() {
           </div>
 
           {/* ── B2.1 Data Profile (pre-clean stats) ──────────────────────── */}
-          {/* Actionable findings — prominent "what needs attention" (KKM BR-01…09). */}
+          {/* Actionable findings — prominent "what needs attention" (BR-01…09). */}
           {qualityCheck.findings.length > 0 && (
             <div style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>

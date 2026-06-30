@@ -369,7 +369,7 @@ export function ReportsPage() {
   );
 
   const sectionHeader = (en: string, bm: string) => (
-    <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
+    <div className="brand-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
       {t(en, bm)}
     </div>
   );

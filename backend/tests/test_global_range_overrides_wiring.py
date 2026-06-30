@@ -3,7 +3,7 @@ on the non-cache endpoints too — not only the primary /clean/run path.
 
 Before this fix, /clean/preview-impact, /clean/download, /clean/run-multi and
 /clean/download-multi called clean_data() WITHOUT range_overrides, so a threshold
-a KKM officer changed in Settings was silently ignored on those paths. All five
+an operator changed in Settings was silently ignored on those paths. All five
 sites now funnel through main._global_range_overrides(); this test pins that the
 value actually arrives at clean_data().
 """

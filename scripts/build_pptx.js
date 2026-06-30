@@ -96,7 +96,7 @@ function sectionTag(slide, label) {
   });
 
   const items = [
-    ["📂", "10 Data Sources", "Handles MyVASS, NCDC, KPM, KKM and more — each with source-specific cleaning rules"],
+    ["📂", "10 Data Sources", "Handles MyVASS, NCDC, KPM and more — each with source-specific cleaning rules"],
     ["🔒", "Fully Private", "Runs on-premise on client's laptop (RTX 5060). No data leaves the building"],
     ["🐳", "One-Command Deploy", "Docker image on Docker Hub — client runs docker compose up and it's ready"],
     ["🤖", "AI-Powered", "Built-in small language model (Gemma 3 4B) for bilingual insights and Q&A"],
@@ -147,7 +147,7 @@ function sectionTag(slide, label) {
 
   const items = [
     ["🗂️", "Backend Migration", "All 21 Python modules moved from the old data-cleaning-tool into the new SmartDQC repo and restructured into clean namespaces (eda/, cleaning/, export/, db/, utils/)"],
-    ["🧹", "Source-Specific Cleaners", "4 dedicated modules: ncdc.py (WIDE→LONG reshape), kpm.py (school-age only), myvass.py (Bahagian derivation, IC gender fallback), kkm.py (7yo BMI thresholds, 2024 date-forcing)"],
+    ["🧹", "Source-Specific Cleaners", "4 dedicated modules: ncdc.py (WIDE→LONG reshape), kpm.py (school-age only), myvass.py (Bahagian derivation, IC gender fallback), weight_height.py (7yo BMI thresholds, 2024 date-forcing)"],
     ["🗄️", "DuckDB Persistence", "3 tables auto-created on startup: datasets, sessions, analysis_results. Chosen over PostgreSQL (too heavy) and SQLite (not analytical-first)"],
     ["🐳", "Docker Stack", "3 containers: api + ollama + ollama-init. Model auto-pulled on first run. WHO z-score Excel files baked into image — client never needs to manage them manually"],
     ["☁️", "Published to Docker Hub", "Image luqmanzulkefli/smartdqc-api:latest pushed. Client only needs docker-compose.yml to run the full app. Source code never exposed"],
@@ -290,7 +290,7 @@ function sectionTag(slide, label) {
   s.addText("How It All Fits Together", { x: 0.5, y: 0.55, w: 9, h: 0.5, fontSize: 24, bold: true, color: NAVY, margin: 0 });
 
   const layers = [
-    [NAVY, WHITE, "Frontend (Day 6)", "React · KKM Branding · Light/Dark Mode · Chatbot · Dataset Library"],
+    [NAVY, WHITE, "Frontend (Day 6)", "React · Theming · Light/Dark Mode · Chatbot · Dataset Library"],
     [TEAL, WHITE, "FastAPI Backend", "25+ Endpoints · EDA Pipeline · Cleaning Pipeline · AI Module (backend/ai/)"],
     [DARK, WHITE, "AI Layer (Day 2)", "ollama_client.py · narrative.py · nlq.py · sandbox.py"],
     ["2C5F7E", WHITE, "Ollama + Gemma 3 4B", "Runs on GPU · Auto-pulled on first start · Swap model via env var only"],
@@ -319,7 +319,7 @@ function sectionTag(slide, label) {
     ["Day 3", "Data Correction + Reports", GREEN, ["ML-based correction suggestions on top of existing outlier detection", "One-click PDF/PPTX report export (reuses Day 2 AI narratives — no new LLM calls)"]],
     ["Day 4", "Risk Scoring + KPI Dashboard", AMBER, ["Predictive risk scoring per child and per district", "Traffic-light dashboard vs national KPIs and WHO benchmarks"]],
     ["Day 5", "Entity Matching + Schema AI", TEAL, ["Cross-dataset entity resolution using IC/NRIC matching", "AI-powered column mapping for unknown and drifted schemas"]],
-    ["Day 6", "Full UI + Final Testing", NAVY, ["React frontend: KKM branding, dark/light mode, chatbot wired to NLQ", "End-to-end test on SE's laptop — full user journey verified"]],
+    ["Day 6", "Full UI + Final Testing", NAVY, ["React frontend: theming, dark/light mode, chatbot wired to NLQ", "End-to-end test on SE's laptop — full user journey verified"]],
   ];
 
   days.forEach(([day, title, color, bullets], i) => {

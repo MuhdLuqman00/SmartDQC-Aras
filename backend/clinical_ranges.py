@@ -50,7 +50,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "school_weight": {
         "min": 12.0, "max": 50.0, "unit": "kg",
-        "tier": "DOM", "source": "cleaning.py:37 ≡ kkm.py:21",
+        "tier": "DOM", "source": "cleaning.py:37 ≡ weight_height.py:21",
         "group": "Cohort bounds",
         "label_en": "School-age weight bounds",
         "label_bm": "Had berat usia sekolah",
@@ -62,7 +62,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "school_height": {
         "min": 100.0, "max": 160.0, "unit": "cm",
-        "tier": "DOM", "source": "cleaning.py:38 ≡ kkm.py:22",
+        "tier": "DOM", "source": "cleaning.py:38 ≡ weight_height.py:22",
         "group": "Cohort bounds",
         "label_en": "School-age height bounds",
         "label_bm": "Had tinggi usia sekolah",
@@ -175,7 +175,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "bmi_underweight": {
         "value": 13.5, "unit": "kg/m²",
-        "tier": "WHO", "source": "kkm.py:26",
+        "tier": "WHO", "source": "weight_height.py:26",
         "group": "BMI thresholds",
         "label_en": "BMI: underweight cutpoint (age 7, WHO 2007)",
         "label_bm": "BMI: titik potong kurang berat (umur 7, WHO 2007)",
@@ -188,7 +188,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "bmi_overweight": {
         "value": 16.5, "unit": "kg/m²",
-        "tier": "WHO", "source": "kkm.py:27",
+        "tier": "WHO", "source": "weight_height.py:27",
         "group": "BMI thresholds",
         "label_en": "BMI: overweight cutpoint (age 7, WHO 2007)",
         "label_bm": "BMI: titik potong berlebihan berat (umur 7, WHO 2007)",
@@ -197,7 +197,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "bmi_obese": {
         "value": 18.5, "unit": "kg/m²",
-        "tier": "WHO", "source": "kkm.py:28",
+        "tier": "WHO", "source": "weight_height.py:28",
         "group": "BMI thresholds",
         "label_en": "BMI: obese cutpoint (age 7, WHO 2007)",
         "label_bm": "BMI: titik potong obes (umur 7, WHO 2007)",
@@ -209,7 +209,7 @@ RANGES: dict[str, dict[str, Any]] = {
 
     "stunted_threshold": {
         "value": 112.0, "unit": "cm",
-        "tier": "PROXY", "source": "kkm.py:31",
+        "tier": "PROXY", "source": "weight_height.py:31",
         "group": "Stunting proxies",
         "label_en": "Stunted height threshold (proxy)",
         "label_bm": "Had tinggi stunting (proksi)",
@@ -222,7 +222,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "tall_threshold": {
         "value": 132.0, "unit": "cm",
-        "tier": "PROXY", "source": "kkm.py:32",
+        "tier": "PROXY", "source": "weight_height.py:32",
         "group": "Stunting proxies",
         "label_en": "Tall height threshold (proxy)",
         "label_bm": "Had tinggi 'tall' (proksi)",
@@ -249,19 +249,19 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "school_age_min": {
         "value": 6.0, "unit": "years",
-        "tier": "DOM", "source": "kkm.py:23",
+        "tier": "DOM", "source": "weight_height.py:23",
         "group": "Age windows",
         "label_en": "School cohort minimum age",
         "label_bm": "Umur minimum kohort sekolah",
         "recommended": "6.0 years",
         "why": (
-            "KKM Berat & Tinggi sheet targets the Tahun-1 (~7y) intake; "
+            "The weight & height sheet targets the Tahun-1 (~7y) intake; "
             "6 years brackets it with one year of tolerance."
         ),
     },
     "school_age_max": {
         "value": 8.0, "unit": "years",
-        "tier": "DOM", "source": "kkm.py:23",
+        "tier": "DOM", "source": "weight_height.py:23",
         "group": "Age windows",
         "label_en": "School cohort maximum age",
         "label_bm": "Umur maksimum kohort sekolah",
@@ -273,7 +273,7 @@ RANGES: dict[str, dict[str, Any]] = {
 
     "br02_weight_impossible": {
         "min": 10.0, "max": 125.0, "unit": "kg",
-        "tier": "DOM", "source": "kkm_quality_rules.py:99",
+        "tier": "DOM", "source": "quality_rules.py:99",
         "group": "Quality checker bounds",
         "label_en": "BR-02: impossible weight bounds",
         "label_bm": "BR-02: had berat mustahil",
@@ -287,7 +287,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "br03_height_impossible": {
         "min": 50.0, "max": 200.0, "unit": "cm",
-        "tier": "DOM", "source": "kkm_quality_rules.py:131",
+        "tier": "DOM", "source": "quality_rules.py:131",
         "group": "Quality checker bounds",
         "label_en": "BR-03: impossible height bounds",
         "label_bm": "BR-03: had tinggi mustahil",
@@ -300,7 +300,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "br06_year_level": {
         "min": 1, "max": 7, "unit": "year",
-        "tier": "DOM", "source": "kkm_quality_rules.py:240",
+        "tier": "DOM", "source": "quality_rules.py:240",
         "group": "Quality checker bounds",
         "label_en": "BR-06: school year level range",
         "label_bm": "BR-06: julat tahun persekolahan",
@@ -312,7 +312,7 @@ RANGES: dict[str, dict[str, Any]] = {
     },
     "br09_date_window_years": {
         "value": 20, "unit": "years",
-        "tier": "DOM", "source": "kkm_quality_rules.py:361",
+        "tier": "DOM", "source": "quality_rules.py:361",
         "group": "Quality checker bounds",
         "label_en": "BR-09: suspicious-date look-back window",
         "label_bm": "BR-09: tetingkap tarikh syak",
@@ -417,7 +417,7 @@ RANGES: dict[str, dict[str, Any]] = {
 
 
 # ─── Editability governance ───────────────────────────────────────────────────
-# Tier-governed editability (decided 2026-06-13, client perspective): a KKM
+# Tier-governed editability (decided 2026-06-13, operator perspective): a domain
 # officer may SEE every threshold + its source, but may only CHANGE the
 # operational DOM-tier bounds that are reachable with override plumbing AND
 # proven by a propagation test (see test_clinical_ranges_propagation.py).
@@ -431,8 +431,8 @@ EDITABLE_KEYS: frozenset[str] = frozenset({
     "school_weight", "school_height",       # cohort bounds → CohortProfile
     "bmi_max",                              # _apply_bmi_outlier (override-aware local)
     "infant_age_cap",                       # under-5 age ceiling (override-aware local)
-    "br02_weight_impossible",               # KKMQualityChecker ctor injection
-    "br03_height_impossible",               # KKMQualityChecker ctor injection
+    "br02_weight_impossible",               # QualityChecker ctor injection
+    "br03_height_impossible",               # QualityChecker ctor injection
 })
 
 

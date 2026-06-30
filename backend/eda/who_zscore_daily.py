@@ -156,7 +156,7 @@ def compute_zscore(indicator: str, value: float, age_days: int, sex: str) -> flo
 
 def classify_waz(z: float | None) -> str:
     """
-    Classify Weight-for-Age z-score per KKM / WHO 2006.
+    Classify Weight-for-Age z-score per WHO 2006.
     
     Returns:
     --------
@@ -181,7 +181,7 @@ def classify_waz(z: float | None) -> str:
 
 def classify_haz(z: float | None) -> str:
     """
-    Classify Height-for-Age z-score per KKM / WHO 2006.
+    Classify Height-for-Age z-score per WHO 2006.
     
     Returns:
     --------
@@ -206,7 +206,7 @@ def classify_haz(z: float | None) -> str:
 
 def classify_baz(z: float | None) -> str:
     """
-    Classify BMI-for-Age z-score per KKM / WHO 2006.
+    Classify BMI-for-Age z-score per WHO 2006.
     
     Returns:
     --------

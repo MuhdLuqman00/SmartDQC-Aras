@@ -156,7 +156,7 @@ const CATALOG: Record<string, CatalogEntry> = {
     rule:  { en: 'Flag records for review',           bm: 'Tandakan rekod untuk semakan' },
   },
 
-  // ── Pre-clean actionable findings (B2.1, KKM business rules BR-01…09) ──────
+  // ── Pre-clean actionable findings (B2.1, business rules BR-01…09) ─────────
   null_measurement_date: {
     issue: { en: 'Measurement date missing',          bm: 'Tarikh pengukuran hilang' },
     rule:  { en: 'Supply measurement dates',          bm: 'Sediakan tarikh pengukuran' },

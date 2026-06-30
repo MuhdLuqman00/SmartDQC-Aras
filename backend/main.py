@@ -44,7 +44,7 @@ from .config import (
 )
 from .ai.schema_mapper import ai_suggest_mapping, _needs_ai_assist
 from .eda.runner import run_eda, run_eda_auto, json_safe
-from .eda.kkm_quality_rules import analyze_kkm_quality
+from .eda.quality_rules import analyze_quality
 from .eda.charts import build_chart_blocks, normalize_for_charts
 from .export.tableau import (
     build_aggregated_table,
@@ -546,7 +546,7 @@ def _summarise_cleaning(stats: dict, rows_before: int, rows_after: int) -> dict:
     """Derive a quality score, applied-rule list, and top issues from a
     cleaner's stats dict (per-rule removed/flagged row counts).
 
-    Generic across kpm/myvass/ncdc/kkm cleaners: any positive-integer stat
+    Generic across kpm/myvass/ncdc cleaners: any positive-integer stat
     that isn't a survivor/transformation count is treated as an issue+rule.
     """
     score = round(rows_after / rows_before * 100, 1) if rows_before else 0.0
@@ -1182,7 +1182,7 @@ async def download_cleaned_merged(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# KKM DATA CLEANING TOOL ENDPOINTS
+# DATA CLEANING TOOL ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import uuid as _uuid
@@ -1448,7 +1448,7 @@ def _persist_linkage_run(
     return run.id
 
 
-# Clinical bounds mirrored from backend/cleaning/kkm.py — keep in sync.
+# Clinical bounds mirrored from backend/cleaning/weight_height.py — keep in sync.
 _FLAG_BERAT_LOW, _FLAG_BERAT_HIGH = 12.0, 50.0  # BERAT_MIN / BERAT_MAX
 _FLAG_TINGGI_LOW, _FLAG_TINGGI_HIGH = 100.0, 160.0  # TINGGI_MIN / TINGGI_MAX
 _FLAG_BMI_LOW, _FLAG_BMI_HIGH = 13.5, 18.5  # BMI_UNDERWEIGHT / BMI_OBESE
@@ -1457,9 +1457,9 @@ _FLAG_BMI_LOW, _FLAG_BMI_HIGH = 13.5, 18.5  # BMI_UNDERWEIGHT / BMI_OBESE
 def _compute_row_flags(df: "pd.DataFrame") -> "pd.Series":
     """Return a boolean Series: True if the row has a known quality issue.
 
-    Priority: use Data_Quality_Flag column if present (KKM cleaned output).
+    Priority: use Data_Quality_Flag column if present (provenance cleaned output).
     Fallback: check clinical bounds on recognised measurement columns so the
-    toggle works for non-KKM source types too.
+    toggle works for other source types too.
     """
     if "Data_Quality_Flag" in df.columns:
         return df["Data_Quality_Flag"] != "Valid"
@@ -1979,7 +1979,7 @@ async def detect_type_endpoint(
     )
 
 
-# Map KKM business-rule ids → stable, localisable finding codes (issueCatalog.ts).
+# Map business-rule ids → stable, localisable finding codes (issueCatalog.ts).
 # Keeps the frontend catalog clean while the backend keeps its BR-xx vocabulary.
 _BR_FINDING_CODE = {
     "BR-01": "null_measurement_date",
@@ -1992,7 +1992,7 @@ _BR_FINDING_CODE = {
     "BR-08": "both_measurements_null",
     "BR-09": "suspicious_dates",
 }
-# KKMQualityChecker severities → frontend severity vocabulary.
+# QualityChecker severities → frontend severity vocabulary.
 _BR_SEVERITY = {
     "CRITICAL": "critical",
     "ERROR": "critical",
@@ -2004,7 +2004,7 @@ _BR_SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 
 def _actionable_findings(df: pd.DataFrame, limit: int = 6,
                          range_overrides: dict | None = None) -> list[dict]:
-    """Run the (otherwise unwired) KKM business-rule checker on the RAW frame and
+    """Run the (otherwise unwired) business-rule checker on the RAW frame and
     return a compact, PII-free list of the most actionable findings for B2.1.
 
     Only aggregate counts/percentages + the rule's own description/fix are
@@ -2015,9 +2015,9 @@ def _actionable_findings(df: pd.DataFrame, limit: int = 6,
     impossible-measurement bounds reflect saved operational overrides.
     """
     try:
-        report = analyze_kkm_quality(df, range_overrides)
+        report = analyze_quality(df, range_overrides)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("Actionable findings skipped (KKM checker failed): %s", exc)
+        logger.warning("Actionable findings skipped (business-rule checker failed): %s", exc)
         return []
 
     findings: list[dict] = []

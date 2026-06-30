@@ -455,7 +455,7 @@ def _is_biv(z, indicator: str) -> bool:
     return z < lo or z > hi
 
 def classify_waz(z):
-    """Weight-for-Age Z-score classification (KKM / WHO 2006)."""
+    """Weight-for-Age Z-score classification (WHO 2006)."""
     if z is None:        return None
     if z < -3:           return "kurang_berat_badan_teruk"
     if z < -2:           return "kurang_berat_badan"
@@ -464,7 +464,7 @@ def classify_waz(z):
     return "mungkin_masalah_pertumbuhan"
 
 def classify_haz(z):
-    """Height/Length-for-Age Z-score classification (KKM / WHO 2006)."""
+    """Height/Length-for-Age Z-score classification (WHO 2006)."""
     if z is None:        return None
     if z < -3:           return "bantut_teruk"
     if z < -2:           return "bantut"
@@ -473,7 +473,7 @@ def classify_haz(z):
     return "mungkin_masalah_endokrin"
 
 def classify_baz(z):
-    """BMI-for-Age Z-score classification (KKM / WHO 2006)."""
+    """BMI-for-Age Z-score classification (WHO 2006)."""
     if z is None:        return None
     if z < -3:           return "susut_teruk"
     if z < -2:           return "susut"
@@ -483,8 +483,8 @@ def classify_baz(z):
     if z <= 3:           return "berlebihan_berat_badan"
     return "obes"
 
-# KKM indicator groupings (which WHO classifications trigger each KKM indicator)
-WHO_TO_KKM_INDICATOR = {
+# Indicator groupings (which WHO classifications trigger each nutrition indicator)
+WHO_TO_INDICATOR = {
     "ind_kurang_berat": lambda waz_cls: waz_cls in ("kurang_berat_badan", "kurang_berat_badan_teruk"),
     "ind_bantut":       lambda haz_cls: haz_cls in ("bantut", "bantut_teruk"),
     "ind_susut":        lambda baz_cls: baz_cls in ("susut", "susut_teruk"),
@@ -549,7 +549,7 @@ def add_who_zscores(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[df["flag_biv_waz"], "waz"] = None  # nullify BIV z-scores
         df["waz_class"] = df["waz"].apply(classify_waz)
         df["ind_kurang_berat_zscore"] = df["waz_class"].apply(
-            lambda c: WHO_TO_KKM_INDICATOR["ind_kurang_berat"](c) if c else False)
+            lambda c: WHO_TO_INDICATOR["ind_kurang_berat"](c) if c else False)
 
     # HAZ
     if "tinggi_cm" in df.columns:
@@ -563,7 +563,7 @@ def add_who_zscores(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[df["flag_biv_haz"], "haz"] = None
         df["haz_class"] = df["haz"].apply(classify_haz)
         df["ind_bantut_zscore"] = df["haz_class"].apply(
-            lambda c: WHO_TO_KKM_INDICATOR["ind_bantut"](c) if c else False)
+            lambda c: WHO_TO_INDICATOR["ind_bantut"](c) if c else False)
 
     # BAZ
     bmi_col = pd.to_numeric(df.get("bmi", pd.Series(dtype=float)), errors="coerce")
@@ -581,9 +581,9 @@ def add_who_zscores(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[df["flag_biv_baz"], "baz"] = None
         df["baz_class"] = df["baz"].apply(classify_baz)
         df["ind_susut_zscore"] = df["baz_class"].apply(
-            lambda c: WHO_TO_KKM_INDICATOR["ind_susut"](c) if c else False)
+            lambda c: WHO_TO_INDICATOR["ind_susut"](c) if c else False)
         df["ind_obes_zscore"] = df["baz_class"].apply(
-            lambda c: WHO_TO_KKM_INDICATOR["ind_obes"](c) if c else False)
+            lambda c: WHO_TO_INDICATOR["ind_obes"](c) if c else False)
 
     # Compare z-score classification vs source labels
     _add_label_mismatch(df)

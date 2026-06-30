@@ -1,5 +1,5 @@
 """
-KKM Data Cleaning Backend Module
+Data Cleaning Backend Module
 ================================
 Provides cleaning functions for KPM, MyVASS, and NCDC data.
 Integrates with WHO z-score calculations using daily LMS tables.
@@ -149,7 +149,7 @@ _REVIEW_MANAGED_SENTINEL = "__reviews_managed"
 
 # Vocabulary/whitelist review rules whose reference-set COMPLETENESS cannot be
 # grounded in the only authoritative sample we have (Docs/Contoh data.xlsx).
-# Disabled 2026-06-16 until KKM supplies the canonical lists. Keeping them on
+# Disabled 2026-06-16 until the data provider supplies the canonical lists. Keeping them on
 # produces false "needs review" flags on legitimate values — e.g. FACILITY_SET is
 # demonstrably missing real categories ("Hospital Kerajaan", "Klinik Swasta"), and
 # ETHNIC_VALID / AGENSI_SET completeness is unprovable from a 19+13-row sample.
@@ -2066,8 +2066,8 @@ REVIEW_RULE_REGISTRY: dict[str, dict] = {
     },
     "review_vaccine_unknown": {
         "en": "Unknown vaccine", "bm": "Vaksin tidak dikenali",
-        "desc_en": "Vaccine name is not in the KKM childhood immunisation schedule.",
-        "desc_bm": "Nama vaksin tidak terdapat dalam jadual imunisasi kanak-kanak KKM.",
+        "desc_en": "Vaccine name is not in the childhood immunisation schedule.",
+        "desc_bm": "Nama vaksin tidak terdapat dalam jadual imunisasi kanak-kanak.",
     },
     "review_agensi_unknown": {
         "en": "Unknown agency", "bm": "Agensi tidak dikenali",
@@ -2086,8 +2086,8 @@ REVIEW_RULE_REGISTRY: dict[str, dict] = {
     },
     "review_facility_unknown": {
         "en": "Unknown facility type", "bm": "Jenis fasiliti tidak dikenali",
-        "desc_en": "Facility type is not a recognised KKM facility type.",
-        "desc_bm": "Jenis fasiliti bukan jenis fasiliti KKM yang diiktiraf.",
+        "desc_en": "Facility type is not a recognised facility type.",
+        "desc_bm": "Jenis fasiliti bukan jenis fasiliti yang diiktiraf.",
     },
 }
 

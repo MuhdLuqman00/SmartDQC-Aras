@@ -52,7 +52,7 @@ export function TopBar() {
           all routes, and at a 32px gutter it left-aligns with the page content
           below it (letterhead alignment). */}
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-        <h1 className="kkm-keyline" style={{
+        <h1 className="brand-keyline" style={{
           fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 16,
           color: 'var(--text-primary)', whiteSpace: 'nowrap',
         }}>

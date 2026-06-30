@@ -68,4 +68,4 @@ def test_build_context_carries_real_score_and_indicators():
     ctx = build_context(run_eda_auto(_titlecase_cleaned_df(), "myvass"))
     assert "No structured context available." not in ctx
     assert "(grade D)" not in ctx
-    assert "KKM nutrition indicators" in ctx
+    assert "Nutrition indicators" in ctx

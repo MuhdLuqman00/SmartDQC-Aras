@@ -167,15 +167,15 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
             "Age in months computed from date_of_birth to measurement_date.")
     else:
         tfm("Compute Age in Months", "tarikh_lahir + tarikh_ukur", "needed",
-            "Required for WHO z-score lookup and KKM age-group classification.")
+            "Required for WHO z-score lookup and nutrition age-group classification.")
 
     # Age group
     if has("age_group_computed"):
         tfm("Age Group Classification", "age_group_computed", "done",
-            "Classified into 'Bawah 2 Tahun' and 'Bawah 5 Tahun' per KKM standard.")
+            "Classified into 'Bawah 2 Tahun' and 'Bawah 5 Tahun' per WHO standard.")
     else:
         tfm("Age Group Classification", "age_months_computed", "needed",
-            "Required to filter KKM indicators by age group.")
+            "Required to filter nutrition indicators by age group.")
 
     # BMI
     if has("bmi"):
@@ -192,18 +192,18 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
     if has("waz") and has("haz") and has("baz"):
         pct = report.get("data_completeness", {}).get("pct_zscore_complete", 0)
         tfm("WHO 2006 Z-Scores", "waz, haz, baz", "done",
-            f"Z-scores computed for {pct}% of records. Required for KKM indicator flags.")
+            f"Z-scores computed for {pct}% of records. Required for nutrition indicator flags.")
     else:
         tfm("WHO 2006 Z-Scores", "berat_kg, tinggi_cm, tarikh_lahir, tarikh_ukur, jantina",
             "needed",
-            "Z-scores (WAZ/HAZ/BAZ) needed for KKM indicator classification.", "critical")
+            "Z-scores (WAZ/HAZ/BAZ) needed for nutrition indicator classification.", "critical")
 
-    # KKM indicator flags
+    # Nutrition indicator flags
     if has("ind_kurang_berat_zscore") or has("ind_kurang_berat"):
-        tfm("KKM Indicator Flags", "ind_kurang_berat, ind_bantut, ind_susut, ind_obes",
-            "done", "4 KKM indicator columns added (0/1 per child per visit).")
+        tfm("Nutrition Indicator Flags", "ind_kurang_berat, ind_bantut, ind_susut, ind_obes",
+            "done", "4 nutrition indicator columns added (0/1 per child per visit).")
     else:
-        tfm("KKM Indicator Flags", "—", "needed",
+        tfm("Nutrition Indicator Flags", "—", "needed",
             "Indicator columns missing — z-scores must be computed first.", "critical")
 
     # IC deduplication
@@ -229,7 +229,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
     calc_fields = [
         {"field": "Age Band",
          "formula": "IF [age_months_computed] <= 24 THEN 'Bawah 2 Tahun' ELSE 'Bawah 5 Tahun' END",
-         "notes": "For KKM indicator age-group filter"},
+         "notes": "For nutrition indicator age-group filter"},
         {"field": "WAZ Band",
          "formula": "IF [waz] < -3 THEN 'Severely Underweight' ELSEIF [waz] < -2 THEN 'Underweight' ELSEIF [waz] <= 2 THEN 'Normal' ELSE 'Overweight' END",
          "notes": "Weight-for-age classification label"},
@@ -646,7 +646,7 @@ def run_eda(df: pd.DataFrame, mapping: dict, source_type: str,
     report["categorical_summary"] = compute_categorical_summary(df)
     report["data_completeness"]   = compute_data_completeness(df)
 
-    # ── KKM Indicators ────────────────────────────────────────────────────────
+    # ── Nutrition Indicators ────────────────────────────────────────────────────────
     # Case-insensitive guard: the cleaners + add_who_zscores emit UPPERCASE
     # WAZ/HAZ/BAZ (and Ind_* / *_Status), so a lowercase-only membership test
     # never matched → indicators stayed {} → the Tableau/aggregated export was

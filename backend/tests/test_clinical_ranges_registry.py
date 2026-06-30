@@ -24,17 +24,17 @@ def test_infant_height_matches_cleaning_constants():
     assert hi == TINGGI_MAX_INFANT
 
 
-def test_school_weight_matches_cleaning_and_kkm():
+def test_school_weight_matches_cleaning_and_bounds():
     from backend.eda.cleaning import BERAT_MIN_SCHOOL, BERAT_MAX_SCHOOL
-    from backend.cleaning.kkm import BERAT_MIN, BERAT_MAX
+    from backend.cleaning.weight_height import BERAT_MIN, BERAT_MAX
     lo, hi = CR.get_range("school_weight")
     assert lo == BERAT_MIN_SCHOOL == BERAT_MIN
     assert hi == BERAT_MAX_SCHOOL == BERAT_MAX
 
 
-def test_school_height_matches_cleaning_and_kkm():
+def test_school_height_matches_cleaning_and_bounds():
     from backend.eda.cleaning import TINGGI_MIN_SCHOOL, TINGGI_MAX_SCHOOL
-    from backend.cleaning.kkm import TINGGI_MIN, TINGGI_MAX
+    from backend.cleaning.weight_height import TINGGI_MIN, TINGGI_MAX
     lo, hi = CR.get_range("school_height")
     assert lo == TINGGI_MIN_SCHOOL == TINGGI_MIN
     assert hi == TINGGI_MAX_SCHOOL == TINGGI_MAX
@@ -82,8 +82,8 @@ def test_zscore_cap_default():
 
 # ── §3  BMI thresholds ────────────────────────────────────────────────────────
 
-def test_bmi_categories_match_kkm():
-    from backend.cleaning.kkm import BMI_UNDERWEIGHT, BMI_OVERWEIGHT, BMI_OBESE
+def test_bmi_categories_match_bounds():
+    from backend.cleaning.weight_height import BMI_UNDERWEIGHT, BMI_OVERWEIGHT, BMI_OBESE
     assert CR.get_val("bmi_underweight") == BMI_UNDERWEIGHT
     assert CR.get_val("bmi_overweight") == BMI_OVERWEIGHT
     assert CR.get_val("bmi_obese") == BMI_OBESE
@@ -91,16 +91,16 @@ def test_bmi_categories_match_kkm():
 
 # ── §4  Stunting proxies ──────────────────────────────────────────────────────
 
-def test_stunting_proxies_match_kkm():
-    from backend.cleaning.kkm import STUNTED_THRESHOLD, TALL_THRESHOLD
+def test_stunting_proxies_match_bounds():
+    from backend.cleaning.weight_height import STUNTED_THRESHOLD, TALL_THRESHOLD
     assert CR.get_val("stunted_threshold") == STUNTED_THRESHOLD
     assert CR.get_val("tall_threshold") == TALL_THRESHOLD
 
 
 # ── §5  Age windows ───────────────────────────────────────────────────────────
 
-def test_school_age_matches_kkm():
-    from backend.cleaning.kkm import AGE_MIN_YEARS, AGE_MAX_YEARS
+def test_school_age_matches_bounds():
+    from backend.cleaning.weight_height import AGE_MIN_YEARS, AGE_MAX_YEARS
     assert CR.get_val("school_age_min") == AGE_MIN_YEARS
     assert CR.get_val("school_age_max") == AGE_MAX_YEARS
 

@@ -16,7 +16,7 @@ If a key is in clinical_ranges.EDITABLE_KEYS it MUST be covered here.
 import pandas as pd
 
 from backend.eda.cleaning import clean_myvass, clean_kpm, clean_data
-from backend.eda.kkm_quality_rules import analyze_kkm_quality
+from backend.eda.quality_rules import analyze_quality
 import backend.clinical_ranges as CR
 
 
@@ -92,22 +92,22 @@ def test_infant_age_cap_override_flags_age_invalid():
     assert ov["dropped_age_over5"] > base["dropped_age_over5"]
 
 
-# ── br02 / br03 (KKMQualityChecker ctor injection) ────────────────────────────
+# ── br02 / br03 (QualityChecker ctor injection) ───────────────────────────────
 
 def test_br02_override_flags_impossible_weight():
     df = pd.DataFrame({"Berat_kg": [11.0, 20.0]})  # both within default 10–125
-    base = analyze_kkm_quality(df.copy())
+    base = analyze_quality(df.copy())
     assert _br_rows(base, "BR-02") == 0
-    ov = analyze_kkm_quality(df.copy(),
+    ov = analyze_quality(df.copy(),
                              range_overrides={"br02_weight_impossible": {"min": 15.0, "max": 125.0}})
     assert _br_rows(ov, "BR-02") > _br_rows(base, "BR-02")
 
 
 def test_br03_override_flags_impossible_height():
     df = pd.DataFrame({"Tinggi_cm": [55.0, 120.0]})  # both within default 50–200
-    base = analyze_kkm_quality(df.copy())
+    base = analyze_quality(df.copy())
     assert _br_rows(base, "BR-03") == 0
-    ov = analyze_kkm_quality(df.copy(),
+    ov = analyze_quality(df.copy(),
                              range_overrides={"br03_height_impossible": {"min": 60.0, "max": 200.0}})
     assert _br_rows(ov, "BR-03") > _br_rows(base, "BR-03")
 

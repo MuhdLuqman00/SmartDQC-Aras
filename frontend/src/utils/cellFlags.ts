@@ -35,7 +35,7 @@ export const DEFAULT_CELL_THRESHOLDS: ClinicalThresholds = {
   bmiObese:             18.5,
 };
 
-// Date bounds — mirrors backend BR-09 (kkm_quality_rules.py): a measurement date
+// Date bounds — mirrors backend BR-09 (quality_rules.py): a measurement date
 // more than br09_date_window_years (20) old, or in the future, is a system/entry
 // error. Anchored to the runtime clock so these never go stale (the old hardcoded
 // 2008–2026 window silently expired each year). Latest = end of the current year

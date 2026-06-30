@@ -156,7 +156,7 @@ def bmi_status_grouped(bmi: float, age_months: int) -> str:
 
 
 # Upstream Malay status columns the backend cleaner expects — derived
-# from Z-scores using KKM-standard nomenclature. Without these, the
+# from Z-scores using standard nomenclature. Without these, the
 # label-based flag pipeline in eda/indicators.py:_add_label_based_flags
 # falls back to False for every row → trend chart is empty.
 

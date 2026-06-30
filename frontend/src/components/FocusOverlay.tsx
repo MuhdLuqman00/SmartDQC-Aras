@@ -54,7 +54,7 @@ export function FocusOverlay({ open, onClose, title, children }: {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
         }}>
-          <h2 className="kkm-keyline" style={{
+          <h2 className="brand-keyline" style={{
             margin: 0, fontFamily: 'var(--font-body)', fontWeight: 700,
             fontSize: 16, color: 'var(--text-primary)',
           }}>

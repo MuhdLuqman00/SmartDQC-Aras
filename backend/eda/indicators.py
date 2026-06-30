@@ -8,7 +8,7 @@ Strategy (WHO 2006 first):
      labels from the mapped columns.
   3. Always compute BOTH sources and report discrepancies.
 
-KKM indicators required (per spec):
+Nutrition indicators required (per spec):
   1. Peratus kanak-kanak kurang berat badan  (WAZ < -2, Weight-for-Age)
   2. Peratus kanak-kanak bantut              (HAZ < -2, Height-for-Age)
   3. Peratus kanak-kanak susut               (BAZ < -2, BMI-for-Age)
@@ -189,7 +189,7 @@ def compute_trajectory(df: pd.DataFrame) -> dict:
 
 def compute_indicators(df: pd.DataFrame) -> dict:
     """
-    Compute KKM nutrition indicators using WHO z-scores as primary source,
+    Compute nutrition indicators using WHO z-scores as primary source,
     falling back to source label columns. Returns nested dict:
       results[age_key][ind_key] = { overall, by_negeri, by_daerah, ... }
     """

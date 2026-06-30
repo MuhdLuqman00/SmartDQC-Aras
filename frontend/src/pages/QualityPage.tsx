@@ -180,7 +180,7 @@ export function QualityPage() {
               the score/max text means colour is never the sole signal. */}
           {breakdown && DIM_ORDER.some(k => breakdown[k]) && (
             <div style={{ width: '100%', marginTop: 4 }}>
-              <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 16 }}>
+              <div className="brand-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 16 }}>
                 {t('Quality by dimension', 'Kualiti mengikut dimensi')}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>

@@ -14,7 +14,7 @@ def _seed(df: pd.DataFrame) -> str:
     return cid
 
 
-def _kkm_df() -> pd.DataFrame:
+def _sample_df() -> pd.DataFrame:
     return pd.DataFrame({
         "Jantina":            ["L", "P", "L", "XYZ"],          # XYZ → BR-05 unknown gender
         "Tarikh Pengukuran":  ["2024-01-01", "2024-02-01",
@@ -26,7 +26,7 @@ def _kkm_df() -> pd.DataFrame:
 # ── Per-column profile ──────────────────────────────────────────────────────────
 
 def test_columns_profile_present():
-    cid = _seed(_kkm_df())
+    cid = _seed(_sample_df())
     body = client.post(f"/clean/quality-check?cache_id={cid}").json()
     assert "columns" in body
     by_name = {c["name"]: c for c in body["columns"]}
@@ -46,7 +46,7 @@ def test_columns_profile_present():
 # ── Actionable findings ─────────────────────────────────────────────────────────
 
 def test_actionable_findings_detect_future_dates():
-    cid = _seed(_kkm_df())
+    cid = _seed(_sample_df())
     body = client.post(f"/clean/quality-check?cache_id={cid}").json()
     findings = body.get("actionable_findings")
     assert isinstance(findings, list) and findings
@@ -56,7 +56,7 @@ def test_actionable_findings_detect_future_dates():
 
 def test_findings_are_pii_free():
     """Findings must carry only aggregate fields — never the checker's raw rows."""
-    cid = _seed(_kkm_df())
+    cid = _seed(_sample_df())
     body = client.post(f"/clean/quality-check?cache_id={cid}").json()
     allowed = {"code", "rule_id", "field", "title", "description", "fix", "severity", "count", "pct"}
     for f in body["actionable_findings"]:
@@ -65,7 +65,7 @@ def test_findings_are_pii_free():
 
 
 def test_findings_empty_when_clean():
-    """A benign frame with no KKM-recognisable columns yields no findings (no crash)."""
+    """A benign frame with no recognisable columns yields no findings (no crash)."""
     cid = _seed(pd.DataFrame({"foo": [1, 2, 3], "bar": ["a", "b", "c"]}))
     body = client.post(f"/clean/quality-check?cache_id={cid}").json()
     assert body["actionable_findings"] == []

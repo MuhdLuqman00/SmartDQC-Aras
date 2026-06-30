@@ -163,7 +163,7 @@ export function FeaturesPage() {
       {/* Themed sections — one gold keyline header per pipeline stage */}
       {THEMES.map(theme => (
         <section key={theme.key}>
-          <div className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
+          <div className="brand-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 14 }}>
             {t(theme.en, theme.bm)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>

@@ -53,7 +53,7 @@ def build_context(eda_result: dict) -> str:
             f"valid ({ic.get('pct_valid', 'N/A')}%)"
         )
 
-    # KKM indicators are nested: indicators[age_group][indicator] = {label,
+    # Nutrition indicators are nested: indicators[age_group][indicator] = {label,
     # overall: {pct, n_affected, n_total}, by_negeri: {...}, ...}
     indicators = eda_result.get("indicators") or {}
     ind_lines = []
@@ -74,7 +74,7 @@ def build_context(eda_result: dict) -> str:
                     f"({overall.get('n_affected', '?')}/{overall.get('n_total', '?')})"
                 )
     if ind_lines:
-        parts.append("KKM nutrition indicators:\n" + "\n".join(ind_lines[:20]))
+        parts.append("Nutrition indicators:\n" + "\n".join(ind_lines[:20]))
 
     # run_eda stores outliers as a per-column report; summarise as a total.
     outliers = eda_result.get("outliers") or {}
@@ -254,7 +254,7 @@ def generate_recommendations(eda_result: dict, insights: dict) -> dict:
     context = build_context(eda_result)
     summary_bm = insights.get("executive_summary", {}).get("bm", "")
 
-    prompt = f"""Based on this KKM dataset analysis and insights, produce actionable recommendations in JSON.
+    prompt = f"""Based on this dataset analysis and insights, produce actionable recommendations in JSON.
 
 Dataset context:
 {context}

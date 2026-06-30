@@ -529,7 +529,7 @@ export function DashboardPage() {
         borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', overflow: 'hidden',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '14px 18px 2px' }}>
-          <span className="kkm-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+          <span className="brand-keyline" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
             {t('Indicators vs Target', 'Penunjuk lwn Sasaran')}
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>

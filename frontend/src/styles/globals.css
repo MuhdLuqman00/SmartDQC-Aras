@@ -166,12 +166,12 @@ input, select, textarea { font-family: inherit; }
    A short gold rule under a heading — the one distinctive brand detail carried
    across the app. Decorative; uses the deep gold on light so it reads as a
    deliberate rule (≥3:1), and the brighter gold on dark surfaces. */
-.kkm-keyline {
+.brand-keyline {
   position: relative;
   display: inline-block;
   padding-bottom: 5px;
 }
-.kkm-keyline::after {
+.brand-keyline::after {
   content: '';
   position: absolute;
   left: 0;
@@ -181,7 +181,7 @@ input, select, textarea { font-family: inherit; }
   border-radius: 2px;
   background: var(--accent-strong);
 }
-[data-theme="dark"] .kkm-keyline::after { background: var(--accent); }
+[data-theme="dark"] .brand-keyline::after { background: var(--accent); }
 
 /* ── Explorer editable cells ────────────────────────────────────────────────
    Make the inline-edit affordance discoverable (a hover/focus pencil + cell

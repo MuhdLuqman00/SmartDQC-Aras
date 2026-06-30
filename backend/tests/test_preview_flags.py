@@ -14,7 +14,7 @@ def _seed(df: pd.DataFrame) -> str:
 
 
 def test_flags_via_data_quality_flag_column():
-    """KKM path: Data_Quality_Flag != 'Valid' rows are flagged."""
+    """Provenance path: Data_Quality_Flag != 'Valid' rows are flagged."""
     df = pd.DataFrame({
         "Name": ["Alice", "Bob"],
         "Data_Quality_Flag": ["Valid", "Invalid Age"],
@@ -39,7 +39,7 @@ def test_flags_valid_quality_flag_not_flagged():
 
 
 def test_flags_fallback_berat_out_of_clinical_range():
-    """Non-KKM fallback: Berat_kg outside 12-50 kg is flagged."""
+    """Fallback: Berat_kg outside 12-50 kg is flagged."""
     df = pd.DataFrame({
         "Berat_kg": [25.0, 55.0],
         "Tinggi_cm": [120.0, 120.0],
@@ -51,7 +51,7 @@ def test_flags_fallback_berat_out_of_clinical_range():
 
 
 def test_flags_fallback_tinggi_out_of_clinical_range():
-    """Non-KKM fallback: Tinggi_cm outside 100-160 cm is flagged."""
+    """Fallback: Tinggi_cm outside 100-160 cm is flagged."""
     df = pd.DataFrame({
         "Berat_kg": [25.0, 25.0],
         "Tinggi_cm": [120.0, 90.0],

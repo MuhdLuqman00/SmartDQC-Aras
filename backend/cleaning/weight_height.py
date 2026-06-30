@@ -1,6 +1,6 @@
 ﻿"""
-KKM Berat & Tinggi source-specific cleaning logic.
-Extracted from clean_kkm_data.py — unique rules not present in backend/eda/cleaning.py.
+Weight & Height source-specific cleaning logic.
+Extracted from the original weight/height cleaner — unique rules not present in backend/eda/cleaning.py.
 
 Key differences vs generic cleaning:
   - BMI thresholds for 7-year-old cohort (WHO 2007): 13.5 / 16.5 / 18.5
@@ -65,7 +65,7 @@ COLUMN_RENAME = {
 # ---------------------------------------------------------------------------
 
 def bmi_category(bmi: float) -> str:
-    """BMI category for 7-year-old KKM cohort (WHO 2007)."""
+    """BMI category for 7-year-old school cohort (WHO 2007)."""
     if pd.isna(bmi):
         return "Unknown"
     if bmi < BMI_UNDERWEIGHT: return "Underweight"
@@ -107,9 +107,9 @@ def _build_quality_flag(df: pd.DataFrame) -> pd.Series:
 # Main cleaning function
 # ---------------------------------------------------------------------------
 
-def clean_kkm(df: pd.DataFrame, year: int, drop_invalid: bool | None = None) -> tuple[pd.DataFrame, dict]:
+def clean_weight_height(df: pd.DataFrame, year: int, drop_invalid: bool | None = None) -> tuple[pd.DataFrame, dict]:
     """
-    Apply all KKM-specific cleaning rules.
+    Apply all weight/height cleaning rules.
     Returns (cleaned_df, stats_dict).
 
     drop_invalid=None (default): auto-detect from year

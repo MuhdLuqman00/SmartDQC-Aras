@@ -1,6 +1,6 @@
 """
-KKM Data Quality Business Rules
-Validates KKM Berat & Tinggi (Weight & Height) datasets against defined business rules.
+Data Quality Business Rules
+Validates weight & height measurement datasets against defined business rules.
 """
 
 import pandas as pd
@@ -17,8 +17,8 @@ _BR02_LO, _BR02_HI = _cr_get_range("br02_weight_impossible")  # 10, 125 kg
 _BR03_LO, _BR03_HI = _cr_get_range("br03_height_impossible")  # 50, 200 cm
 
 
-class KKMQualityChecker:
-    """Business rule validation for KKM school health measurement data"""
+class QualityChecker:
+    """Business rule validation for school-health measurement data"""
     
     def __init__(self, df: pd.DataFrame, range_overrides: dict | None = None):
         self.df = df
@@ -31,7 +31,7 @@ class KKMQualityChecker:
     def check_all_rules(self) -> Dict:
         """Run all business rules and return consolidated report"""
         print("\n" + "="*60)
-        print("KKM DATA QUALITY VALIDATION")
+        print("DATA QUALITY VALIDATION")
         print("="*60)
         
         self.check_br01_null_measurement_dates()
@@ -75,7 +75,7 @@ class KKMQualityChecker:
                     "row_count": total,
                     "pct_total": 100.0,
                     "severity": "CRITICAL",
-                    "recommended_fix": "Request actual measurement dates from KKM. For 2024, use school year (2024) as proxy date only.",
+                    "recommended_fix": "Request actual measurement dates from the data provider. For 2024, use school year (2024) as proxy date only.",
                 })
                 # Store sample of affected rows (first 100)
                 self.affected_rows["BR-01"] = self.df.head(100).to_dict('records')
@@ -186,7 +186,7 @@ class KKMQualityChecker:
                     "row_count": len(dupes),
                     "pct_total": round(len(dupes) / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "WARNING",
-                    "recommended_fix": "Investigate duplicates. If same student, keep most recent. If different students, escalate to KKM.",
+                    "recommended_fix": "Investigate duplicates. If same student, keep most recent. If different students, escalate for review.",
                 })
                 # Store ALL duplicate rows (up to 1000), sorted by ID for easy comparison
                 self.affected_rows["BR-04"] = dupes_sorted.head(1000).to_dict('records')
@@ -228,7 +228,7 @@ class KKMQualityChecker:
                     "row_count": len(invalid),
                     "pct_total": round(len(invalid) / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "WARNING",
-                    "recommended_fix": "Exclude from gender-stratified analysis. Flag for KKM review.",
+                    "recommended_fix": "Exclude from gender-stratified analysis. Flag for review.",
                 })
                 self.affected_rows["BR-05"] = invalid.head(100).to_dict('records')
     
@@ -259,7 +259,7 @@ class KKMQualityChecker:
                     "row_count": unusual.sum(),
                     "pct_total": round(unusual.sum() / len(self.df) * 100, 2) if len(self.df) > 0 else 0,
                     "severity": "INFO",
-                    "recommended_fix": "Clarify with KKM: include or exclude non-Tahun Satu records? Age-validate against Tarikh Lahir.",
+                    "recommended_fix": "Clarify with the data provider: include or exclude non-Tahun Satu records? Age-validate against Tarikh Lahir.",
                 })
                 self.affected_rows["BR-06"] = self.df[unusual].head(100).to_dict('records')
     
@@ -395,17 +395,17 @@ class KKMQualityChecker:
                 self.affected_rows["BR-09"] = self.df[suspicious].head(100).to_dict('records')
 
 
-def analyze_kkm_quality(df: pd.DataFrame, range_overrides: dict | None = None) -> Dict:
+def analyze_quality(df: pd.DataFrame, range_overrides: dict | None = None) -> Dict:
     """
-    Main entry point for KKM data quality analysis
+    Main entry point for data quality analysis
 
     Args:
-        df: DataFrame with KKM Berat & Tinggi data
+        df: DataFrame with weight & height data
         range_overrides: optional {registry_key: {min,max}} applied to BR-02/BR-03
             (br02_weight_impossible / br03_height_impossible) for this run.
 
     Returns:
         Dictionary with quality report and affected rows
     """
-    checker = KKMQualityChecker(df, range_overrides)
+    checker = QualityChecker(df, range_overrides)
     return checker.check_all_rules()
