@@ -120,9 +120,9 @@ GENDER_VALID = {"M", "F"}
 # ─── C4 CATEGORICAL VALIDATION SETS (Families 10-11) ──────────────────────────
 # Membership is tested case-insensitively (source value is lower()-cased first).
 # Generous on known synonyms so genuine values are never flagged "unknown" — a
-# flag here means a value outside the recognised KKM vocabulary, for review.
+# flag here means a value outside the recognised default vocabulary, for review.
 
-KKM_VACCINE_SET = {
+VACCINE_SET = {
     "bcg", "hib", "polio", "opv", "ipv", "dtap", "dpt", "mmr",
     "hepatitis b", "hep b", "rotavirus", "pneumococcal", "pcv",
 }
@@ -208,6 +208,56 @@ SARAWAK_BAHAGIAN_MAP = {
     "niah": "Bahagian Miri", "subis": "Bahagian Miri",
     "limbang": "Bahagian Limbang", "lawas": "Bahagian Limbang",
 }
+
+# ─── DATASET VOCABULARY PROFILE (config-driven) ───────────────────────────────
+# The valid-value sets and normalisation/geo maps above are the *bundled default
+# profile* (a child-growth / nutrition dataset). They are spelling/presentation
+# aids only — never the source of truth for WHO classification. To reuse SmartDQC
+# on another dataset, point SMARTDQC_VOCAB_PROFILE at a JSON file whose top-level
+# keys are any of the names below; provided keys replace the default at import
+# time. No code change needed; unknown keys are ignored.
+_VOCAB_OVERRIDABLE = (
+    "STATUS_BERAT_VALID", "STATUS_TINGGI_VALID", "STATUS_BMI_VALID",
+    "INCOME_VALID", "GENDER_VALID", "VACCINE_SET", "AGENSI_SET",
+    "FACILITY_SET", "ETHNIC_VALID", "GENDER_MAP", "INCOME_MAP",
+    "BMI_GROUPED_MAP", "SABAH_KAWASAN_MAP", "SARAWAK_BAHAGIAN_MAP",
+)
+
+
+def _load_vocab_profile() -> None:
+    """Override default vocab from SMARTDQC_VOCAB_PROFILE (JSON path), if set.
+
+    Lists become sets for the *_VALID / *_SET names; objects stay dicts for the
+    *_MAP names. Silently keeps the defaults on any error so a bad or missing
+    profile never breaks startup.
+    """
+    import json
+    import os
+
+    path = os.environ.get("SMARTDQC_VOCAB_PROFILE")
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            profile = json.load(fh)
+    except (OSError, ValueError):
+        return
+    if not isinstance(profile, dict):
+        return
+    g = globals()
+    for name in _VOCAB_OVERRIDABLE:
+        if name not in profile:
+            continue
+        val = profile[name]
+        current = g.get(name)
+        if isinstance(current, set) and isinstance(val, list):
+            g[name] = set(val)
+        elif isinstance(current, dict) and isinstance(val, dict):
+            g[name] = val
+
+
+_load_vocab_profile()
+
 
 # ─── AUTO-MAPPING HINTS ───────────────────────────────────────────────────────
 # Each source type maps standard field names to lists of possible column header

@@ -73,7 +73,7 @@ def build_aggregated_table(report: dict) -> list[dict]:
 
             # National overall
             rows.append(_row(age_label, ind_key, ind_data, source,
-                             "Kebangsaan", "Malaysia", ind_data.get("overall", {})))
+                             "Kebangsaan", "National", ind_data.get("overall", {})))
 
             # Every breakdown collapses into one (pecahan, kategori) pair
             for key, pecahan, val_field in BREAKDOWNS:

@@ -22,7 +22,7 @@ except Exception:
     ZSCORE_AVAILABLE = False
 
 from ..utils.ic_validator import extract_ic_gender_digit, validate_ic, extract_ic_birthdate
-from ..config import INCOME_VALID, KKM_VACCINE_SET, AGENSI_SET, FACILITY_SET, ETHNIC_VALID
+from ..config import INCOME_VALID, VACCINE_SET, AGENSI_SET, FACILITY_SET, ETHNIC_VALID
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -776,7 +776,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
         if _on("review_vaccine_unknown"):
             _vc = find_col(["vaccine_name", "vaksin", "vaccine"])
             if _vc and _vc in df.columns:
-                _flag(df, _unknown_mask(df[_vc], KKM_VACCINE_SET), "review_vaccine_unknown")
+                _flag(df, _unknown_mask(df[_vc], VACCINE_SET), "review_vaccine_unknown")
         if _on("review_agensi_unknown"):
             _ac = find_col(["agensi", "agency"])
             if _ac and _ac in df.columns:
