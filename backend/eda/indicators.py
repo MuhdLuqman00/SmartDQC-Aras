@@ -1,5 +1,5 @@
 """
-Nutrition indicator computation for KKM child nutrition dashboard.
+Nutrition indicator computation for the child nutrition dashboard.
 
 Strategy (WHO 2006 first):
   1. If WHO z-scores are available (waz, haz, baz computed), use z-score-derived

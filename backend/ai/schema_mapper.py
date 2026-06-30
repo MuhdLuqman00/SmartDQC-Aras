@@ -9,7 +9,7 @@ import re
 from backend.config import STANDARD_SCHEMA
 from backend.ai.ollama_client import generate
 
-_SCHEMA_SYSTEM = """You are a data schema mapper for Malaysian health data.
+_SCHEMA_SYSTEM = """You are a data schema mapper for health data.
 Given a list of raw column names and sample values, map each raw column to a
 standard field name from the provided schema. Respond ONLY with valid JSON:
 {"standard_field_name": "raw_column_name_or_null", ...}

@@ -67,7 +67,7 @@ def _result_to_chart(result) -> str | None:
 
     return None
 
-CODE_SYSTEM = """You are a Python/pandas code generator for KKM health data analysis.
+CODE_SYSTEM = """You are a Python/pandas code generator for health data analysis.
 Given a user question and a DataFrame schema, write pandas code to answer it.
 Rules:
 - There is exactly ONE DataFrame, available as `df`. There are NOT multiple
@@ -89,7 +89,7 @@ Rules:
 - Match column names to the schema EXACTLY (they are case- and spelling-sensitive).
 - Return only the code block, no explanation."""
 
-ANSWER_SYSTEM = """You are SmartDQC, a bilingual (Bahasa Malaysia and English) data analyst for KKM.
+ANSWER_SYSTEM = """You are SmartDQC, a bilingual (Bahasa Malaysia and English) data analyst.
 Your readers are non-technical health staff. Given a user question and the
 computed result, reply with:
   - "answer": the result stated plainly in both languages.

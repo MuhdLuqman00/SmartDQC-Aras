@@ -1,6 +1,6 @@
 """Client-friendly Data Dictionary exports (Excel + PDF).
 
-The /data-dictionary endpoint returns technical JSON; non-technical KKM users
+The /data-dictionary endpoint returns technical JSON; non-technical users
 need a readable spreadsheet or printable document. Both renderers flatten the
 source + derived field definitions into plain rows:
     Field | Category | Type | Description
@@ -15,7 +15,7 @@ from openpyxl.utils import get_column_letter
 
 from .report_template_spec import BRAND_NAVY, BRAND_BG
 
-# Bahasa Melayu type labels — the audience reads BM.
+# Bahasa Melayu type labels — BM is the default locale.
 _TYPE_BM = {
     "identifier":  "Pengenalan",
     "categorical": "Kategori",

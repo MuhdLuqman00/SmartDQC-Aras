@@ -5,7 +5,7 @@ from .ollama_client import generate, OllamaError
 _ANTI_ECHO_RULES = """Rules (follow exactly):
 - Fill EVERY field with real, specific content derived from the dataset context. Never copy the template.
 - The "..." in the schema below are placeholders — replace each one. Never output a literal "..." or an empty string.
-- GROUNDING: Use ONLY the figures, percentages, dates, years, places and counts that appear in the dataset context above. NEVER invent or estimate any number, date, year, quarter, month, ringgit/RM amount, family/beneficiary count, district name, state name, or programme/policy name that is not explicitly present. If a specific figure is not given, describe it qualitatively rather than fabricating one.
+- GROUNDING: Use ONLY the figures, percentages, dates, years, places and counts that appear in the dataset context above. NEVER invent or estimate any number, date, year, quarter, month, currency amount, family/beneficiary count, district name, state name, or programme/policy name that is not explicitly present. If a specific figure is not given, describe it qualitatively rather than fabricating one.
 - The total record count is EXACTLY the number stated in the dataset context. Never state a different total in any field.
 - Do not confuse the indicators: stunting, wasting, underweight and overweight are distinct — describe each only with its own figure from the context.
 - Never output the words "in English", "in Bahasa Malaysia", "dalam bahasa Malaysia", or any field label as a value.
@@ -13,12 +13,12 @@ _ANTI_ECHO_RULES = """Rules (follow exactly):
 - Respond with valid JSON only. No markdown, no commentary outside the JSON."""
 
 INSIGHTS_SYSTEM = f"""/no_think
-You are SmartDQC, a bilingual (Bahasa Malaysia and English) data quality analyst for KKM (Kementerian Kesihatan Malaysia).
+You are SmartDQC, a bilingual (Bahasa Malaysia and English) data quality analyst.
 You analyse child nutrition and health data and produce structured JSON insights.
 {_ANTI_ECHO_RULES}"""
 
 RECOMMENDATIONS_SYSTEM = f"""/no_think
-You are SmartDQC, a bilingual (Bahasa Malaysia and English) public health advisor for KKM.
+You are SmartDQC, a bilingual (Bahasa Malaysia and English) public health advisor.
 You produce actionable recommendations based on data insights.
 {_ANTI_ECHO_RULES}"""
 
@@ -191,7 +191,7 @@ def _insights_fallback(message_en: str, message_bm: str, flag: str) -> dict:
 
 def generate_insights(eda_result: dict) -> dict:
     context = build_context(eda_result)
-    prompt = f"""Based on this KKM health dataset analysis, produce a JSON response with executive summary and 5W1H insights.
+    prompt = f"""Based on this health dataset analysis, produce a JSON response with executive summary and 5W1H insights.
 
 Dataset context:
 {context}
