@@ -16,6 +16,7 @@ v2 (current):
 
 from __future__ import annotations
 
+import os
 import re
 from collections import defaultdict
 from datetime import date, datetime
@@ -274,8 +275,16 @@ def _dob_equal(a: Any, b: Any, tol_days: int = 1) -> bool:
 # so the UI can render the "unified longitudinal profile" the spec demands.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Per-spec preference when canonical-identity ties on frequency + recency.
-_SOURCE_PRIORITY = ["MyVASS", "myvass", "KKM", "kkm", "NCDC", "ncdc"]
+# Preference order when canonical-identity ties on frequency + recency. The
+# bundled default reflects the original dataset's sources; override per deployment
+# with SMARTDQC_SOURCE_PRIORITY (comma-separated source tags, most-preferred
+# first). Unknown sources go last regardless.
+_DEFAULT_SOURCE_PRIORITY = ["MyVASS", "myvass", "KKM", "kkm", "NCDC", "ncdc"]
+_SOURCE_PRIORITY = (
+    [s.strip() for s in os.environ["SMARTDQC_SOURCE_PRIORITY"].split(",") if s.strip()]
+    if os.environ.get("SMARTDQC_SOURCE_PRIORITY")
+    else list(_DEFAULT_SOURCE_PRIORITY)
+)
 
 
 def _source_priority(src: str | None) -> int:

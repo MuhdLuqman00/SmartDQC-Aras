@@ -476,6 +476,30 @@ _SCHEMA_SIGNALS: dict[str, list[str]] = {
 }
 
 
+def _merge_source_signals() -> None:
+    """Extend/replace per-schema detection signals from SMARTDQC_SOURCE_SIGNALS
+    (JSON: {source_type: ["signal", ...]}). Lets a new dataset be recognised by
+    score_source_types without code changes; the built-ins are the default."""
+    import json
+
+    path = os.environ.get("SMARTDQC_SOURCE_SIGNALS")
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            extra = json.load(fh)
+    except (OSError, ValueError):
+        return
+    if not isinstance(extra, dict):
+        return
+    for src, sigs in extra.items():
+        if isinstance(sigs, list):
+            _SCHEMA_SIGNALS[src] = [str(s) for s in sigs]
+
+
+_merge_source_signals()
+
+
 def score_source_types(df: "pd.DataFrame") -> list[dict]:
     """Return per-schema evidence scores for a DataFrame's columns.
 
