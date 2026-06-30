@@ -142,7 +142,7 @@ export function QualityPage() {
   const sevIcon = (sev: string) => {
     if (sev === 'critical') return <AlertCircle size={15} style={{ color: 'var(--danger)', flexShrink: 0 }} />;
     if (sev === 'warning')  return <AlertTriangle size={15} style={{ color: 'var(--warning)', flexShrink: 0 }} />;
-    return <Info size={15} style={{ color: 'var(--kkm-sky)', flexShrink: 0 }} />;
+    return <Info size={15} style={{ color: 'var(--brand-sky)', flexShrink: 0 }} />;
   };
 
   return (
@@ -296,7 +296,7 @@ export function QualityPage() {
                 <button
                   onClick={runAnomalyDetection}
                   disabled={anomalyLoading}
-                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: anomalyLoading ? 0.6 : 1 }}
+                  style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: anomalyLoading ? 0.6 : 1 }}
                 >
                   {anomalyLoading ? t('Running…', 'Sedang berjalan…') : t('Run Detection', 'Jalankan')}
                 </button>
@@ -309,7 +309,7 @@ export function QualityPage() {
 
             {anomalies !== null && (
               anomalies.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--kkm-teal)' }}>
+                <div style={{ fontSize: 13, color: 'var(--brand-teal)' }}>
                   {t('No anomalies detected.', 'Tiada anomali dikesan.')}
                 </div>
               ) : (

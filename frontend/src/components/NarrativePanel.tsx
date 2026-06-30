@@ -57,7 +57,7 @@ const W5H1_LABEL: Record<string, [string, string]> = {
 function prioColor(p?: string): string {
   if (p === 'high')   return 'var(--danger)';
   if (p === 'medium') return 'var(--warning)';
-  return 'var(--kkm-teal)';
+  return 'var(--brand-teal)';
 }
 
 export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
@@ -77,7 +77,7 @@ export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {summary && (
         <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--brand-sky)', fontWeight: 600, fontSize: 12 }}>
             <ScrollText size={13} /> {t('Executive Summary', 'Ringkasan Eksekutif')}
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-primary)' }}>{summary}</div>
@@ -86,7 +86,7 @@ export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
 
       {W5H1_ORDER.some(k => pick(insights[k])) && (
         <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, color: 'var(--brand-sky)', fontWeight: 600, fontSize: 12 }}>
             <Lightbulb size={13} /> {t('Insights (5W1H)', 'Wawasan (5W1H)')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -104,7 +104,7 @@ export function NarrativePanel({ raw }: { raw: NarrativeRaw }) {
 
       {visibleRecs.length > 0 && (
         <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, color: 'var(--brand-sky)', fontWeight: 600, fontSize: 12 }}>
             <ListChecks size={13} /> {t('Recommendations', 'Cadangan')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

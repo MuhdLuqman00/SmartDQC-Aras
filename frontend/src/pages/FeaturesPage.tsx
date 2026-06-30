@@ -14,7 +14,7 @@ interface Feat {
   descEn: string; descBm: string;
   to: string;
   /* Plain-language "key detail" shown in the card footer. Replaces the raw
-     API paths (dev noise for KKM users) the audit flagged (14 · P3). */
+     API paths (dev noise for end users) the audit flagged (14 · P3). */
   techEn: string; techBm: string;
 }
 
@@ -62,8 +62,8 @@ const FEATURES: Feat[] = [
     descEn: 'Cross-dataset record linkage by IC number.', descBm: 'Pautan rekod merentas dataset mengikut nombor IC.',
     to: '/linkage', techEn: 'Links records across datasets by IC', techBm: 'Pautkan rekod merentas dataset mengikut IC' },
   { n: 15, icon: <FileText size={18} />,   en: 'Automated Reports', bm: 'Laporan Automatik',
-    descEn: 'KKM-branded PDF & PPTX with charts.', descBm: 'PDF & PPTX berjenama KKM dengan carta.',
-    to: '/reports', techEn: 'KKM-branded PDF and PowerPoint', techBm: 'PDF dan PowerPoint berjenama KKM' },
+    descEn: 'Branded PDF & PPTX with charts.', descBm: 'PDF & PPTX berjenama dengan carta.',
+    to: '/reports', techEn: 'Branded PDF and PowerPoint', techBm: 'PDF dan PowerPoint berjenama' },
   { n: 16, icon: <Target size={18} />,     en: 'Benchmarking & Targets', bm: 'Penanda Aras & Sasaran',
     descEn: 'RAG vs NPAN/WHO targets + per-district target-year trajectory.', descBm: 'RAG lwn sasaran NPAN/WHO + trajektori sasaran setiap daerah.',
     to: '/geo', techEn: 'Tracks progress to NPAN & WHO targets', techBm: 'Jejak kemajuan ke sasaran NPAN & WHO' },
@@ -99,9 +99,9 @@ export function FeaturesPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 11, flexShrink: 0,
-          /* --kkm-sky reads clearly on the info tint in BOTH themes; the old
+          /* --brand-sky reads clearly on the info tint in BOTH themes; the old
              --primary-light blended into --info-bg's dark-blue in dark mode. */
-          background: 'var(--info-bg)', color: 'var(--kkm-sky)',
+          background: 'var(--info-bg)', color: 'var(--brand-sky)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {f.icon}

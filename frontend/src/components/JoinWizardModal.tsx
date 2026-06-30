@@ -160,14 +160,14 @@ export function JoinWizardModal({ left, right, onClose, onJoined }: Props): JSX.
   };
   const stepDot = (n: number): React.CSSProperties => ({
     width: 26, height: 26, borderRadius: '50%',
-    background: n <= step ? 'var(--kkm-blue)' : 'var(--surface-2)',
+    background: n <= step ? 'var(--brand-blue)' : 'var(--surface-2)',
     color: n <= step ? '#fff' : 'var(--text-muted)',
-    border: `1px solid ${n <= step ? 'var(--kkm-blue)' : 'var(--border)'}`,
+    border: `1px solid ${n <= step ? 'var(--brand-blue)' : 'var(--border)'}`,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 12, fontWeight: 700,
   });
   const btnPrimary: React.CSSProperties = {
-    background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+    background: 'var(--brand-blue)', color: '#fff', border: 'none',
     borderRadius: 'var(--radius-btn)', padding: '9px 18px',
     fontWeight: 600, fontSize: 13, cursor: 'pointer',
     display: 'flex', alignItems: 'center', gap: 6,
@@ -188,7 +188,7 @@ export function JoinWizardModal({ left, right, onClose, onJoined }: Props): JSX.
       <div className="modal-card" style={cardBg} onClick={e => e.stopPropagation()}>
         {/* ── Header ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <GitMerge size={20} style={{ color: 'var(--kkm-blue)' }} />
+          <GitMerge size={20} style={{ color: 'var(--brand-blue)' }} />
           <h3 style={{ fontFamily: 'var(--font-body)', fontSize: 17, fontWeight: 700, margin: 0, flex: 1 }}>
             {t('Join Datasets', 'Cantum Set Data')}
           </h3>
@@ -307,7 +307,7 @@ export function JoinWizardModal({ left, right, onClose, onJoined }: Props): JSX.
                       <label key={col} style={{
                         display: 'flex', alignItems: 'center', gap: 8,
                         padding: '8px 12px', borderRadius: 8,
-                        border: `1px solid ${sel ? 'var(--kkm-blue)' : 'var(--border)'}`,
+                        border: `1px solid ${sel ? 'var(--brand-blue)' : 'var(--border)'}`,
                         background: sel ? 'rgba(0,163,224,0.08)' : 'var(--surface-2)',
                         cursor: 'pointer', fontSize: 13,
                       }}>
@@ -428,7 +428,7 @@ function JoinTypeOption({ selected, onSelect, titleEn, titleBm, descEn, descBm }
       onClick={onSelect}
       style={{
         padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-        border: `1px solid ${selected ? 'var(--kkm-blue)' : 'var(--border)'}`,
+        border: `1px solid ${selected ? 'var(--brand-blue)' : 'var(--border)'}`,
         background: selected ? 'rgba(0,163,224,0.08)' : 'var(--surface-2)',
         transition: 'all var(--transition)',
       }}
@@ -436,8 +436,8 @@ function JoinTypeOption({ selected, onSelect, titleEn, titleBm, descEn, descBm }
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{
           width: 14, height: 14, borderRadius: '50%',
-          border: `2px solid ${selected ? 'var(--kkm-blue)' : 'var(--border)'}`,
-          background: selected ? 'var(--kkm-blue)' : 'transparent',
+          border: `2px solid ${selected ? 'var(--brand-blue)' : 'var(--border)'}`,
+          background: selected ? 'var(--brand-blue)' : 'transparent',
           flexShrink: 0,
         }} />
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t(titleEn, titleBm)}</span>
@@ -456,7 +456,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
       borderRadius: 8, padding: '8px 12px',
     }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: accent ? 'var(--kkm-blue)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{value}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: accent ? 'var(--brand-blue)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{value}</div>
     </div>
   );
 }

@@ -25,7 +25,7 @@ export interface Aggregates {
 }
 
 /* Status palette migrated from the old generic RAG (#00b5a5/#e0a13c/#d9534f)
-   to the KKM Navy-Gold-Brick set: --status-good (sky), --status-watch (gold),
+   to the brand Navy-Gold-Brick set: --status-good (sky), --status-watch (gold),
    --status-critical (brick). Tokens defined in tokens.css. */
 export function ragToColor(rag: 'green' | 'amber' | 'red' | undefined): string {
   if (rag === 'green') return 'var(--status-good)';
@@ -82,7 +82,7 @@ export function computeAggregates(districts: District[], targets: AggregateTarge
 }
 
 /* Reverse of DashboardPage/GeoPage STATE_TO_CODE — display only.
-   Canonical "Pulau Pinang" preferred over "Penang" (matches MOH/KKM usage). */
+   Canonical "Pulau Pinang" preferred over "Penang" (canonical spelling). */
 const CODE_TO_STATE_DISPLAY: Record<string, string> = {
   jhr: 'Johor',
   kdh: 'Kedah',
@@ -156,7 +156,7 @@ export function ChoroplethMap({ districts, selectedDistrict, onDistrictClick }: 
                   key={geo.rsmKey}
                   geography={geo}
                   fill={fill}
-                  stroke={isSelected ? 'var(--kkm-sky)' : 'var(--text-secondary)'}
+                  stroke={isSelected ? 'var(--brand-sky)' : 'var(--text-secondary)'}
                   strokeWidth={isSelected ? 3 : 1.6}
                   style={{
                     /* Boundaries on an 800-unit viewBox scale down ~0.65× in the

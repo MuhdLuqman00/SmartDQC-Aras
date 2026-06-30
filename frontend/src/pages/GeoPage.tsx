@@ -207,7 +207,7 @@ function KpiCard({ label, value, status, onClick, isSelected }: {
       onClick={onClick}
       style={{
         background: isSelected ? 'var(--surface-3)' : 'var(--surface-2)',
-        border: isSelected ? '2px solid var(--kkm-sky)' : '0.5px solid var(--border)',
+        border: isSelected ? '2px solid var(--brand-sky)' : '0.5px solid var(--border)',
         borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6,
         cursor: onClick ? 'pointer' : 'default', textAlign: 'left', width: '100%',
         transition: 'border-color var(--transition), background var(--transition)',
@@ -548,7 +548,7 @@ export function GeoPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {risk === null && (
                 <button onClick={runRisk} disabled={riskLoading}
-                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: riskLoading ? 0.6 : 1 }}>
+                  style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: riskLoading ? 0.6 : 1 }}>
                   {riskLoading ? t('Scoring…', 'Memarkah…') : t('Run Risk Scoring', 'Jalankan Pemarkahan')}
                 </button>
               )}

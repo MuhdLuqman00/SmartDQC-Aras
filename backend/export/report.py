@@ -1,6 +1,6 @@
-"""SmartDQC report builders — KKM-formatted PDF and PPTX output.
+"""SmartDQC report builders — bilingual PDF and PPTX output.
 
-Format reference: MOH Malaysia Annual Report 2024 (teal section bars,
+Format reference: national health annual-report style (teal section bars,
 bilingual headers, alternating-row tables, footer stamp).
 
 Content (Feature #15):
@@ -31,9 +31,10 @@ from reportlab.platypus import (
 
 from backend.export.charts import chart_quality_bar, chart_nutritional_rates, chart_kpi_vs_target
 
+from backend import branding
 from backend.export.report_template_spec import (
-    KKM_TEAL, KKM_TEAL_DARK, KKM_TEAL_LIGHT,
-    KKM_NAVY, KKM_MID_GRAY, KKM_RULE_LINE,
+    BRAND_TEAL, BRAND_TEAL_DARK, BRAND_TEAL_LIGHT,
+    BRAND_NAVY, BRAND_MID_GRAY, BRAND_RULE_LINE,
     SECTION_LABELS, FOOTER_TEMPLATE, METHODOLOGY_LINES,
     NUTRITIONAL_TABLE_HEADERS, KPI_TABLE_HEADERS,
 )
@@ -124,7 +125,7 @@ def _section_bar_pptx(slide, key: str):
     )
     tf = tb.text_frame
     tb.fill.solid()
-    tb.fill.fore_color.rgb = _rgb(KKM_TEAL)
+    tb.fill.fore_color.rgb = _rgb(BRAND_TEAL)
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.LEFT
     run = p.add_run()
@@ -135,30 +136,30 @@ def _section_bar_pptx(slide, key: str):
 
 
 def _footer_bar_pptx(slide, district: str):
-    footer = FOOTER_TEMPLATE.format(district=district, year=date.today().year)
+    footer = FOOTER_TEMPLATE.format(district=district, year=date.today().year, org=branding.ORG_NAME_BM)
     tb = slide.shapes.add_textbox(
         Inches(0), Inches(7.2), Inches(13.33), Inches(0.28),
     )
     tf = tb.text_frame
     tb.fill.solid()
-    tb.fill.fore_color.rgb = _rgb(KKM_TEAL_DARK)
+    tb.fill.fore_color.rgb = _rgb(BRAND_TEAL_DARK)
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.CENTER
     run = p.add_run()
     run.text = footer
     run.font.size = Pt(7.5)
-    run.font.color.rgb = _rgb(KKM_TEAL_LIGHT)
+    run.font.color.rgb = _rgb(BRAND_TEAL_LIGHT)
 
 
 def _pptx_table(slide, rows: list[list[str]], l, t, w, h,
                 status_cols: list[int] | None = None):
-    """Add a styled KKM table. status_cols = col indices to colour-code."""
+    """Add a styled table. status_cols = col indices to colour-code."""
     n_r, n_c = len(rows), len(rows[0])
     tbl = slide.shapes.add_table(
         n_r, n_c, Inches(l), Inches(t), Inches(w), Inches(h),
     ).table
 
-    status_map = {"Green": KKM_TEAL, "Amber": "#E8A020", "Red": "#C0392B"}
+    status_map = {"Green": BRAND_TEAL, "Amber": "#E8A020", "Red": "#C0392B"}
 
     for ri, row in enumerate(rows):
         for ci, val in enumerate(row):
@@ -172,7 +173,7 @@ def _pptx_table(slide, rows: list[list[str]], l, t, w, h,
 
             if ri == 0:
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = _rgb(KKM_TEAL)
+                cell.fill.fore_color.rgb = _rgb(BRAND_TEAL)
                 run.font.color.rgb = _rgb("#FFFFFF")
             elif status_cols and ci in status_cols and val in status_map:
                 cell.fill.solid()
@@ -181,17 +182,17 @@ def _pptx_table(slide, rows: list[list[str]], l, t, w, h,
                 run.font.bold = True
             elif ri % 2 == 0:
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = _rgb(KKM_TEAL_LIGHT)
-                run.font.color.rgb = _rgb(KKM_NAVY)
+                cell.fill.fore_color.rgb = _rgb(BRAND_TEAL_LIGHT)
+                run.font.color.rgb = _rgb(BRAND_NAVY)
             else:
-                run.font.color.rgb = _rgb(KKM_NAVY)
+                run.font.color.rgb = _rgb(BRAND_NAVY)
 
 
 # --- individual slides -------------------------------------------------------
 
 def _slide_cover(prs, layout, eda: dict, district: str, date_range: str):
     s = prs.slides.add_slide(layout)
-    _bg(s, KKM_TEAL_DARK)
+    _bg(s, BRAND_TEAL_DARK)
     today  = date.today().strftime("%d %B %Y")
     # run_eda emits source_type/total_rows at the top level; the legacy
     # nested "summary" shape is kept only as a fallback.
@@ -200,17 +201,17 @@ def _slide_cover(prs, layout, eda: dict, district: str, date_range: str):
     rows   = eda.get("total_rows",
                      eda.get("summary", {}).get("total_rows", "N/A"))
 
-    _box(s, "Kementerian Kesihatan Malaysia", 0.6, 0.5, 12, 0.45,
-         size=11, color=KKM_TEAL_LIGHT)
+    _box(s, branding.ORG_NAME_BM, 0.6, 0.5, 12, 0.45,
+         size=11, color=BRAND_TEAL_LIGHT)
     _box(s, "LAPORAN PEMAKANAN SmartDQC", 0.6, 1.1, 12, 1.1,
          size=34, bold=True)
     _box(s, "SMARTDQC NUTRITION REPORT", 0.6, 2.1, 12, 0.55,
-         size=15, color=KKM_TEAL_LIGHT)
+         size=15, color=BRAND_TEAL_LIGHT)
 
     meta = f"Daerah / District: {district}  |  Sumber / Source: {source}  |  Rekod / Records: {rows}"
     if date_range:
         meta += f"  |  Tempoh / Period: {date_range}"
-    _box(s, meta, 0.6, 3.0, 12.0, 0.45, size=10, color=KKM_TEAL_LIGHT)
+    _box(s, meta, 0.6, 3.0, 12.0, 0.45, size=10, color=BRAND_TEAL_LIGHT)
     _box(s, today, 0.6, 3.45, 12.0, 0.4, size=10, color="#FFFFFF")
     _footer_bar_pptx(s, district)
 
@@ -221,13 +222,13 @@ def _slide_exec_summary(prs, layout, narrative: dict, district: str):
     _section_bar_pptx(s, "executive_summary")
     exec_sum = narrative.get("executive_summary", {})
     _box(s, "Bahasa Malaysia", 0.5, 0.75, 6.0, 0.38,
-         size=10, bold=True, color=KKM_TEAL)
+         size=10, bold=True, color=BRAND_TEAL)
     _box(s, exec_sum.get("bm", "-"), 0.5, 1.15, 5.9, 5.7,
-         size=10, color=KKM_NAVY)
+         size=10, color=BRAND_NAVY)
     _box(s, "English", 7.0, 0.75, 6.0, 0.38,
-         size=10, bold=True, color=KKM_TEAL)
+         size=10, bold=True, color=BRAND_TEAL)
     _box(s, exec_sum.get("en", "-"), 7.0, 1.15, 5.9, 5.7,
-         size=10, color=KKM_NAVY)
+         size=10, color=BRAND_NAVY)
     _footer_bar_pptx(s, district)
 
 
@@ -275,7 +276,7 @@ def _quality_overview_rows(eda: dict) -> list[list[str]]:
 
 def _slide_quality(prs, layout, eda: dict, district: str, charts: set[str] | None = None):
     s = prs.slides.add_slide(layout)
-    _bg(s, KKM_TEAL_LIGHT)
+    _bg(s, BRAND_TEAL_LIGHT)
     _section_bar_pptx(s, "quality_overview")
 
     rows = [["Metric / Metrik", "Value / Nilai"]]
@@ -311,13 +312,13 @@ def _slide_recommendations(prs, layout, narrative: dict, district: str):
         action_en = _action_for(rec, "en")
         # Priority pill spans both columns; per-language action sits with its body.
         _box(s, f"[{priority}]", 0.5, y, 1.2, 0.45,
-             size=12, bold=True, color=KKM_NAVY)
+             size=12, bold=True, color=BRAND_NAVY)
         _box(s, action_bm, 1.8, y, 4.7, 0.45,
-             size=12, bold=True, color=KKM_NAVY)
+             size=12, bold=True, color=BRAND_NAVY)
         _box(s, action_en, 6.7, y, 6.0, 0.45,
-             size=12, bold=True, color=KKM_NAVY)
-        _box(s, rec.get("bm", ""), 0.5, y + 0.48, 6.0, 1.3, size=10, color=KKM_MID_GRAY)
-        _box(s, rec.get("en",  ""), 6.7, y + 0.48, 6.0, 1.3, size=10, color=KKM_MID_GRAY)
+             size=12, bold=True, color=BRAND_NAVY)
+        _box(s, rec.get("bm", ""), 0.5, y + 0.48, 6.0, 1.3, size=10, color=BRAND_MID_GRAY)
+        _box(s, rec.get("en",  ""), 6.7, y + 0.48, 6.0, 1.3, size=10, color=BRAND_MID_GRAY)
     _footer_bar_pptx(s, district)
 
 
@@ -325,7 +326,7 @@ def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: s
                            charts: set[str] | None = None):
     breakdown = kpi_result.get("by_daerah") or kpi_result.get("by_state") or []
     s = prs.slides.add_slide(layout)
-    _bg(s, KKM_TEAL_LIGHT)
+    _bg(s, BRAND_TEAL_LIGHT)
     _section_bar_pptx(s, "indicator_table")
 
     headers = NUTRITIONAL_TABLE_HEADERS[lang]
@@ -346,7 +347,7 @@ def _slide_indicator_table(prs, layout, kpi_result: dict, district: str, lang: s
         _pptx_table(s, rows, l=0.4, t=0.75, w=12.5, h=table_h)
     else:
         _box(s, "No district breakdown available.", 0.5, 1.5, 12, 1.0,
-             size=11, color=KKM_NAVY)
+             size=11, color=BRAND_NAVY)
 
     _footer_bar_pptx(s, district)
 
@@ -363,7 +364,7 @@ def _slide_indicator_charts(prs, layout, kpi_result: dict, district: str,
         return
 
     s = prs.slides.add_slide(layout)
-    _bg(s, KKM_TEAL_LIGHT)
+    _bg(s, BRAND_TEAL_LIGHT)
     _section_bar_pptx(s, "indicator_table")
 
     # One chart → centred wide; two charts → side by side. Aspect preserved.
@@ -378,7 +379,7 @@ def _slide_indicator_charts(prs, layout, kpi_result: dict, district: str,
 
 def _slide_methodology(prs, layout, district: str):
     s = prs.slides.add_slide(layout)
-    _bg(s, KKM_TEAL_DARK)
+    _bg(s, BRAND_TEAL_DARK)
     _section_bar_pptx(s, "methodology")
     body = "\n".join(f"  - {line}" for line in METHODOLOGY_LINES)
     _box(s, body, 0.5, 0.75, 12.3, 6.3, size=9.5)
@@ -443,29 +444,29 @@ def _pdf_styles():
     h2 = ParagraphStyle(
         "H2", parent=base["Normal"],
         fontSize=12, leading=16, fontName="Helvetica-Bold",
-        textColor=rl_colors.HexColor(KKM_TEAL), spaceBefore=8,
+        textColor=rl_colors.HexColor(BRAND_TEAL), spaceBefore=8,
     )
     body = ParagraphStyle(
         "Body", parent=base["Normal"],
         fontSize=10, leading=15,
-        textColor=rl_colors.HexColor(KKM_NAVY),
+        textColor=rl_colors.HexColor(BRAND_NAVY),
     )
     small = ParagraphStyle(
         "Small", parent=base["Normal"],
         fontSize=8.5, leading=13,
-        textColor=rl_colors.HexColor(KKM_MID_GRAY),
+        textColor=rl_colors.HexColor(BRAND_MID_GRAY),
     )
     return cover_h, sec_label, h2, body, small
 
 
 def _section_bar_pdf(label_en: str, label_bm: str, sec_label_style) -> Table:
-    """Teal header bar matching KKM section style."""
+    """Teal header bar matching the report section style."""
     tbl = Table(
         [[Paragraph(f"{label_en}  /  {label_bm}", sec_label_style)]],
         colWidths=[17 * cm],
     )
     tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor(KKM_TEAL)),
+        ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor(BRAND_TEAL)),
         ("TOPPADDING",    (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("LEFTPADDING",   (0, 0), (-1, -1), 10),
@@ -475,13 +476,13 @@ def _section_bar_pdf(label_en: str, label_bm: str, sec_label_style) -> Table:
 
 def _base_table_style() -> list:
     return [
-        ("BACKGROUND",    (0, 0), (-1, 0),  rl_colors.HexColor(KKM_TEAL)),
+        ("BACKGROUND",    (0, 0), (-1, 0),  rl_colors.HexColor(BRAND_TEAL)),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  rl_colors.white),
         ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
         ("FONTSIZE",      (0, 0), (-1, -1), 9),
-        ("GRID",          (0, 0), (-1, -1), 0.4, rl_colors.HexColor(KKM_RULE_LINE)),
+        ("GRID",          (0, 0), (-1, -1), 0.4, rl_colors.HexColor(BRAND_RULE_LINE)),
         ("ROWBACKGROUNDS",(0, 1), (-1, -1),
-         [rl_colors.white, rl_colors.HexColor(KKM_TEAL_LIGHT)]),
+         [rl_colors.white, rl_colors.HexColor(BRAND_TEAL_LIGHT)]),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING",    (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
@@ -493,7 +494,7 @@ def _base_table_style() -> list:
 def _make_footer_canvas(district: str, year: int):
     from reportlab.pdfgen.canvas import Canvas
 
-    class KKMCanvas(Canvas):
+    class BrandCanvas(Canvas):
         def showPage(self):
             _stamp_footer(self, district, year)
             super().showPage()
@@ -502,14 +503,14 @@ def _make_footer_canvas(district: str, year: int):
             _stamp_footer(self, district, year)
             super().save()
 
-    return KKMCanvas
+    return BrandCanvas
 
 
 def _stamp_footer(canvas, district: str, year: int):
-    text = FOOTER_TEMPLATE.format(district=district, year=year)
+    text = FOOTER_TEMPLATE.format(district=district, year=year, org=branding.ORG_NAME_BM)
     canvas.saveState()
     canvas.setFont("Helvetica", 7)
-    canvas.setFillColor(rl_colors.HexColor(KKM_MID_GRAY))
+    canvas.setFillColor(rl_colors.HexColor(BRAND_MID_GRAY))
     canvas.drawCentredString(A4[0] / 2.0, 0.7 * cm, text)
     canvas.restoreState()
 
@@ -536,14 +537,14 @@ def _pdf_section_cover(story, eda: dict, district: str, date_range: str,
             [Paragraph("LAPORAN PEMAKANAN SmartDQC", cover_h)],
             [Paragraph("SMARTDQC NUTRITION REPORT",  cover_h)],
             [Paragraph(
-                f'<font color="{KKM_TEAL_LIGHT}">{meta}<br/>{today}</font>',
+                f'<font color="{BRAND_TEAL_LIGHT}">{meta}<br/>{today}</font>',
                 small,
             )],
         ],
         colWidths=[17 * cm],
     )
     cover_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor(KKM_TEAL_DARK)),
+        ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor(BRAND_TEAL_DARK)),
         ("TOPPADDING",    (0, 0), (-1, -1), 14),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
         ("LEFTPADDING",   (0, 0), (-1, -1), 16),

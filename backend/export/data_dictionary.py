@@ -13,7 +13,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from .report_template_spec import KKM_NAVY, KKM_BG
+from .report_template_spec import BRAND_NAVY, BRAND_BG
 
 # Bahasa Melayu type labels — the audience reads BM.
 _TYPE_BM = {
@@ -48,10 +48,10 @@ def to_excel(source_fields: dict, derived_fields: dict) -> bytes:
     ws = wb.active
     ws.title = "Kamus Data"
 
-    navy = KKM_NAVY.lstrip("#")
+    navy = BRAND_NAVY.lstrip("#")
     header_fill = PatternFill("solid", fgColor=navy)
     header_font = Font(bold=True, color="FFFFFF", size=11)
-    band_fill = PatternFill("solid", fgColor=KKM_BG.lstrip("#"))
+    band_fill = PatternFill("solid", fgColor=BRAND_BG.lstrip("#"))
     thin = Side(style="thin", color="D9DEE8")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
@@ -101,8 +101,8 @@ def to_pdf(source_fields: dict, derived_fields: dict) -> bytes:
     )
 
     rows = _flatten(source_fields, derived_fields)
-    navy = colors.HexColor(KKM_NAVY)
-    band = colors.HexColor(KKM_BG)
+    navy = colors.HexColor(BRAND_NAVY)
+    band = colors.HexColor(BRAND_BG)
 
     styles = getSampleStyleSheet()
     cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=8, leading=10)

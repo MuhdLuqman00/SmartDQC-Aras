@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useLang } from '../context/LanguageContext';
 import { useSession } from '../context/SessionContext';
+import { BRAND } from '../config/brand';
 
 interface NavItem { path: string; en: string; bm: string; icon: React.ReactNode; adminOnly?: boolean; }
 interface Group { labelEn: string; labelBm: string; items: NavItem[]; }
@@ -81,15 +82,15 @@ export function Sidebar({ role, collapsed, onToggle }: Props): JSX.Element {
       width: collapsed ? 72 : 248,
       /* Flat navy "ink", not a gradient — a printed-document surface reads as
          deliberate, where a soft gradient reads as generic SaaS chrome. */
-      background: 'var(--kkm-deep)',
+      background: 'var(--brand-deep)',
       display: 'flex', flexDirection: 'column',
       transition: 'width var(--transition-lg)',
       overflow: 'hidden', flexShrink: 0,
       borderRight: '1px solid rgba(255,255,255,0.06)',
       position: 'relative',
     }}>
-      {/* Brand — pure-typographic ministerial letterhead. No monogram tile:
-          the serif wordmark + a single gold rule + the ministry register carry
+      {/* Brand — pure-typographic letterhead. No monogram tile:
+          the serif wordmark + a single gold rule + the org register carry
           the identity. A flat, document-like mark that reads as deliberate and
           can't be mistaken for a generated/stock badge. Height matches the
           TopBar (64px) so the divider below aligns with the page content line.
@@ -116,7 +117,7 @@ export function Sidebar({ role, collapsed, onToggle }: Props): JSX.Element {
               textTransform: 'uppercase', color: 'rgba(255,255,255,0.46)',
               whiteSpace: 'nowrap', lineHeight: 1,
             }}>
-              Kementerian Kesihatan Malaysia
+              {lang === 'en' ? BRAND.orgNameEn : BRAND.orgNameBm}
             </span>
           </div>
         )}

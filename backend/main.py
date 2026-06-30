@@ -4017,10 +4017,10 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
         # only the "Row Labels" row got blue-filled and no borders / column
         # widths / freeze panes were applied, so sections 2-4 looked unstyled
         # compared to the Executive Summary tab. This pass applies the same
-        # visual treatment everywhere, plus the new KKM Navy palette.
-        navy_hex = "1B2A4A"  # KKM Navy — header fill
-        navy_text_hex = "0F1B2F"  # KKM Navy Dark — bold title text
-        gold_text_hex = "C8962E"  # KKM Gold  — section-title accent
+        # visual treatment everywhere, plus the brand Navy palette.
+        navy_hex = "1B2A4A"  # Brand Navy — header fill
+        navy_text_hex = "0F1B2F"  # Brand Navy Dark — bold title text
+        gold_text_hex = "C8962E"  # Brand Gold  — section-title accent
         thin = Side(style="thin", color="D8DFEC")
         all_borders = Border(left=thin, right=thin, top=thin, bottom=thin)
         hdr_font = Font(bold=True, color="FFFFFF", size=11)

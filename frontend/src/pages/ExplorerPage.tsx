@@ -225,7 +225,7 @@ export function ExplorerPage() {
         { cache_id: cacheId, row_index: editing.rowId, column: editing.col, value: editValue },
       );
       const raw = r.data.row;
-      // Recompute _flagged client-side: use Data_Quality_Flag if present (KKM), else clinical bounds.
+      // Recompute _flagged client-side: use Data_Quality_Flag if present (provenance), else clinical bounds.
       const hasDQF   = 'Data_Quality_Flag' in raw;
       const newFlagged = hasDQF
         ? raw['Data_Quality_Flag'] !== 'Valid'
@@ -267,7 +267,7 @@ export function ExplorerPage() {
               target="_blank" rel="noreferrer"
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                background: 'var(--kkm-blue)', border: '1px solid var(--kkm-blue)',
+                background: 'var(--brand-blue)', border: '1px solid var(--brand-blue)',
                 borderRadius: 'var(--radius-btn)', padding: '7px 14px',
                 fontSize: 13, fontWeight: 600, color: 'var(--text-on-navy)',
               }}
@@ -425,8 +425,8 @@ export function ExplorerPage() {
                 aria-pressed={showAnalyzableOnly}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  background: showAnalyzableOnly ? 'var(--kkm-blue)' : 'var(--surface)',
-                  border: `1px solid ${showAnalyzableOnly ? 'var(--kkm-blue)' : 'var(--border)'}`,
+                  background: showAnalyzableOnly ? 'var(--brand-blue)' : 'var(--surface)',
+                  border: `1px solid ${showAnalyzableOnly ? 'var(--brand-blue)' : 'var(--border)'}`,
                   borderRadius: 'var(--radius-btn)', padding: '6px 12px',
                   fontSize: 12.5, fontWeight: 600,
                   color: showAnalyzableOnly ? 'var(--text-on-navy)' : 'var(--text-secondary)',
@@ -519,7 +519,7 @@ export function ExplorerPage() {
                         >
                           {c}
                           {sortCol === c && (
-                            <span style={{ marginLeft: 4, color: 'var(--kkm-blue)', fontWeight: 700 }} aria-hidden>
+                            <span style={{ marginLeft: 4, color: 'var(--brand-blue)', fontWeight: 700 }} aria-hidden>
                               {sortDir === 'asc' ? '↑' : '↓'}
                             </span>
                           )}
@@ -614,7 +614,7 @@ export function ExplorerPage() {
                                       style={{
                                         width: 120, padding: '2px 6px', fontSize: 12,
                                         fontFamily: 'var(--font-mono)',
-                                        border: `1px solid ${editError ? 'var(--danger)' : 'var(--kkm-blue)'}`,
+                                        border: `1px solid ${editError ? 'var(--danger)' : 'var(--brand-blue)'}`,
                                         borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text-primary)',
                                       }}
                                     />
@@ -633,7 +633,7 @@ export function ExplorerPage() {
                                     {row[c] == null
                                       ? <span style={{ color: 'var(--text-muted)' }}>—</span>
                                       : String(row[c])}
-                                    <Pencil className="edit-icon" size={11} style={{ color: 'var(--kkm-sky)' }} aria-hidden />
+                                    <Pencil className="edit-icon" size={11} style={{ color: 'var(--brand-sky)' }} aria-hidden />
                                   </span>
                                 )}
                               </td>

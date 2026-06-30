@@ -77,7 +77,7 @@ interface ClinicalEntry {
   overridden: boolean;
 }
 
-/* Tier badge palette — DOM (operational, KKM house rules), WHO (international
+/* Tier badge palette — DOM (operational, org house rules), WHO (international
    standard), PROXY (legacy approximation), GEO (geographic bound). */
 const CLINICAL_TIER_STYLE: Record<string, React.CSSProperties> = {
   WHO:   { background: 'var(--success-bg)',            color: 'var(--success)' },
@@ -270,7 +270,7 @@ export function SettingsPage() {
     await api.post('/settings/rules/toggle', { rule: code, enabled }).catch(console.error);
   };
 
-  const sliderStyle: React.CSSProperties = { width: '100%', accentColor: 'var(--kkm-blue)' };
+  const sliderStyle: React.CSSProperties = { width: '100%', accentColor: 'var(--brand-blue)' };
 
   /* Threshold metadata. `scale` is the multiplier from stored value to
      display value: 100 for rate columns (0.05 → 5%), 1 for the z-score.
@@ -347,7 +347,7 @@ export function SettingsPage() {
           ...(isAdmin ? [['kpi', t('KPI Targets', 'Sasaran KPI')] as const] : []),
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id as typeof tab)}
-            style={{ background: 'none', border: 'none', borderBottom: tab === id ? '2px solid var(--kkm-blue)' : '2px solid transparent', padding: '10px 20px', fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--kkm-blue)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, marginBottom: -1 }}>
+            style={{ background: 'none', border: 'none', borderBottom: tab === id ? '2px solid var(--brand-blue)' : '2px solid transparent', padding: '10px 20px', fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--brand-blue)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, marginBottom: -1 }}>
             {label}
           </button>
         ))}
@@ -371,7 +371,7 @@ export function SettingsPage() {
                         type="button"
                         onClick={() => setOpenHelp(isOpen ? null : s.key)}
                         aria-label="Help"
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isOpen ? 'var(--kkm-blue)' : 'var(--text-muted)', display: 'inline-flex' }}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isOpen ? 'var(--brand-blue)' : 'var(--text-muted)', display: 'inline-flex' }}
                       >
                         <Info size={13} />
                       </button>
@@ -382,7 +382,7 @@ export function SettingsPage() {
                           {t('Recommended', 'Disyorkan')}
                         </span>
                       )}
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--kkm-blue)', fontFamily: 'var(--font-mono)' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-blue)', fontFamily: 'var(--font-mono)' }}>
                         {display.toFixed(s.step < 1 ? 1 : 0)}{s.unit}
                       </span>
                     </div>
@@ -413,7 +413,7 @@ export function SettingsPage() {
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 28 }}>
             <button onClick={saveThresholds} disabled={saving}
-              style={{ background: saved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              style={{ background: saved ? 'var(--success)' : 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Save size={15} />
               {saving ? t('Saving…', 'Menyimpan…') : saved ? t('Saved!', 'Disimpan!') : t('Save', 'Simpan')}
             </button>
@@ -449,9 +449,9 @@ export function SettingsPage() {
                 <button key={key} type="button" onClick={() => setRuleSchema(key)}
                   style={{
                     fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-                    background: ruleSchema === key ? 'var(--kkm-blue)' : 'var(--surface-2)',
+                    background: ruleSchema === key ? 'var(--brand-blue)' : 'var(--surface-2)',
                     color: ruleSchema === key ? '#fff' : 'var(--text-secondary)',
-                    border: `1px solid ${ruleSchema === key ? 'var(--kkm-blue)' : 'var(--border)'}`,
+                    border: `1px solid ${ruleSchema === key ? 'var(--brand-blue)' : 'var(--border)'}`,
                   }}>
                   {label}
                 </button>
@@ -474,7 +474,7 @@ export function SettingsPage() {
                 <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 20px', borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none', opacity: applicable ? 1 : 0.5 }}>
                   <label style={{ position: 'relative', width: 44, height: 24, flexShrink: 0, marginTop: 2, opacity: disabledToggle ? 0.55 : 1 }}>
                     <input type="checkbox" checked={rule.enabled} disabled={disabledToggle} onChange={() => toggleRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: disabledToggle ? 'not-allowed' : 'pointer' }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 12, background: rule.enabled ? 'var(--brand-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: disabledToggle ? 'not-allowed' : 'pointer' }}>
                       <div style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 23 : 3, transition: 'left var(--transition)' }} />
                     </div>
                   </label>
@@ -621,7 +621,7 @@ export function SettingsPage() {
                       );
                     })}
                     <button onClick={() => resetKpiSet(grp)} type="button"
-                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, marginTop: 2, color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, marginTop: 2, color: 'var(--brand-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <RotateCcw size={12} />
                       {grp === 'npan' ? t('Reset to NPAN 2021–2025', 'Set semula ke NPAN 2021–2025') : t('Reset to WHO 2025', 'Set semula ke WHO 2025')}
                     </button>
@@ -631,7 +631,7 @@ export function SettingsPage() {
             })}
             <div>
               <button onClick={saveKpiTargets} disabled={kpiSaving || kpiHasError}
-                style={{ background: kpiSaved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: kpiHasError ? 'not-allowed' : 'pointer', opacity: kpiHasError ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                style={{ background: kpiSaved ? 'var(--success)' : 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: kpiHasError ? 'not-allowed' : 'pointer', opacity: kpiHasError ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Save size={15} />
                 {kpiSaving ? t('Saving…', 'Menyimpan…') : kpiSaved ? t('Saved!', 'Disimpan!') : t('Save targets', 'Simpan sasaran')}
               </button>
@@ -664,8 +664,8 @@ export function SettingsPage() {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                   {t(
-                    'KKM operational thresholds. Edits take effect on new cleaning runs.',
-                    'Ambang operasi KKM. Suntingan terpakai pada larian pembersihan baharu.',
+                    'Operational thresholds. Edits take effect on new cleaning runs.',
+                    'Ambang operasi. Suntingan terpakai pada larian pembersihan baharu.',
                   )}
                 </div>
               </div>
@@ -702,7 +702,7 @@ export function SettingsPage() {
                                 {entry.unit && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({entry.unit})</span>}
                               </span>
                               <button type="button" onClick={() => setOpenClinicalHelp(isHelpOpen ? null : key)} aria-label="Info"
-                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isHelpOpen ? 'var(--kkm-blue)' : 'var(--text-muted)', display: 'inline-flex', flexShrink: 0 }}>
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isHelpOpen ? 'var(--brand-blue)' : 'var(--text-muted)', display: 'inline-flex', flexShrink: 0 }}>
                                 <Info size={12} />
                               </button>
                               {isModified && (
@@ -795,7 +795,7 @@ export function SettingsPage() {
                                 {entry.unit && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({entry.unit})</span>}
                               </span>
                               <button type="button" onClick={() => setOpenClinicalHelp(isHelpOpen ? null : key)} aria-label="Info"
-                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isHelpOpen ? 'var(--kkm-blue)' : 'var(--text-muted)', display: 'inline-flex', flexShrink: 0 }}>
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: isHelpOpen ? 'var(--brand-blue)' : 'var(--text-muted)', display: 'inline-flex', flexShrink: 0 }}>
                                 <Info size={12} />
                               </button>
                             </div>
@@ -828,7 +828,7 @@ export function SettingsPage() {
                 )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <button onClick={saveClinicalRanges} disabled={clinicalSaving}
-                    style={{ background: clinicalSaved ? 'var(--success)' : 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    style={{ background: clinicalSaved ? 'var(--success)' : 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Save size={15} />
                     {clinicalSaving ? t('Saving…', 'Menyimpan…') : clinicalSaved ? t('Saved!', 'Disimpan!') : t('Save ranges', 'Simpan julat')}
                   </button>

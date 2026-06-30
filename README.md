@@ -1,19 +1,19 @@
 # SmartDQC
 
-Local-deployed data quality and cleaning platform for KKM (Kementerian Kesihatan Malaysia) child nutrition data. Runs fully on-premise — no data leaves the machine.
+Local-deployed data quality and cleaning platform for child-growth / nutrition datasets. Runs fully on-premise — no data leaves the machine.
 
 ---
 
 ## What It Does
 
-SmartDQC ingests CSV/XLSX files from multiple KKM health data sources, cleans and standardises them against WHO 2006 z-score benchmarks, and surfaces insights through an interactive bilingual dashboard.
+SmartDQC ingests CSV/XLSX files from multiple health data sources, cleans and standardises them against WHO 2006 z-score benchmarks, and surfaces insights through an interactive bilingual dashboard.
 
 **Core capabilities:**
 
 - AI-assisted schema mapping for known and unknown column layouts
 - Source-specific cleaning pipelines (MyVASS, NCDC/TASKA, KPM, KKM, Generic)
 - WHO 2006 z-score computation (WAZ, HAZ, BAZ) with nutrition status classification (stunting, wasting, underweight, overweight)
-- KPI dashboard with RAG traffic-light indicators (Green/Amber/Red) vs. NPAN 2021–2025 and Malaysia Plan targets
+- KPI dashboard with RAG traffic-light indicators (Green/Amber/Red) vs. configurable national nutrition targets (e.g. NPAN 2021–2025)
 - District-level geo risk scoring and choropleth map by daerah
 - AI narrative generation and NLQ (natural language query) powered by a local SLM via Ollama
 - PDF and PPTX report generation with quality metrics and AI insights

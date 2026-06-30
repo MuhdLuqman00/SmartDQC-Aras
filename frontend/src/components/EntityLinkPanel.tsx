@@ -50,7 +50,7 @@ export function EntityLinkPanel({ datasetIds }: { datasetIds: string[] }) {
         <button
           onClick={runLink}
           disabled={!canLink || loading}
-          style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: canLink ? 'pointer' : 'not-allowed', opacity: !canLink || loading ? 0.6 : 1 }}
+          style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: canLink ? 'pointer' : 'not-allowed', opacity: !canLink || loading ? 0.6 : 1 }}
         >
           {loading ? t('Linking…', 'Memaut…') : t('Link Records', 'Paut Rekod')}
         </button>

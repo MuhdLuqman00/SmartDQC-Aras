@@ -439,7 +439,7 @@ export function LinkagePage() {
             onClick={runLinkage}
             disabled={!canRun || running}
             style={{
-              background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+              background: 'var(--brand-blue)', color: '#fff', border: 'none',
               borderRadius: 'var(--radius-btn)', padding: '9px 18px',
               fontWeight: 600, fontSize: 13, cursor: canRun ? 'pointer' : 'not-allowed',
               opacity: !canRun || running ? 0.6 : 1,

@@ -1,13 +1,13 @@
 /* ════════════════════════════════════════════════════════════════════════
-   SmartDQC — KKM Navy Design Tokens
-   Canonical palette per Docs/SmartDQC_UI_Spec.md §1 (KKM Navy).
+   SmartDQC — Brand Navy Design Tokens
+   Canonical palette per Docs/SmartDQC_UI_Spec.md §1 (Brand Navy).
    Legacy variable names are preserved so every existing page re-skins to
    spec with zero markup changes; new tokens add elevation, gradients,
-   spacing and motion for a premium ministerial feel.
+   spacing and motion for a premium feel.
    ──────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* ── Brand · KKM Navy (spec canonical) ───────────────────────────────── */
+  /* ── Brand · Navy (spec canonical) ───────────────────────────────────── */
   --primary:        #1B2A4A;   /* header, sidebar, primary CTAs            */
   --primary-dark:   #0F1B2F;   /* hover / active                          */
   --primary-light:  #2E4A7A;   /* secondary buttons, badges, accents      */
@@ -16,10 +16,10 @@
   --accent-soft:    #E8C77A;
 
   /* Legacy aliases (consumed across all pages — DO NOT rename) */
-  --kkm-deep:  #0F1B2F;        /* sidebar / login brand panel             */
-  --kkm-blue:  #1B2A4A;        /* primary action color                     */
-  --kkm-sky:   #2E4A7A;        /* active state / focus accent              */
-  --kkm-teal:  #2D7D46;        /* positive / success accent                */
+  --brand-deep:  #0F1B2F;        /* sidebar / login brand panel             */
+  --brand-blue:  #1B2A4A;        /* primary action color                     */
+  --brand-sky:   #2E4A7A;        /* active state / focus accent              */
+  --brand-teal:  #2D7D46;        /* positive / success accent                */
   --navy:      #1B2A4A;        /* GeoPage KpiCard value color              */
 
   /* ── Surfaces ────────────────────────────────────────────────────────── */
@@ -131,10 +131,10 @@
   --accent-strong:  #D4A93A;   /* deep gold — functional accent on dark light-ish surfaces */
   --accent-soft:    #F0D596;
 
-  --kkm-deep:  #0B1424;
-  --kkm-blue:  #3B5B92;
-  --kkm-sky:   #6E8FC4;
-  --kkm-teal:  #38A169;
+  --brand-deep:  #0B1424;
+  --brand-blue:  #3B5B92;
+  --brand-sky:   #6E8FC4;
+  --brand-teal:  #38A169;
   --navy:      #C7D4EC;
 
   --bg:        #0B1424;

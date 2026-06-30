@@ -80,7 +80,7 @@ export function HistoryPage() {
                     setSession({ cacheId: s.cache_id, filename: s.name || s.filename, sourceType: s.source_type, rowCount: s.row_count, qualityScore: s.quality_score });
                     nav('/');
                   }}
-                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
                   {t('Reopen', 'Buka Semula')}
                 </button>

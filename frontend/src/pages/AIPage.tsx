@@ -248,7 +248,7 @@ export function AIPage() {
             onClick={handleNarrative}
             disabled={narrativeLoading || !cacheId}
             style={{
-              background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+              background: 'var(--brand-blue)', color: '#fff', border: 'none',
               borderRadius: 'var(--radius-btn)', padding: '9px 16px',
               fontWeight: 600, fontSize: 13, cursor: 'pointer',
               opacity: (narrativeLoading || !cacheId) ? 0.6 : 1,
@@ -304,7 +304,7 @@ export function AIPage() {
                         position: 'relative',
                         padding: '8px 10px', margin: '2px 0', borderRadius: 8,
                         background: active ? 'var(--surface-2)' : 'transparent',
-                        border: `1px solid ${active ? 'var(--kkm-sky)' : 'transparent'}`,
+                        border: `1px solid ${active ? 'var(--brand-sky)' : 'transparent'}`,
                         cursor: active ? 'default' : 'pointer',
                         transition: 'background var(--transition)',
                       }}
@@ -368,12 +368,12 @@ export function AIPage() {
                   maxWidth: '85%',
                 }}>
                   {msg.role === 'user' ? (
-                    <div style={{ background: 'var(--kkm-blue)', color: '#fff', borderRadius: '12px 12px 2px 12px', padding: '10px 14px', fontSize: 13 }}>
+                    <div style={{ background: 'var(--brand-blue)', color: '#fff', borderRadius: '12px 12px 2px 12px', padding: '10px 14px', fontSize: 13 }}>
                       {msg.content}
                     </div>
                   ) : msg.role === 'narrative' ? (
                     <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px 12px 12px 12px', padding: '14px 16px', fontSize: 13, lineHeight: 1.7 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--kkm-sky)', fontWeight: 600, fontSize: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--brand-sky)', fontWeight: 600, fontSize: 12 }}>
                         <ScanSearch size={13} /> {t('AI Insight', 'Cerapan AI')}
                       </div>
                       {msg.raw
@@ -439,7 +439,7 @@ export function AIPage() {
                   onClick={handleSend}
                   disabled={!input.trim() || loading || !cacheId}
                   style={{
-                    background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+                    background: 'var(--brand-blue)', color: '#fff', border: 'none',
                     borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
                     opacity: !input.trim() || loading || !cacheId ? 0.5 : 1,
                     display: 'flex', alignItems: 'center',

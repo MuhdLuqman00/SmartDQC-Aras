@@ -1,4 +1,4 @@
-"""Tests for Feature #15 — KKM-formatted report generation (PDF + PPTX)."""
+"""Tests for Feature #15 — report generation (PDF + PPTX)."""
 from io import BytesIO
 
 import pdfplumber
@@ -8,8 +8,9 @@ from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL
 
 from backend.export.report import build_pptx_bytes, build_pdf_bytes
+from backend import branding
 from backend.export.report_template_spec import (
-    KKM_TEAL, SECTION_LABELS,
+    BRAND_TEAL, SECTION_LABELS,
 )
 from backend.export.charts import (
     chart_quality_bar, chart_nutritional_rates, chart_kpi_vs_target,
@@ -136,10 +137,10 @@ def test_pptx_cover_slide_has_text():
 
 def test_pptx_section_bars_use_brand_color():
     """Every non-cover slide should carry at least one section bar filled with
-    the KKM brand color (navy after the v3 reskin; tracked via KKM_TEAL)."""
+    the brand color (navy after the v3 reskin; tracked via BRAND_TEAL)."""
     data = build_pptx_bytes(_eda(), _narrative(), kpi_result=_kpi())
     prs  = Presentation(BytesIO(data))
-    brand = RGBColor.from_string(KKM_TEAL.lstrip("#"))
+    brand = RGBColor.from_string(BRAND_TEAL.lstrip("#"))
 
     def _solid_rgb(sh):
         """fore_color.rgb for solid-filled shapes only; None otherwise."""
@@ -173,7 +174,7 @@ def test_pptx_exec_summary_bilingual():
     assert "English"         in exec_slide_text
 
 
-def test_pptx_footer_contains_kkm():
+def test_pptx_footer_contains_org():
     data = build_pptx_bytes(_eda(), _narrative())
     prs  = Presentation(BytesIO(data))
     all_text = " ".join(
@@ -182,7 +183,7 @@ def test_pptx_footer_contains_kkm():
         for sh in slide.shapes
         if sh.has_text_frame
     )
-    assert "Kementerian Kesihatan Malaysia" in all_text
+    assert branding.ORG_NAME_BM in all_text
 
 
 def test_pptx_district_param_appears_in_output():
@@ -223,10 +224,10 @@ def test_pdf_contains_bilingual_section_labels():
     assert "LAMPIRAN METODOLOGI"             in text
 
 
-def test_pdf_footer_contains_kkm():
+def test_pdf_footer_contains_org():
     data = build_pdf_bytes(_eda(), _narrative(), district="Selangor")
     text = _pdf_text(data)
-    assert "Kementerian Kesihatan Malaysia" in text
+    assert branding.ORG_NAME_BM in text
     assert "Selangor"                       in text
 
 

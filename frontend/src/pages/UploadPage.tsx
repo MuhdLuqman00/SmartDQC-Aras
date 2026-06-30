@@ -98,7 +98,7 @@ function StepIndicator({ current }: { current: Step }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 28, height: 28, borderRadius: '50%',
-                background: done ? 'var(--kkm-teal)' : active ? 'var(--kkm-blue)' : 'var(--border)',
+                background: done ? 'var(--brand-teal)' : active ? 'var(--brand-blue)' : 'var(--border)',
                 color: done || active ? '#fff' : 'var(--text-muted)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, flexShrink: 0,
@@ -107,14 +107,14 @@ function StepIndicator({ current }: { current: Step }) {
               </div>
               <span style={{
                 fontSize: 12, fontWeight: active ? 600 : 400,
-                color: active ? 'var(--text-primary)' : done ? 'var(--kkm-teal)' : 'var(--text-muted)',
+                color: active ? 'var(--text-primary)' : done ? 'var(--brand-teal)' : 'var(--text-muted)',
                 whiteSpace: 'nowrap',
               }}>
                 {t(s.en, s.bm)}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div style={{ flex: 1, height: 1, background: s.n < current ? 'var(--kkm-teal)' : 'var(--border)', margin: '0 12px' }} />
+              <div style={{ flex: 1, height: 1, background: s.n < current ? 'var(--brand-teal)' : 'var(--border)', margin: '0 12px' }} />
             )}
           </React.Fragment>
         );
@@ -441,7 +441,7 @@ export function UploadPage() {
           <div
             {...getRootProps()}
             style={{
-              border: `2px dashed ${isDragActive ? 'var(--kkm-sky)' : files.length ? 'var(--kkm-teal)' : 'var(--border)'}`,
+              border: `2px dashed ${isDragActive ? 'var(--brand-sky)' : files.length ? 'var(--brand-teal)' : 'var(--border)'}`,
               borderRadius: 'var(--radius-card)',
               padding: '40px 24px', textAlign: 'center', cursor: 'pointer',
               background: isDragActive ? 'rgba(0,163,224,0.05)' : 'var(--surface-2)',
@@ -497,7 +497,7 @@ export function UploadPage() {
               onClick={() => handlePreview()}
               disabled={!files.length || loading}
               style={{
-                background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+                background: 'var(--brand-blue)', color: '#fff', border: 'none',
                 borderRadius: 'var(--radius-btn)', padding: '10px 24px',
                 fontWeight: 600, fontSize: 14, cursor: files.length ? 'pointer' : 'not-allowed',
                 opacity: !files.length || loading ? 0.5 : 1,
@@ -668,7 +668,7 @@ export function UploadPage() {
                     onClick={() => handleAcceptReroute(rerouteCard.type)}
                     disabled={loading}
                     style={{
-                      background: 'var(--kkm-blue)', color: '#fff',
+                      background: 'var(--brand-blue)', color: '#fff',
                       border: 'none', borderRadius: 6, padding: '4px 12px',
                       fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     }}
@@ -798,7 +798,7 @@ export function UploadPage() {
                           </div>
                           {row.source === 'ai' && (
                             <span style={{
-                              fontSize: 10, fontWeight: 700, color: 'var(--kkm-blue)',
+                              fontSize: 10, fontWeight: 700, color: 'var(--brand-blue)',
                               background: 'rgba(0,100,180,0.1)', borderRadius: 4, padding: '1px 5px',
                               letterSpacing: '0.05em',
                             }}>AI</span>
@@ -825,7 +825,7 @@ export function UploadPage() {
             <button
               onClick={handleValidateMapping}
               disabled={loading}
-              style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 24px', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 24px', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
             >
               {loading ? <RefreshCw size={14} /> : null}
               {t('Confirm Mapping', 'Sahkan Pemetaan')} <ChevronRight size={16} />
@@ -1044,7 +1044,7 @@ export function UploadPage() {
                 <div key={rule.code} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <label style={{ position: 'relative', width: 40, height: 22, flexShrink: 0, marginTop: 1, opacity: rule.locked ? 0.55 : 1 }}>
                     <input type="checkbox" checked={rule.enabled} disabled={rule.locked} onChange={() => toggleCleanRule(rule.code)} aria-label={t(rule.en, rule.bm)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: 11, background: rule.enabled ? 'var(--kkm-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: 11, background: rule.enabled ? 'var(--brand-blue)' : 'var(--border)', transition: 'background var(--transition)', cursor: rule.locked ? 'not-allowed' : 'pointer' }}>
                       <div style={{ position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff', top: 3, left: rule.enabled ? 21 : 3, transition: 'left var(--transition)' }} />
                     </div>
                   </label>
@@ -1130,7 +1130,7 @@ export function UploadPage() {
             <button
               onClick={handleClean}
               disabled={loading}
-              style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 24px', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px 24px', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
             >
               {loading ? <RefreshCw size={14} /> : <CheckCircle2 size={16} />}
               {t('Clean Data', 'Bersihkan Data')} <ChevronRight size={16} />
@@ -1149,7 +1149,7 @@ export function UploadPage() {
       {step === 4 && cleanStats && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '32px', boxShadow: 'var(--shadow-card)' }}>
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <CheckCircle2 size={44} style={{ color: 'var(--kkm-teal)', marginBottom: 12 }} />
+            <CheckCircle2 size={44} style={{ color: 'var(--brand-teal)', marginBottom: 12 }} />
             <h2 style={{ fontFamily: 'var(--font-body)', fontSize: 20, fontWeight: 700 }}>
               {t('Cleaning Complete', 'Pembersihan Selesai')}
             </h2>
@@ -1369,7 +1369,7 @@ export function UploadPage() {
 
           <button
             onClick={() => nav('/')}
-            style={{ width: '100%', background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '12px', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+            style={{ width: '100%', background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 'var(--radius-btn)', padding: '12px', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             {t('View on Dashboard →', 'Lihat di Papan Pemuka →')}
           </button>

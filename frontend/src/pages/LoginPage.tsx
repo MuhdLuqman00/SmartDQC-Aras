@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ShieldCheck, User as UserIcon, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LanguageContext';
+import { BRAND } from '../config/brand';
 
 export function LoginPage() {
   // Anonymous named-identity: no password. The user types a name; it is stored
@@ -83,8 +84,8 @@ export function LoginPage() {
           position: 'absolute', top: -120, right: -120, width: 380, height: 380,
           borderRadius: '50%', background: 'radial-gradient(circle, rgba(200,150,46,0.18), transparent 70%)',
         }} />
-        {/* Songket-inspired gold lattice — a subtle KKM signature filling the
-            lower panel (audit 01). Decorative only: aria-hidden, faded upward,
+        {/* Gold lattice — a subtle brand signature filling the lower panel
+            (audit 01). Decorative only: aria-hidden, faded upward,
             non-interactive; a crosshatch echo of the gold keyline motif. */}
         <div aria-hidden style={{
           position: 'absolute', left: 0, right: 0, bottom: 0, height: '44%',
@@ -102,7 +103,7 @@ export function LoginPage() {
           }}>S</div>
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', marginBottom: 3 }}>
-              {t('Ministry of Health Malaysia', 'Kementerian Kesihatan Malaysia')}
+              {t(BRAND.orgNameEn, BRAND.orgNameBm)}
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: 16 }}>
               Smart<span style={{ color: 'var(--accent-soft)' }}>DQC</span>
@@ -119,8 +120,8 @@ export function LoginPage() {
             {t('Check', 'Semakan Pintar')}
           </h1>
           <p style={{ fontSize: 14.5, lineHeight: 1.75, color: 'rgba(255,255,255,0.82)', maxWidth: 440, marginBottom: 28 }}>
-            {t('Secure data validation, automated cleaning, and district-level nutrition reporting for the Ministry of Health Malaysia.',
-               'Pengesahan data selamat, pembersihan automatik, dan pelaporan pemakanan peringkat daerah untuk Kementerian Kesihatan Malaysia.')}
+            {t('Secure data validation, automated cleaning, and district-level nutrition reporting.',
+               'Pengesahan data selamat, pembersihan automatik, dan pelaporan pemakanan peringkat daerah.')}
           </p>
           <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
             {[
@@ -141,7 +142,7 @@ export function LoginPage() {
           borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20,
           display: 'flex', justifyContent: 'space-between',
         }}>
-          <span>© {new Date().getFullYear()} Kementerian Kesihatan Malaysia</span>
+          <span>© {new Date().getFullYear()} {t(BRAND.orgNameEn, BRAND.orgNameBm)}</span>
           <span>v3.0</span>
         </div>
       </div>

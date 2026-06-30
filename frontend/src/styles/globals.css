@@ -163,7 +163,7 @@ input, select, textarea { font-family: inherit; }
 .btn-primary:active:not(:disabled) { transform: translateY(1px); }
 
 /* ── Signature: gold "letterhead" keyline ───────────────────────────────────
-   A short gold rule under a heading — the one distinctive KKM detail carried
+   A short gold rule under a heading — the one distinctive brand detail carried
    across the app. Decorative; uses the deep gold on light so it reads as a
    deliberate rule (≥3:1), and the brighter gold on dark surfaces. */
 .kkm-keyline {
@@ -190,7 +190,7 @@ input, select, textarea { font-family: inherit; }
 .explorer-cell.editable { cursor: cell; }
 .explorer-cell.editable:hover { background: var(--surface-3); }
 .explorer-cell.editable:focus-visible {
-  outline: 2px solid var(--kkm-sky);
+  outline: 2px solid var(--brand-sky);
   outline-offset: -2px;
   background: var(--surface-3);
 }
@@ -209,7 +209,7 @@ input, select, textarea { font-family: inherit; }
 .kpi-seg { transition: background var(--transition); }
 .kpi-seg:hover { background: var(--surface-2); }
 .kpi-seg:focus-visible {
-  outline: 2px solid var(--kkm-sky);
+  outline: 2px solid var(--brand-sky);
   outline-offset: -2px;
 }
 /* Selected segment (D1) — bg + gold index rail. Kept in CSS (not inline) so

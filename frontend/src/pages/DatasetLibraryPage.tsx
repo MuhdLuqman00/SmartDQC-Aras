@@ -90,13 +90,13 @@ export function DatasetLibraryPage() {
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{selected.size} {t('selected', 'dipilih')}</span>
           {selected.size >= 2 && (
             <button onClick={handleCompare} disabled={comparing}
-              style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: comparing ? 0.6 : 1 }}>
+              style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: comparing ? 0.6 : 1 }}>
               {comparing ? t('Comparing…', 'Sedang membandingkan…') : t('Compare', 'Bandingkan')}
             </button>
           )}
           {selected.size === 2 && (
             <button onClick={() => setJoinOpen(true)}
-              style={{ background: 'var(--kkm-teal)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              style={{ background: 'var(--brand-teal)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               <GitMerge size={14} /> {t('Join', 'Cantum')}
             </button>
           )}
@@ -121,7 +121,7 @@ export function DatasetLibraryPage() {
           const isSelected = selected.has(ds.id);
           return (
             <div key={ds.id} style={{
-              background: 'var(--surface)', border: `1px solid ${isSelected ? 'var(--kkm-sky)' : 'var(--border)'}`,
+              background: 'var(--surface)', border: `1px solid ${isSelected ? 'var(--brand-sky)' : 'var(--border)'}`,
               borderRadius: 'var(--radius-card)', padding: '18px 20px',
               boxShadow: 'var(--shadow-card)', cursor: 'pointer',
               transition: 'border-color var(--transition)',
@@ -155,7 +155,7 @@ export function DatasetLibraryPage() {
                     setSession({ cacheId: ds.id, filename: ds.name || ds.filename, sourceType: ds.source_type });
                     nav('/');
                   }}
-                  style={{ background: 'var(--kkm-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ background: 'var(--brand-blue)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 >
                   {t('Load Session', 'Muat Sesi')}
                 </button>
@@ -198,10 +198,10 @@ export function DatasetLibraryPage() {
               const deltaColor = (m: string, v: number | null) => {
                 if (v == null || v === 0) return 'var(--text-muted)';
                 const good = m === 'quality_score' ? v > 0 : v < 0;
-                return good ? 'var(--kkm-teal)' : 'var(--warning)';
+                return good ? 'var(--brand-teal)' : 'var(--warning)';
               };
               const trendColor = (tr?: string) =>
-                tr === 'improving' ? 'var(--kkm-teal)' : tr === 'worsening' ? 'var(--warning)' : 'var(--text-muted)';
+                tr === 'improving' ? 'var(--brand-teal)' : tr === 'worsening' ? 'var(--warning)' : 'var(--text-muted)';
               const trendLabel = (tr?: string) =>
                 tr === 'improving' ? t('Improving', 'Bertambah baik')
                   : tr === 'worsening' ? t('Worsening', 'Bertambah buruk')

@@ -103,10 +103,10 @@ export function ReportsPage() {
   const cards: ReportCard[] = [
     {
       id: 'pptx',
-      icon: <Presentation size={28} style={{ color: 'var(--kkm-blue)' }} />,
+      icon: <Presentation size={28} style={{ color: 'var(--brand-blue)' }} />,
       titleEn: 'PowerPoint Report', titleBm: 'Laporan PowerPoint',
-      descEn: 'Full ministerial-grade slide deck with KPI charts and district breakdown.',
-      descBm: 'Dekset slaid peringkat kementerian dengan carta KPI dan pecahan daerah.',
+      descEn: 'Full presentation-grade slide deck with KPI charts and district breakdown.',
+      descBm: 'Dekset slaid lengkap dengan carta KPI dan pecahan daerah.',
       format: 'PPTX', hasKpiToggle: true, hasChartPicker: true,
       action: async (cacheId, includeKpi, charts) => {
         setProgress(p => ({ ...p, pptx: true }));
@@ -139,7 +139,7 @@ export function ReportsPage() {
     },
     {
       id: 'quality',
-      icon: <Table size={28} style={{ color: 'var(--kkm-teal)' }} />,
+      icon: <Table size={28} style={{ color: 'var(--brand-teal)' }} />,
       titleEn: 'Data Quality Report', titleBm: 'Laporan Kualiti Data',
       descEn: '5-tab Excel workbook: summary, issues, cleaning log, column stats, samples.',
       descBm: 'Buku kerja Excel 5-tab: ringkasan, isu, log pembersihan, statistik lajur, sampel.',
@@ -150,7 +150,7 @@ export function ReportsPage() {
     },
     {
       id: 'tableau',
-      icon: <Database size={28} style={{ color: 'var(--kkm-blue)' }} />,
+      icon: <Database size={28} style={{ color: 'var(--brand-blue)' }} />,
       titleEn: 'Tableau Aggregation', titleBm: 'Agregasi Tableau',
       descEn: 'Tidy long table — one row per indicator × breakdown (pecahan/kategori) — ready for Tableau / BI tools.',
       descBm: 'Jadual panjang kemas — satu baris bagi setiap indikator × pecahan (pecahan/kategori) — sedia untuk Tableau / alat BI.',
@@ -161,10 +161,10 @@ export function ReportsPage() {
     },
     {
       id: 'dictionary',
-      icon: <BookOpen size={28} style={{ color: 'var(--kkm-teal)' }} />,
+      icon: <BookOpen size={28} style={{ color: 'var(--brand-teal)' }} />,
       titleEn: 'Data Dictionary', titleBm: 'Kamus Data',
-      descEn: 'Readable definitions of all fields — WHO z-scores, KKM indicators, age bands. For non-technical users.',
-      descBm: 'Definisi semua medan yang mudah dibaca — z-skor WHO, indikator KKM, jaluran umur. Untuk pengguna bukan teknikal.',
+      descEn: 'Readable definitions of all fields — WHO z-scores, programme indicators, age bands. For non-technical users.',
+      descBm: 'Definisi semua medan yang mudah dibaca — z-skor WHO, indikator program, jaluran umur. Untuk pengguna bukan teknikal.',
       format: 'XLSX · PDF', hasKpiToggle: false, hasChartPicker: false,
       action: () => {},
       actions: [
@@ -175,7 +175,7 @@ export function ReportsPage() {
   ];
 
   /* Two report classes get two visual weights (audit 12 · AI-TELL): the
-     PPTX/PDF generators are the featured ministerial deliverables (full
+     PPTX/PDF generators are the featured report deliverables (full
      controls); the direct downloads are compact export rows. */
   const generators = cards.filter(c => c.hasChartPicker);
   const exportItems = cards.filter(c => !c.hasChartPicker);
@@ -232,7 +232,7 @@ export function ReportsPage() {
               disabled={!cacheId}
               style={{
                 background: 'none', border: 'none', padding: 0, cursor: cacheId ? 'pointer' : 'not-allowed',
-                color: 'var(--kkm-sky)', fontSize: 12, fontWeight: 600,
+                color: 'var(--brand-sky)', fontSize: 12, fontWeight: 600,
                 display: 'flex', alignItems: 'center', gap: 4,
               }}
             >
@@ -287,7 +287,7 @@ export function ReportsPage() {
           disabled={!cacheId || !!progress[card.id]}
           onClick={() => cacheId && card.action(cacheId, kpiToggles[card.id] ?? true, sel)}
           style={{
-            background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+            background: cacheId ? 'var(--brand-blue)' : 'var(--border)',
             color: cacheId ? '#fff' : 'var(--text-muted)',
             border: 'none', borderRadius: 'var(--radius-btn)', padding: '10px',
             fontWeight: 600, fontSize: 14, cursor: cacheId ? 'pointer' : 'not-allowed',
@@ -353,7 +353,7 @@ export function ReportsPage() {
             disabled={!cacheId}
             onClick={() => cacheId && card.action(cacheId, true, new Set())}
             style={{
-              background: cacheId ? 'var(--kkm-blue)' : 'var(--border)',
+              background: cacheId ? 'var(--brand-blue)' : 'var(--border)',
               color: cacheId ? '#fff' : 'var(--text-muted)',
               border: 'none', borderRadius: 'var(--radius-btn)', padding: '8px 18px',
               fontWeight: 600, fontSize: 13, cursor: cacheId ? 'pointer' : 'not-allowed',
@@ -388,7 +388,7 @@ export function ReportsPage() {
       )}
 
       <section>
-        {sectionHeader('Ministerial Reports', 'Laporan Kementerian')}
+        {sectionHeader('Organisation Reports', 'Laporan Organisasi')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
           {generators.map(renderGenerator)}
         </div>

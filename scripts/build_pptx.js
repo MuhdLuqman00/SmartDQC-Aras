@@ -78,7 +78,7 @@ function sectionTag(slide, label) {
   s.addText("Development Progress", { x: 0.6, y: 1.1, w: 7, h: 0.75, fontSize: 36, bold: true, color: WHITE, margin: 0 });
   s.addText("Day 1 & Day 2 Summary", { x: 0.6, y: 1.85, w: 7, h: 0.55, fontSize: 22, color: "A8C8D8", margin: 0 });
   s.addShape(pres.shapes.LINE, { x: 0.6, y: 2.55, w: 3.5, h: 0, line: { color: TEAL, width: 2 } });
-  s.addText("KKM Smart Data Quality Check & Cleaning Tool", { x: 0.6, y: 2.75, w: 7.5, h: 0.35, fontSize: 13, color: "8BAFC2", margin: 0 });
+  s.addText("SmartDQC — Smart Data Quality Check & Cleaning Tool", { x: 0.6, y: 2.75, w: 7.5, h: 0.35, fontSize: 13, color: "8BAFC2", margin: 0 });
   s.addText("Fully Dockerised  ·  On-Premise  ·  Bilingual AI (BM + EN)", { x: 0.6, y: 3.1, w: 7.5, h: 0.35, fontSize: 11, color: "6A8EA0", margin: 0 });
   s.addText("M Telecommunication Sdn Bhd  ·  2026", { x: 0.6, y: 5.15, w: 8, h: 0.4, fontSize: 10, color: WHITE, valign: "middle", margin: 0 });
 }
@@ -91,7 +91,7 @@ function sectionTag(slide, label) {
   sectionTag(s, "OVERVIEW");
 
   s.addText("What is SmartDQC?", { x: 0.5, y: 0.55, w: 9, h: 0.55, fontSize: 26, bold: true, color: NAVY, margin: 0 });
-  s.addText("A data quality and cleaning platform built for KKM — runs entirely on a laptop, no internet needed.", {
+  s.addText("A data quality and cleaning platform for internal datasets — runs entirely on a laptop, no internet needed.", {
     x: 0.5, y: 1.12, w: 9, h: 0.4, fontSize: 12, color: GRAY, margin: 0,
   });
 

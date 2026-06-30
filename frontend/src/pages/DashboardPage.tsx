@@ -71,7 +71,7 @@ const STATE_TO_CODE: Record<string, string> = {
 const STATE_CODES = new Set(Object.values(STATE_TO_CODE));
 
 /* Canonical state names for backend filter + tooltip display.
-   "Pulau Pinang" is preferred over "Penang" (matches KKM/MOH usage). */
+   "Pulau Pinang" is preferred over "Penang" (canonical spelling). */
 const CODE_TO_STATE_NAME: Record<string, string> = {
   jhr: 'Johor',
   kdh: 'Kedah',
@@ -163,7 +163,7 @@ function GroupBars({ title, rows, labelKey, indicator, notAvail, lang }: {
 const ragToLower = (r?: Rag): 'green' | 'amber' | 'red' =>
   r === 'Amber' ? 'amber' : r === 'Red' ? 'red' : 'green';
 
-/* Status palette — migrated to KKM Navy-Gold-Brick. Tokens live in
+/* Status palette — migrated to the brand Navy-Gold-Brick. Tokens live in
    tokens.css (--status-good / --status-watch / --status-critical) and
    stay in sync with ChoroplethMap. The track variants are slightly
    tinted backgrounds for the bar's empty portion so a 0%-rate "good"
@@ -361,7 +361,7 @@ export function DashboardPage() {
       }}>
         <div style={{
           width: 56, height: 56, borderRadius: 14,
-          background: 'var(--kkm-sky)', color: '#fff',
+          background: 'var(--brand-sky)', color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 22,
         }}>S</div>
@@ -377,7 +377,7 @@ export function DashboardPage() {
         <button
           onClick={() => nav('/upload')}
           style={{
-            background: 'var(--kkm-blue)', color: '#fff', border: 'none',
+            background: 'var(--brand-blue)', color: '#fff', border: 'none',
             borderRadius: 'var(--radius-btn)', padding: '12px 28px',
             fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15,
             display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
@@ -503,21 +503,21 @@ export function DashboardPage() {
               });
               nav('/quality');
             }}
-            style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: 'var(--brand-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
           >
             {t('Resume', 'Sambung')} {summary.latest_session.filename} →
           </button>
         )}
         <button
           onClick={() => nav('/history')}
-          style={{ background: 'none', border: 'none', color: 'var(--kkm-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', color: 'var(--brand-blue)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
         >
           {t('History', 'Sejarah')} →
         </button>
       </div>
 
       {/* ── Indicator status board (dossier panel) ──────────────────────────
-          One framed panel under a Songket-Gold keyline, not four loose cards.
+          One framed panel under a gold keyline, not four loose cards.
           All indicators stay equal-width with a value-vs-target bar (target
           tick fixed at 70% → fill past the tick = above target), so an analyst
           compares all four at a glance. The SELECTED indicator elevates by
@@ -645,8 +645,8 @@ export function DashboardPage() {
               <button onClick={() => handleStateClick(null)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,163,224,0.12)',
-                  border: '1px solid var(--kkm-sky)', borderRadius: 999, padding: '4px 12px',
-                  fontSize: 12, fontWeight: 600, color: 'var(--kkm-sky)', cursor: 'pointer',
+                  border: '1px solid var(--brand-sky)', borderRadius: 999, padding: '4px 12px',
+                  fontSize: 12, fontWeight: 600, color: 'var(--brand-sky)', cursor: 'pointer',
                 }}>
                 {codeToStateName(selectedStateCode)} <X size={12} />
               </button>

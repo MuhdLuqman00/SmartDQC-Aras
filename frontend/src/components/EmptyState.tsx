@@ -34,7 +34,7 @@ export function EmptyState({ icon, title, description, action }: Props) {
           onClick={() => nav(action.to)}
           style={{
             marginTop: 4,
-            background: 'var(--kkm-blue)', color: '#fff',
+            background: 'var(--brand-blue)', color: '#fff',
             border: 'none', borderRadius: 'var(--radius-btn)',
             padding: '10px 22px', fontWeight: 600, fontSize: 14,
             transition: 'opacity var(--transition)',
