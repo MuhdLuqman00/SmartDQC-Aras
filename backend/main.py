@@ -36,6 +36,7 @@ from typing import List, Optional
 
 from .config import (
     STANDARD_SCHEMA,
+    DEFAULT_ID_COLUMN,
     auto_suggest_mapping,
     detect_source_type,
     normalize_schema_type,
@@ -931,7 +932,7 @@ async def myvass_wide_to_long_endpoint(
 def _merge_myvass_files(
     file_contents: list[tuple[str, bytes]],
     dose_date_col: str = "DOSE_DATE",
-    ic_col: str = "IC_NO_PASSPORT",
+    ic_col: str = DEFAULT_ID_COLUMN,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Merge multiple MyVASS files:
@@ -1022,7 +1023,7 @@ def _merge_myvass_files(
 @app.post("/upload/merge-preview")
 async def merge_preview(
     files: List[UploadFile] = File(...),
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
@@ -1090,7 +1091,7 @@ async def run_eda_merged(
     files: List[UploadFile] = File(...),
     mapping: str = "",
     source_type: str = "myvass",
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
 ):
@@ -1137,7 +1138,7 @@ async def download_cleaned_merged(
     files: List[UploadFile] = File(...),
     mapping: str = "",
     source_type: str = "myvass",
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
 ):
@@ -2520,7 +2521,7 @@ async def clean_download_endpoint(
 async def quality_check_multi_endpoint(
     files: List[UploadFile] = File(...),
     data_type: str = "myvass",
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
 ):
     """Merge multiple files, then return quality stats on the merged data."""
@@ -2591,7 +2592,7 @@ async def quality_check_multi_endpoint(
 async def clean_run_multi_endpoint(
     files: List[UploadFile] = File(...),
     data_type: str = "myvass",
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
 ):
     """Merge multiple files, then run cleaning on the merged data."""
@@ -2637,7 +2638,7 @@ async def clean_run_multi_endpoint(
 async def clean_download_multi_endpoint(
     files: List[UploadFile] = File(...),
     data_type: str = "myvass",
-    ic_col: str = Query("IC_NO_PASSPORT"),
+    ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     fmt: str = Query("xlsx", pattern="^(csv|xlsx)$"),
     view: str = Query("analysis", pattern="^(analysis|full)$"),
@@ -4700,7 +4701,7 @@ class EntityRecordsSyncRequest(BaseModel):
 
 
 _IC_COL_CANDIDATES = (
-    "IC_NO_PASSPORT",
+    DEFAULT_ID_COLUMN,
     "IC",
     "NRIC",
     "MyKID",

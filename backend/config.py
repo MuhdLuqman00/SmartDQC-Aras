@@ -3,6 +3,7 @@
 # No hardcoded assumptions about status labels — valid sets are used for
 # *spelling correction only*; the source of truth for classification is WHO 2006.
 
+import os
 import re
 
 from backend.clinical_ranges import get_range as _cr_get_range, get_val as _cr_get_val
@@ -259,6 +260,13 @@ def _load_vocab_profile() -> None:
 _load_vocab_profile()
 
 
+# ─── DEFAULT ID COLUMN (config-driven) ────────────────────────────────────────
+# Raw column holding the per-record unique id. The bundled default matches the
+# original dataset; override per deployment with SMARTDQC_ID_COLUMN so API
+# endpoints and entity linkage target the right column without code changes.
+DEFAULT_ID_COLUMN = os.environ.get("SMARTDQC_ID_COLUMN", "IC_NO_PASSPORT")
+
+
 # ─── AUTO-MAPPING HINTS ───────────────────────────────────────────────────────
 # Each source type maps standard field names to lists of possible column header
 # variants (lowercased). First match wins.
@@ -353,6 +361,41 @@ AUTO_MAPPING_HINTS = {
         "tahun_ukur":     ["tahun", "year", "tahun ukur"],
     },
 }
+
+# ─── EXTRA SCHEMA-MAPPING HINTS (config-driven) ───────────────────────────────
+# Per-deployment header variants can be supplied via SMARTDQC_SCHEMA_HINTS
+# (JSON: {source_type: {standard_field: ["header variant", ...]}}). Variants are
+# appended to the built-in hints so a new dataset's columns auto-map without
+# editing source. The "general" path already merges all known hints + fuzzy
+# matches the canonical field names, so unknown datasets still map best-effort.
+def _merge_schema_hints() -> None:
+    import json
+
+    path = os.environ.get("SMARTDQC_SCHEMA_HINTS")
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            extra = json.load(fh)
+    except (OSError, ValueError):
+        return
+    if not isinstance(extra, dict):
+        return
+    for src, fields in extra.items():
+        if not isinstance(fields, dict):
+            continue
+        hintset = AUTO_MAPPING_HINTS.setdefault(src, {})
+        for field, variants in fields.items():
+            if not isinstance(variants, list):
+                continue
+            lst = hintset.setdefault(field, [])
+            for v in variants:
+                if v not in lst:
+                    lst.append(v)
+
+
+_merge_schema_hints()
+
 
 # ─── SOURCE TYPE DETECTION ────────────────────────────────────────────────────
 

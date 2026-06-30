@@ -35,6 +35,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from backend.config import DEFAULT_ID_COLUMN
+
 # Component max-point budgets (see module docstring for rationale).
 _PTS_WASTING      = 70.0
 _PTS_UNDERWEIGHT  = 55.0
@@ -51,7 +53,7 @@ _WAZ_COLS      = ("WAZ", "waz")
 _HAZ_COLS      = ("HAZ", "haz")
 _BAZ_COLS      = ("BAZ", "baz")
 _AGE_COLS      = ("Age_Months", "age_months", "umur_bulan", "Umur_Bulan")
-_IC_COLS       = ("IC_NO_PASSPORT", "ic_no", "IC", "ic")
+_IC_COLS       = (DEFAULT_ID_COLUMN, "ic_no", "IC", "ic")
 _DATE_COLS     = ("Tarikh_Ukur", "tarikh_ukur", "tarikh_antropometri", "visit_date")
 _DISTRICT_COLS = ("NEGERI", "STATE", "negeri", "state", "Negeri", "State")
 _NAME_COLS     = ("NAMA", "nama", "name")
