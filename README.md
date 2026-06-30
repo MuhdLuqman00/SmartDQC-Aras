@@ -327,7 +327,7 @@ SmartDQC/
 │   ├── auth.py                   # JWT auth + bcrypt, X-User named identity
 │   ├── clinical_ranges.py        # Machine-readable clinical range registry
 │   ├── ai/                       # Ollama client, schema mapper, NLQ, narrative
-│   ├── cleaning/                 # Source-specific cleaning (weight_height, kpm, myvass, ncdc)
+│   ├── cleaning/                 # Source-specific cleaning (weight_height, school_age, wide_multiyear, wide_registry)
 │   ├── db/                       # SQLAlchemy models (14 tables), DB init
 │   ├── eda/                      # WHO z-score, indicators, quality rules, KPI, runner
 │   ├── export/                   # PDF/PPTX reports, Tableau export, data dictionary

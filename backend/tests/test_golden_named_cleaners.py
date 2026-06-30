@@ -1,7 +1,7 @@
 """Phase 0 safety net for the unified cohort-aware cleaning engine refactor.
 
 These are BEHAVIOR-PRESERVATION golden snapshots, not correctness oracles. They
-pin the *current* output of the three named cleaners (myvass / ncdc / kpm) on
+pin the *current* output of the three named cleaners (wide_multiyear / wide_registry / school_age) on
 fixtures that deliberately exercise the paths the refactor touches: exclusion
 masks, cohort bounds, NCDC wide->long reshape, WHO z-scores, and school-age BMI
 categories. Phases 1-2 (extract CohortProfile, unify the rule battery) must
@@ -25,7 +25,7 @@ import pandas as pd
 import pytest
 
 # WHO LMS tables load at import time; point the loader at the repo copy BEFORE
-# importing cleaning so z-scores are real (mirrors test_clean_myvass_columns.py).
+# importing cleaning so z-scores are real (mirrors test_clean_wide_multiyear_columns.py).
 _ZDIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "zscore"
 os.environ.setdefault("WHO_ZSCORE_DIR", str(_ZDIR))
 
@@ -35,7 +35,7 @@ _FTOL = 1e-3  # float tolerance for z-score / BMI / age columns
 
 
 # ── Fixtures (raw column names; cleaners self-map via find_col) ───────────────
-def _myvass() -> pd.DataFrame:
+def _wide_multiyear() -> pd.DataFrame:
     # Infant cohort: clean, invalid gender, measure<dob, impossible height,
     # implausible weight.
     return pd.DataFrame({
@@ -47,7 +47,7 @@ def _myvass() -> pd.DataFrame:
     })
 
 
-def _ncdc() -> pd.DataFrame:
+def _wide_registry() -> pd.DataFrame:
     # Wide format, two measurement years -> reshaped to long (8 rows).
     return pd.DataFrame({
         "JANTINA":      ["L", "P", "L", "ZZZ"],
@@ -61,7 +61,7 @@ def _ncdc() -> pd.DataFrame:
     })
 
 
-def _kpm() -> pd.DataFrame:
+def _school_age() -> pd.DataFrame:
     # School-age cohort: clean, duplicate id, invalid gender, implausible
     # weight, measure<dob.
     return pd.DataFrame({
@@ -76,11 +76,11 @@ def _kpm() -> pd.DataFrame:
 
 # ── Expected snapshots (captured from current code 2026-06-11) ────────────────
 GOLDEN = {
-    "myvass": {
-        "frame": _myvass,
+    "wide_multiyear": {
+        "frame": _wide_multiyear,
         "len": 6,
         "stats": {
-            "raw_count": 6, "data_type": "myvass", "dropped_invalid_gender": 1,
+            "raw_count": 6, "data_type": "wide_multiyear", "dropped_invalid_gender": 1,
             "dropped_date_before_dob": 0, "dropped_age_over5": 0,
             "dropped_measurement_outlier": 2, "dropped_no_measurement": 0,
             "dropped_bmi_outlier": 0, "dropped_null_zscore": 0,
@@ -103,11 +103,11 @@ GOLDEN = {
             "Age_Days": [730.0, 730.0, 365.0, 730.0, 730.0, 730.0],
         },
     },
-    "ncdc": {
-        "frame": _ncdc,
+    "wide_registry": {
+        "frame": _wide_registry,
         "len": 8,
         "stats": {
-            "raw_count": 8, "data_type": "ncdc", "years_found": [2022, 2023],
+            "raw_count": 8, "data_type": "wide_registry", "years_found": [2022, 2023],
             "dropped_invalid_gender": 2, "dropped_pendapatan_x": 0,
             "dropped_null_dob": 0, "dropped_date_before_dob": 0,
             "dropped_age_invalid": 0, "dropped_measurement_outlier": 1,
@@ -134,11 +134,11 @@ GOLDEN = {
             "Age_Days": [1247.0, 1612.0, 1247.0, 1612.0, 1247.0, 1612.0, 1247.0, 1612.0],
         },
     },
-    "kpm": {
-        "frame": _kpm,
+    "school_age": {
+        "frame": _school_age,
         "len": 5,
         "stats": {
-            "raw_count": 5, "data_type": "kpm", "dropped_ragu_gender": 0,
+            "raw_count": 5, "data_type": "school_age", "dropped_ragu_gender": 0,
             "dropped_invalid_gender": 1, "dropped_duplicate_id": 1,
             "dropped_invalid_date": 1, "dropped_age_invalid": 0,
             "dropped_measurement_outlier": 1, "dropped_no_bmi": 0,
@@ -170,7 +170,7 @@ def _assert_floats(actual: pd.Series, expected: list, label: str):
             assert got == pytest.approx(exp, abs=_FTOL), f"{label}[{i}]: {got} != {exp}"
 
 
-@pytest.mark.parametrize("source", ["myvass", "ncdc", "kpm"])
+@pytest.mark.parametrize("source", ["wide_multiyear", "wide_registry", "school_age"])
 def test_named_cleaner_golden_snapshot(source):
     g = GOLDEN[source]
     cleaned, stats = cleaning.clean_data(g["frame"](), source)

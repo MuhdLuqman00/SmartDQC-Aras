@@ -14,7 +14,7 @@ from backend.main import (
 
 
 def test_set_then_get_narrative_roundtrip():
-    cid = _cache_cleaned(pd.DataFrame({"a": [1, 2]}), {"source_type": "myvass"})
+    cid = _cache_cleaned(pd.DataFrame({"a": [1, 2]}), {"source_type": "wide_multiyear"})
     nar = {"executive_summary": {"en": "hello", "bm": "helo"}, "recommendations": []}
     _cache_set_narrative(cid, nar)
     assert _cache_get(cid)["narrative"] == nar

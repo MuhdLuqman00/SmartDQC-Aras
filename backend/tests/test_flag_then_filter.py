@@ -26,7 +26,7 @@ client = TestClient(main.app)
 
 
 # ── Fixtures: each has exactly one row that fails a quality rule ──────────────
-def _kpm() -> pd.DataFrame:
+def _school_age() -> pd.DataFrame:
     # Two identical rows → the duplicate-id rule excludes the second.
     return pd.DataFrame({
         "ID_MURID":          ["A1", "A1"],
@@ -38,7 +38,7 @@ def _kpm() -> pd.DataFrame:
     })
 
 
-def _myvass() -> pd.DataFrame:
+def _wide_multiyear() -> pd.DataFrame:
     # Second row's gender is unmappable → invalid-gender rule excludes it.
     return pd.DataFrame({
         "JANTINA":           ["LELAKI", "ZZZ"],
@@ -49,7 +49,7 @@ def _myvass() -> pd.DataFrame:
     })
 
 
-def _ncdc() -> pd.DataFrame:
+def _wide_registry() -> pd.DataFrame:
     # Wide format: one measurement year → reshaped to long, two clean rows.
     return pd.DataFrame({
         "JANTINA":      ["L", "P"],
@@ -66,7 +66,7 @@ def _general() -> pd.DataFrame:
 
 # ── Cleaner-level invariants (all four cleaners) ─────────────────────────────
 @pytest.mark.parametrize("source,frame_fn", [
-    ("kpm", _kpm), ("myvass", _myvass), ("ncdc", _ncdc), ("general", _general),
+    ("school_age", _school_age), ("wide_multiyear", _wide_multiyear), ("wide_registry", _wide_registry), ("general", _general),
 ])
 def test_cleaner_flags_instead_of_dropping(source, frame_fn):
     cleaned, stats = clean_data(frame_fn(), source)
@@ -99,7 +99,7 @@ def test_per_rule_counts_do_not_double_count_a_multi_fault_row():
         "BERAT (KG)":        [12.0],
         "TINGGI (CM)":       [85.0],
     })
-    _, stats = clean_data(df, "myvass")
+    _, stats = clean_data(df, "wide_multiyear")
     assert stats["final_count"] == 0
     assert stats["total_dropped"] == 1
     per_rule = sum(v for k, v in stats.items() if k.startswith("dropped_"))
@@ -111,7 +111,7 @@ def test_per_rule_counts_do_not_double_count_a_multi_fault_row():
 def test_analysis_view_reproduces_drop_based_output():
     """view=analysis must equal what the old (physically-dropping) cleaners
     produced: analyzable rows only, neither flag column present."""
-    cleaned, stats = clean_data(_kpm(), "kpm")
+    cleaned, stats = clean_data(_school_age(), "school_age")
     av = main._analysis_view(cleaned)
     assert len(av) == stats["final_count"]
     assert "analyzable" not in av.columns

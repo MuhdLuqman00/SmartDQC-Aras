@@ -71,7 +71,7 @@ def test_general_school_uses_bmi_categories_not_infant_zscores():
     weight/height-for-age (stunting/wasting) stay unavailable; no infant
     z-score columns are fabricated."""
     out, stats = clean_general(_school_df())
-    # BMI-category indicator columns emitted (same as clean_kpm).
+    # BMI-category indicator columns emitted (same as clean_school_age).
     for col in ("BMI_Category", "Ind_Kurus", "Ind_Normal", "Ind_Berlebihan", "Ind_Obes"):
         assert col in out.columns
     # No infant z-score indicator columns fabricated.

@@ -236,7 +236,7 @@ def _apply_bmi_outlier(df, stats, on, bmi_max=BMI_MAX) -> None:
 
 
 # ── Schema-specific portable drop-rule helpers (Phase 5C) ─────────────────────
-# Each _apply_* encapsulates the inline rule logic from clean_myvass/ncdc/kpm.
+# Each _apply_* encapsulates the inline rule logic from clean_wide_multiyear/wide_registry/school_age.
 # Call sites stay at the SAME pipeline stage — pure relocation, no logic change.
 # Each _trigger_* is a predicate over a PREPARED frame (canonical columns already
 # present) for the recommend endpoint (Phase 5C step 4).
@@ -386,7 +386,7 @@ def _set_kategori_umur(df: pd.DataFrame) -> None:
 def _compute_zscores_indicators(df, stats) -> None:
     """WHO WAZ/HAZ/BAZ (BIV-clamped, rounded 2dp) + status classifications +
     indicator flags + null-z-score exclusion (Rule 7, locked) + analyzable-only
-    indicator counts. Shared by the infant cleaners (myvass/ncdc) and reused by
+    indicator counts. Shared by the infant cleaners (wide_multiyear/wide_registry) and reused by
     the general infant cohort in Phase 4. Mutates df and stats in place. When
     WHO tables are unavailable it records a zero null-z-score drop and returns,
     matching the original `else` branch."""
@@ -490,15 +490,15 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
     if _mcol in df.columns and _on("review_future_measure_date"):
         _today = pd.Timestamp.now().normalize()
         _flag(df, df[_mcol].notna() & (df[_mcol] > _today), "review_future_measure_date")
-    # review_duplicate_ic (Family 1, myvass): same IC across rows (flag, not drop).
-    if source == "myvass" and _on("review_duplicate_ic"):
+    # review_duplicate_ic (Family 1, wide_multiyear): same IC across rows (flag, not drop).
+    if source == "wide_multiyear" and _on("review_duplicate_ic"):
         _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
         if _ic:
             _icn = df[_ic].astype(str).str.strip()
             _valid = (_icn != "") & (~_icn.str.lower().isin(["nan", "none", "<na>"]))
             _flag(df, _valid & _icn.duplicated(keep=False), "review_duplicate_ic")
-    # review_ic_gender_mismatch (Family 1, myvass): IC final-digit sex != Gender.
-    if source == "myvass" and _on("review_ic_gender_mismatch") and "Gender" in df.columns:
+    # review_ic_gender_mismatch (Family 1, wide_multiyear): IC final-digit sex != Gender.
+    if source == "wide_multiyear" and _on("review_ic_gender_mismatch") and "Gender" in df.columns:
         _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
         if _ic:
             _icsex = df[_ic].apply(extract_ic_gender_digit)
@@ -531,7 +531,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
             _flag(df, _ga.notna() & _gb.notna() & (_ga != _gb), "review_gender_cols_disagree")
     # review_year_mismatch (Family 4): stated year != measurement-date year.
     _mcol2 = "Tarikh_Ukur" if "Tarikh_Ukur" in df.columns else "Tarikh_Pengukuran"
-    if source == "ncdc" and "Year" in df.columns:
+    if source == "wide_registry" and "Year" in df.columns:
         _ycol = "Year"
     else:
         _ycol = find_col(["tahun ukur", "tahun_ukur", "tahun"])
@@ -549,8 +549,8 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
             _da = _parse_date(df[_dcols[0]])
             _db = _parse_date(df[_dcols[1]])
             _flag(df, _da.notna() & _db.notna() & (_da != _db), "review_dob_dual_mismatch")
-    # review_ic_* (Family 1, myvass): one validate_ic pass feeds three flags.
-    if source == "myvass":
+    # review_ic_* (Family 1, wide_multiyear): one validate_ic pass feeds three flags.
+    if source == "wide_multiyear":
         _ic = find_col(["ic_no_passport", "no kp", "kad pengenalan", "passport"])
         _need_ic = _ic and (
             _on("review_ic_malformed")
@@ -585,15 +585,15 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
                         & (df["Age_Months"] < age_cap)
                     )
                     _flag(df, _contra.fillna(False).astype(bool), "review_ic_age_contradiction")
-    # review_mykid_invalid (Family 1, ncdc): MyKid uses the 12-digit format too.
-    if source == "ncdc" and _on("review_mykid_invalid"):
+    # review_mykid_invalid (Family 1, wide_registry): MyKid uses the 12-digit format too.
+    if source == "wide_registry" and _on("review_mykid_invalid"):
         _mk = find_col(["mykid", "no. mykid", "no mykid"])
         if _mk:
             _mkres = df[_mk].apply(validate_ic)
             _mkbad = _mkres.apply(lambda r: (not r["valid"]) and r["type"] != "missing")
             _flag(df, _mkbad.astype(bool), "review_mykid_invalid")
     # review_dose_date_mismatch (Family 4, contoh-only): DOSE_DATE != measure date.
-    if source == "myvass" and _on("review_dose_date_mismatch") and "Tarikh_Ukur" in df.columns:
+    if source == "wide_multiyear" and _on("review_dose_date_mismatch") and "Tarikh_Ukur" in df.columns:
         _dose = next((c for c in src_cols if c.lower().replace("-", "_") == "dose_date"), None)
         if _dose and _dose in df.columns:
             _dd = _parse_date(df[_dose])
@@ -656,7 +656,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
             _dv = df[_dcol].astype(str).str.strip()
             _flag(df, df[_dcol].isna() | _dv.isin(["", "nan", "none", "<NA>", "<na>"]),
                   "review_daerah_null")
-    if source == "ncdc" and _on("review_bahagian_null"):
+    if source == "wide_registry" and _on("review_bahagian_null"):
         _bcol = find_col(["bahagian", "division"])
         if _bcol and _bcol in df.columns:
             _bv = df[_bcol].astype(str).str.strip()
@@ -772,7 +772,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
         return _present & ~_known
 
     # Family 10 — NCDC-SPECIFIC
-    if source == "ncdc":
+    if source == "wide_registry":
         if _on("review_vaccine_unknown"):
             _vc = find_col(["vaccine_name", "vaksin", "vaccine"])
             if _vc and _vc in df.columns:
@@ -792,7 +792,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
                 _flag(df, _ap & _tblank, "review_taska_blank")
 
     # Family 11 — MyVASS-SPECIFIC
-    if source == "myvass":
+    if source == "wide_multiyear":
         if _on("review_ethnicity_unknown"):
             _ec = find_col(["ethnicity", "etnik", "kaum", "bangsa"])
             if _ec and _ec in df.columns:
@@ -809,7 +809,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
 # MYVASS CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def clean_myvass(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
+def clean_wide_multiyear(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
     """Clean MyVASS data and compute WHO z-scores.
 
     Flag-then-filter: rows that fail quality rules are tagged with
@@ -824,7 +824,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | N
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
-    stats = {"raw_count": len(df), "data_type": "myvass"}
+    stats = {"raw_count": len(df), "data_type": "wide_multiyear"}
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
@@ -926,7 +926,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | N
     _set_kategori_umur(df)
 
     # Final stats — final_count = analyzable rows, not len(df)
-    _apply_review_flags(df, "myvass", _src_cols, find_col, enabled_rules, src_raw=_src_raw,
+    _apply_review_flags(df, "wide_multiyear", _src_cols, find_col, enabled_rules, src_raw=_src_raw,
                         age_cap=_age_cap)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
@@ -945,7 +945,7 @@ def clean_myvass(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | N
 # NCDC CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def clean_ncdc(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
+def clean_wide_registry(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
     """Clean NCDC (TASKA) data and compute WHO z-scores.
 
     Flag-then-filter: rows that fail quality rules are tagged with
@@ -958,7 +958,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | Non
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
-    stats = {"raw_count": len(df), "data_type": "ncdc"}
+    stats = {"raw_count": len(df), "data_type": "wide_registry"}
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
@@ -1125,7 +1125,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | Non
     _set_kategori_umur(df)
 
     # Final stats — final_count = analyzable rows, not len(df)
-    _apply_review_flags(df, "ncdc", _src_cols, find_col, enabled_rules, src_raw=_src_raw,
+    _apply_review_flags(df, "wide_registry", _src_cols, find_col, enabled_rules, src_raw=_src_raw,
                         age_cap=_age_cap)
     stats["final_count"] = int(df["analyzable"].sum())
     stats["total_dropped"] = stats["raw_count"] - stats["final_count"]
@@ -1146,7 +1146,7 @@ def clean_ncdc(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | Non
 # KPM CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def clean_kpm(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
+def clean_school_age(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
     """Clean KPM (school) data and calculate BMI categories.
 
     Flag-then-filter: rows that fail quality rules are tagged with
@@ -1159,7 +1159,7 @@ def clean_kpm(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None
     Returns:
         tuple: (cleaned_dataframe, statistics_dict)
     """
-    stats = {"raw_count": len(df), "data_type": "kpm"}
+    stats = {"raw_count": len(df), "data_type": "school_age"}
     df = df.copy()
     df["analyzable"] = True
     df["exclude_reason"] = ""
@@ -1559,7 +1559,7 @@ def clean_general(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | 
         _gap("overweight")
 
     # School-age cohort: BMI categories (KPM-style) replace WHO infant z-scores.
-    # Emit the same Ind_* / BMI_Category columns clean_kpm produces so analytics
+    # Emit the same Ind_* / BMI_Category columns clean_school_age produces so analytics
     # treat general school-age data identically. Requires both measurements.
     if cohort == "school" and coverage["berat_kg"] and coverage["tinggi_cm"]:
         df["BMI_Category"] = df["BMI"].apply(_classify_bmi_school)
@@ -1616,7 +1616,7 @@ def clean_data(
 
     Args:
         df: Raw DataFrame
-        data_type: 'kpm', 'myvass', 'ncdc', or 'general' (any unsupported schema)
+        data_type: 'school_age', 'wide_multiyear', 'wide_registry', or 'general' (any unsupported schema)
             which routes to the conservative general cleaner. Legacy values
             'unknown' and 'generic' are normalised to 'general'.
         enabled_rules: optional set/collection of rule codes the user kept on
@@ -1631,14 +1631,14 @@ def clean_data(
     """
     from backend.config import normalize_schema_type
     data_type = normalize_schema_type(data_type)
-    if data_type == "kpm":
-        return clean_kpm(df, enabled_rules, range_overrides)
-    elif data_type == "myvass":
-        return clean_myvass(df, enabled_rules, range_overrides)
-    elif data_type == "ncdc":
-        return clean_ncdc(df, enabled_rules, range_overrides)
+    if data_type == "school_age":
+        return clean_school_age(df, enabled_rules, range_overrides)
+    elif data_type == "wide_multiyear":
+        return clean_wide_multiyear(df, enabled_rules, range_overrides)
+    elif data_type == "wide_registry":
+        return clean_wide_registry(df, enabled_rules, range_overrides)
     # general / any unsupported schema → conservative general cleaner (never
-    # ValueError, never silently mis-routed to clean_myvass).
+    # ValueError, never silently mis-routed to clean_wide_multiyear).
     return clean_general(df, enabled_rules, range_overrides)
 
 
@@ -1648,7 +1648,7 @@ def clean_data(
 # the Quality Report "Rules Applied" card shows the full check set, not just
 # the ones that found problems.
 EVALUATED_RULES: dict[str, list[str]] = {
-    "myvass": [
+    "wide_multiyear": [
         "dropped_invalid_gender",
         "dropped_date_before_dob",
         "dropped_age_over5",
@@ -1657,7 +1657,7 @@ EVALUATED_RULES: dict[str, list[str]] = {
         "dropped_bmi_outlier",
         "dropped_null_zscore",
     ],
-    "ncdc": [
+    "wide_registry": [
         "dropped_invalid_gender",
         "dropped_pendapatan_x",
         "dropped_null_dob",
@@ -1669,7 +1669,7 @@ EVALUATED_RULES: dict[str, list[str]] = {
         "dropped_duplicate_mykid",
         "dropped_null_zscore",
     ],
-    "kpm": [
+    "school_age": [
         "dropped_ragu_gender",
         "dropped_invalid_gender",
         "dropped_duplicate_id",
@@ -1800,32 +1800,32 @@ DROP_RULE_REGISTRY: dict[str, dict] = {
     "dropped_date_before_dob": {
         "fn": _apply_dropped_date_before_dob,
         "trigger_fn": _trigger_date_before_dob,
-        "applicable_schemas": ["myvass", "ncdc"],
+        "applicable_schemas": ["wide_multiyear", "wide_registry"],
     },
     "dropped_age_over5": {
         "fn": _apply_dropped_age_over5,
         "trigger_fn": _trigger_age_over5,
-        "applicable_schemas": ["myvass"],
+        "applicable_schemas": ["wide_multiyear"],
     },
     "dropped_pendapatan_x": {
         "fn": _apply_dropped_pendapatan_x,
         "trigger_fn": _trigger_pendapatan_x,
-        "applicable_schemas": ["ncdc"],
+        "applicable_schemas": ["wide_registry"],
     },
     "dropped_null_dob": {
         "fn": _apply_dropped_null_dob,
         "trigger_fn": _trigger_null_dob,
-        "applicable_schemas": ["ncdc"],
+        "applicable_schemas": ["wide_registry"],
     },
     "dropped_duplicate_mykid": {
         "fn": _apply_dropped_duplicate_mykid,
         "trigger_fn": _trigger_duplicate_mykid,
-        "applicable_schemas": ["ncdc"],
+        "applicable_schemas": ["wide_registry"],
     },
     "dropped_ragu_gender": {
         "fn": _apply_dropped_ragu_gender,
         "trigger_fn": _trigger_ragu_gender,
-        "applicable_schemas": ["kpm"],
+        "applicable_schemas": ["school_age"],
     },
 }
 
@@ -2092,7 +2092,7 @@ REVIEW_RULE_REGISTRY: dict[str, dict] = {
 }
 
 REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
-    "myvass": [
+    "wide_multiyear": [
         "review_ic_malformed",
         "review_ic_dob_mismatch",
         "review_ic_gender_mismatch",
@@ -2122,7 +2122,7 @@ REVIEW_EVALUATED_RULES: dict[str, list[str]] = {
         # review_ethnicity_unknown — DISABLED 2026-06-16 (ETHNIC_VALID completeness unprovable from contoh)
         # review_facility_unknown  — DISABLED 2026-06-16 (FACILITY_SET demonstrably incomplete; real categories missing)
     ],
-    "ncdc": [
+    "wide_registry": [
         "review_mykid_shared_placeholder",
         "review_mykid_invalid",
         "review_name_gender_mismatch",
@@ -2190,29 +2190,29 @@ def detect_data_type(columns: list[str], filename: str = "") -> str:
     Auto-detect data type from column names and filename.
     
     Returns:
-        str: 'kpm', 'myvass', 'ncdc', or 'general'
+        str: 'school_age', 'wide_multiyear', 'wide_registry', or 'general'
     """
     col_set = set(c.upper() for c in columns)
     fname = filename.lower()
     
     # Check for NCDC pattern (year-prefixed columns)
     if any("2023" in c or "2024" in c or "2025" in c for c in columns):
-        return "ncdc"
+        return "wide_registry"
     
     # Check for KPM pattern
     if any(p in col_set for p in ["ID_MURID", "THN_TING", "NAMA SEKOLAH"]):
-        return "kpm"
-    if "kpm" in fname or ("berat" in fname and "tinggi" in fname):
-        return "kpm"
+        return "school_age"
+    if "school_age" in fname or ("berat" in fname and "tinggi" in fname):
+        return "school_age"
     
     # Check for MyVASS pattern
     if any(p in col_set for p in ["VACCINE_NAME", "NAMA KLINIK", "PANJANG LAHIR (KG)"]):
-        return "myvass"
+        return "wide_multiyear"
     if any(p in col_set for p in ["IC_NO_PASSPORT", "DOSE_DATE", "FACILITY_NAME"]):
-        return "myvass"
-    if "myvass" in fname or "gis" in fname:
-        return "myvass"
+        return "wide_multiyear"
+    if "wide_multiyear" in fname or "gis" in fname:
+        return "wide_multiyear"
     if "pemakanan" in fname or "anthropometry" in fname:
-        return "myvass"
+        return "wide_multiyear"
     
     return "general"

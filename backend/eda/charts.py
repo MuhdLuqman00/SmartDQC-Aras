@@ -55,8 +55,8 @@ def normalize_for_charts(df: pd.DataFrame, source_type: str = None) -> pd.DataFr
         dt = pd.to_datetime(df["tarikh_ukur"], errors="coerce", dayfirst=True, format="mixed")
         df["tahun_ukur"] = dt.dt.year
 
-    # 3. status_bmi_grouped — feeds status_bmi_pie for the general/kpm path
-    #    (mirrors runner.py:588). Suppressed for myvass/ncdc inside build_chart_blocks.
+    # 3. status_bmi_grouped — feeds status_bmi_pie for the general/school_age path
+    #    (mirrors runner.py:588). Suppressed for wide_multiyear/wide_registry inside build_chart_blocks.
     if "status_bmi_grouped" not in df.columns and "status_bmi" in df.columns:
         from ..config import BMI_GROUPED_MAP
         df["status_bmi_grouped"] = (
@@ -125,8 +125,8 @@ def build_chart_blocks(df: pd.DataFrame, source_type: str = None) -> dict:
             ],
         }
 
-    # ── Status BMI grouped pie (general schema only — myvass/ncdc use WHO z-score charts) ──
-    _zscore_schemas = {"myvass", "ncdc"}
+    # ── Status BMI grouped pie (general schema only — wide_multiyear/wide_registry use WHO z-score charts) ──
+    _zscore_schemas = {"wide_multiyear", "wide_registry"}
     if "status_bmi_grouped" in df.columns and source_type not in _zscore_schemas:
         vc = df["status_bmi_grouped"].value_counts()
         charts["status_bmi_pie"] = [

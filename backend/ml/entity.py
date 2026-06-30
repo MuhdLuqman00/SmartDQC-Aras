@@ -279,7 +279,7 @@ def _dob_equal(a: Any, b: Any, tol_days: int = 1) -> bool:
 # bundled default reflects the original dataset's sources; override per deployment
 # with SMARTDQC_SOURCE_PRIORITY (comma-separated source tags, most-preferred
 # first). Unknown sources go last regardless.
-_DEFAULT_SOURCE_PRIORITY = ["MyVASS", "myvass", "Clinic", "clinic", "NCDC", "ncdc"]
+_DEFAULT_SOURCE_PRIORITY = ["MyVASS", "wide_multiyear", "Clinic", "clinic", "NCDC", "wide_registry"]
 _SOURCE_PRIORITY = (
     [s.strip() for s in os.environ["SMARTDQC_SOURCE_PRIORITY"].split(",") if s.strip()]
     if os.environ.get("SMARTDQC_SOURCE_PRIORITY")

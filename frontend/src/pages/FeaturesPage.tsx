@@ -21,7 +21,7 @@ interface Feat {
 const FEATURES: Feat[] = [
   { n: 1,  icon: <FileInput size={18} />,  en: 'Data Input & Detection', bm: 'Input & Pengesanan Data',
     descEn: 'CSV/XLSX ingest with automatic source-type detection.', descBm: 'Muat naik CSV/XLSX dengan pengesanan jenis sumber automatik.',
-    to: '/upload', techEn: 'Auto-detects MyVASS, NCDC & KPM formats', techBm: 'Auto-kesan format MyVASS, NCDC & KPM' },
+    to: '/upload', techEn: 'Auto-detects multiple source formats', techBm: 'Auto-kesan pelbagai format sumber' },
   { n: 2,  icon: <GitMerge size={18} />,   en: 'Column Mapping (AI)', bm: 'Pemetaan Lajur (AI)',
     descEn: 'Fuzzy + AI schema mapping across 3 drift scenarios.', descBm: 'Pemetaan skema kabur + AI merentas 3 senario.',
     to: '/upload', techEn: 'AI matches your columns to the standard schema', techBm: 'AI memadankan lajur anda ke skema standard' },

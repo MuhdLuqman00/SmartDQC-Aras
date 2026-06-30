@@ -25,7 +25,7 @@ def test_persist_session_creates_dataset(db_session):
     _persist_session(
         cache_id=cache_id,
         filename="test.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=500,
         result={"quality_score": 88, "issues": []},
         db=db_session,
@@ -33,7 +33,7 @@ def test_persist_session_creates_dataset(db_session):
     ds = db_session.query(Dataset).filter_by(id=cache_id).first()
     assert ds is not None
     assert ds.filename == "test.csv"
-    assert ds.source_type == "myvass"
+    assert ds.source_type == "wide_multiyear"
     assert ds.row_count == 500
 
 
@@ -56,7 +56,7 @@ def test_persist_session_stores_quality_in_analysis_result(db_session):
     _persist_session(
         cache_id=cache_id,
         filename="g.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=200,
         result={"quality_score": 92, "issues": ["missing_ic"]},
         db=db_session,
@@ -77,7 +77,7 @@ def test_persist_session_accepts_numpy_scalars(db_session):
     _persist_session(
         cache_id=cache_id,
         filename="Contoh data.xlsx",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=13,
         result={
             "quality_score": np.float64(79.0),

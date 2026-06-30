@@ -28,14 +28,14 @@ def test_delete_datasets_removes_rows_cache_and_unlinks_entity(tmp_path, monkeyp
 
     with initdb.SessionLocal() as db:
         db.add(Dataset(id=ds_id, name="t", filename="t.csv",
-                        source_type="myvass", row_count=1,
+                        source_type="wide_multiyear", row_count=1,
                         quality_score=50.0, created_at=now))
         db.add(_Session(id=sess_id, dataset_id=ds_id,
                          created_at=now, updated_at=now))
         db.add(AnalysisResult(id=ar_id, session_id=sess_id,
                               result_type="clean", result_json={"a": 1},
                               created_at=now))
-        db.add(EntityLinkage(ic_no="IC123", source_type="myvass",
+        db.add(EntityLinkage(ic_no="IC123", source_type="wide_multiyear",
                              dataset_id=ds_id, created_at=now))
         db.commit()
         linkage_id = db.query(EntityLinkage).filter(

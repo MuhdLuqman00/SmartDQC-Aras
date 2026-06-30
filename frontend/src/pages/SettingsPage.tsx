@@ -41,7 +41,7 @@ interface Rule {
   kind: 'drop' | 'review';
 }
 
-type RuleSchema = 'myvass' | 'ncdc' | 'kpm' | 'general';
+type RuleSchema = 'wide_multiyear' | 'wide_registry' | 'school_age' | 'general';
 
 /* KPI benchmark targets. Both NPAN (national policy) and WHO (clinical
    standard) targets are editable, admin-only. Labels live here; the backend
@@ -106,7 +106,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState<'thresholds' | 'rules' | 'kpi' | 'ranges'>('thresholds');
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [rules, setRules] = useState<Rule[]>([]);
-  const [ruleSchema, setRuleSchema] = useState<RuleSchema>('myvass');
+  const [ruleSchema, setRuleSchema] = useState<RuleSchema>('wide_multiyear');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [kpi, setKpi] = useState<KpiTargets | null>(null);
@@ -441,9 +441,9 @@ export function SettingsPage() {
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {([
-                ['myvass', 'MyVASS'],
-                ['ncdc', 'NCDC'],
-                ['kpm', 'KPM'],
+                ['wide_multiyear', 'MyVASS'],
+                ['wide_registry', 'NCDC'],
+                ['school_age', 'KPM'],
                 ['general', t('Other', 'Lain-lain')],
               ] as [RuleSchema, string][]).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setRuleSchema(key)}

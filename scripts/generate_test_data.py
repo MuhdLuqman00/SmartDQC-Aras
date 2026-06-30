@@ -1,7 +1,7 @@
 """Generate two synthetic SmartDQC datasets that exercise every feature.
 
 Outputs:
-  data/test/smartdqc_test_myvass.csv   (~1500 rows)
+  data/test/smartdqc_test_wide_multiyear.csv   (~1500 rows)
   data/test/smartdqc_test_klinik.csv   (~800 rows, ~30% IC overlap with the
                                         MyVASS file plus a handful of
                                         near-matches for fuzzy linkage)
@@ -183,7 +183,7 @@ def status_bmi_from_baz(baz: float) -> str:
 
 # ── Row generator ────────────────────────────────────────────────────────────
 
-def build_myvass_row(force_ic: str | None = None) -> dict:
+def build_wide_multiyear_row(force_ic: str | None = None) -> dict:
     state = random.choices(list(STATE_WEIGHTS.keys()), weights=list(STATE_WEIGHTS.values()))[0]
     state_code, districts = STATES[state]
     district = random.choice(districts)
@@ -284,7 +284,7 @@ def build_klinik_row(force_ic: str | None = None) -> dict:
     """Klinik rows look similar to MyVASS but always have a vaccine column
     and a klinik-specific source_type. Used to exercise the cross-dataset
     linkage feature."""
-    row = build_myvass_row(force_ic=force_ic)
+    row = build_wide_multiyear_row(force_ic=force_ic)
     row["vaccine_name"] = random.choice(VACCINES)
     return row
 
@@ -336,11 +336,11 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         w.writerows(rows)
 
 
-def _inject_linkage_conflicts(klinik: list[dict], myvass_lookup: dict[str, dict]) -> dict:
+def _inject_linkage_conflicts(klinik: list[dict], wide_multiyear_lookup: dict[str, dict]) -> dict:
     """Mutate klinik rows that share an IC with MyVASS so the v2 linkage UI
     has real contradictions to surface. Returns counts for logging."""
     counts = {"gender": 0, "dob_drift": 0, "name_variant": 0, "district_drift": 0}
-    overlapping = [r for r in klinik if r["IC_NO_PASSPORT"] in myvass_lookup]
+    overlapping = [r for r in klinik if r["IC_NO_PASSPORT"] in wide_multiyear_lookup]
     random.shuffle(overlapping)
 
     # 15 hard gender mismatches (flip L↔P in klinik)
@@ -386,17 +386,17 @@ def main() -> None:
     out_dir = here / "data" / "test"
 
     # ── MyVASS: 1500 unique children ─────────────────────────────────────
-    myvass = [build_myvass_row() for _ in range(1500)]
-    myvass_ics = [r["IC_NO_PASSPORT"] for r in myvass]
-    myvass_lookup = {r["IC_NO_PASSPORT"]: r for r in myvass}
+    wide_multiyear = [build_wide_multiyear_row() for _ in range(1500)]
+    wide_multiyear_ics = [r["IC_NO_PASSPORT"] for r in wide_multiyear]
+    wide_multiyear_lookup = {r["IC_NO_PASSPORT"]: r for r in wide_multiyear}
 
     # ── Klinik: 800 rows where ~30% share ICs with MyVASS for linkage ────
     overlap_n = 240   # 30% of 800
     fuzzy_n   = 20    # one-digit-off fuzzy IC variants
     fresh_n   = 800 - overlap_n - fuzzy_n
 
-    overlap_ics = random.sample(myvass_ics, overlap_n)
-    fuzzy_ics   = [fuzzy_one_digit(ic) for ic in random.sample(myvass_ics, fuzzy_n)]
+    overlap_ics = random.sample(wide_multiyear_ics, overlap_n)
+    fuzzy_ics   = [fuzzy_one_digit(ic) for ic in random.sample(wide_multiyear_ics, fuzzy_n)]
 
     klinik = (
         [build_klinik_row(force_ic=ic) for ic in overlap_ics]
@@ -406,16 +406,16 @@ def main() -> None:
 
     # Inject linkage-specific conflicts BEFORE adding generic missing/dupe
     # noise so the conflict-bearing rows are guaranteed present.
-    conflict_counts = _inject_linkage_conflicts(klinik, myvass_lookup)
+    conflict_counts = _inject_linkage_conflicts(klinik, wide_multiyear_lookup)
 
-    myvass = inject_issues(myvass, missing_rate=0.03, duplicate_rate=0.02)
+    wide_multiyear = inject_issues(wide_multiyear, missing_rate=0.03, duplicate_rate=0.02)
     klinik = inject_issues(klinik, missing_rate=0.04, duplicate_rate=0.015)
 
-    write_csv(out_dir / "smartdqc_test_myvass.csv", myvass)
+    write_csv(out_dir / "smartdqc_test_wide_multiyear.csv", wide_multiyear)
     write_csv(out_dir / "smartdqc_test_klinik.csv", klinik)
 
     print("Wrote:")
-    print(f"  {out_dir/'smartdqc_test_myvass.csv'}   {len(myvass):>5} rows × {len(myvass[0])} cols")
+    print(f"  {out_dir/'smartdqc_test_wide_multiyear.csv'}   {len(wide_multiyear):>5} rows × {len(wide_multiyear[0])} cols")
     print(f"  {out_dir/'smartdqc_test_klinik.csv'}   {len(klinik):>5} rows × {len(klinik[0])} cols")
     print()
     print("Linkage expectations (v2):")

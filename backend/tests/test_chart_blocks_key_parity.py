@@ -1,5 +1,5 @@
 """Regression: /charts/blocks must produce the same chart keys as run_eda for a
-raw (non-pre-baked) myvass-shaped fixture.
+raw (non-pre-baked) wide_multiyear-shaped fixture.
 
 Root cause being guarded: the cleaned DataFrame cached by /clean/run carries
 mixed-case columns (Berat_kg, Tinggi_cm) with no z-score classification cols.
@@ -32,11 +32,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _raw_myvass_df() -> pd.DataFrame:
+def _raw_wide_multiyear_df() -> pd.DataFrame:
     """Df shaped like the REAL /clean/run cache output for a MyVASS file.
 
     This deliberately mirrors what clean_data() actually emits (verified against
-    synthetic_myvass_12000.csv), NOT a convenience fixture:
+    synthetic_wide_multiyear_12000.csv), NOT a convenience fixture:
       - Mixed-case canonical-mappable columns (Berat_kg, Tinggi_cm, BMI, Negeri).
       - Date columns the cleaner keeps (Tarikh_Lahir, Tarikh_Pengukuran) — NOT a
         pre-computed lowercase ``age_months_computed``.
@@ -79,15 +79,15 @@ def test_charts_blocks_keys_match_run_eda():
     from backend.eda.charts import normalize_for_charts, build_chart_blocks
     from backend.eda.runner import run_eda_auto
 
-    df = _raw_myvass_df()
+    df = _raw_wide_multiyear_df()
 
     # Path A: normalize_for_charts(df, source_type) + build_chart_blocks
     # This simulates the /charts/blocks endpoint after the Phase 1 fix.
-    normalized = normalize_for_charts(df.copy(), "myvass")
-    blocks_keys = set(build_chart_blocks(normalized, source_type="myvass").keys())
+    normalized = normalize_for_charts(df.copy(), "wide_multiyear")
+    blocks_keys = set(build_chart_blocks(normalized, source_type="wide_multiyear").keys())
 
     # Path B: run_eda_auto — the gold-standard path that already normalises.
-    eda_keys = set(run_eda_auto(df.copy(), "myvass").get("charts", {}).keys())
+    eda_keys = set(run_eda_auto(df.copy(), "wide_multiyear").get("charts", {}).keys())
 
     assert blocks_keys == eda_keys, (
         f"Chart key mismatch:\n"
@@ -105,9 +105,9 @@ def test_charts_blocks_has_zscore_and_trend_charts():
     """
     from backend.eda.charts import normalize_for_charts, build_chart_blocks
 
-    df = _raw_myvass_df()
-    normalized = normalize_for_charts(df.copy(), "myvass")
-    blocks = build_chart_blocks(normalized, source_type="myvass")
+    df = _raw_wide_multiyear_df()
+    normalized = normalize_for_charts(df.copy(), "wide_multiyear")
+    blocks = build_chart_blocks(normalized, source_type="wide_multiyear")
 
     required = {
         "waz_distribution", "haz_distribution", "baz_distribution",
@@ -117,7 +117,7 @@ def test_charts_blocks_has_zscore_and_trend_charts():
     }
     missing = required - set(blocks.keys())
     assert not missing, f"Charts still missing after normalization: {missing}"
-    # status_bmi_pie must NOT appear for myvass (Phase 2 clinical decision)
+    # status_bmi_pie must NOT appear for wide_multiyear (Phase 2 clinical decision)
     assert "status_bmi_pie" not in blocks
 
 
@@ -127,8 +127,8 @@ def test_charts_blocks_derives_age_when_absent():
     that pre-supplied age and hid this dependency."""
     from backend.eda.charts import normalize_for_charts
 
-    df = _raw_myvass_df()
+    df = _raw_wide_multiyear_df()
     assert "age_months_computed" not in df.columns  # real cached shape
-    normalized = normalize_for_charts(df.copy(), "myvass")
+    normalized = normalize_for_charts(df.copy(), "wide_multiyear")
     assert "age_months_computed" in normalized.columns
     assert "waz" in normalized.columns  # proof add_who_zscores ran

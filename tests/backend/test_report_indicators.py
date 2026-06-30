@@ -40,7 +40,7 @@ def _eda():
     in production. This pins the real producer -> consumer contract.
     """
     return {
-        "source_type":   "myvass",
+        "source_type":   "wide_multiyear",
         "total_rows":    100,
         "total_columns": 12,
         "data_quality_score": {

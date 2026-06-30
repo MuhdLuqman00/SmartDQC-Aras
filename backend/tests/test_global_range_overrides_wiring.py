@@ -23,7 +23,7 @@ def _seed(df: pd.DataFrame) -> str:
     return cid
 
 
-def _kpm_frame() -> pd.DataFrame:
+def _school_age_frame() -> pd.DataFrame:
     return pd.DataFrame({
         "ID_MURID":          ["A1", "A2"],
         "JANTINA":           ["L", "P"],
@@ -48,8 +48,8 @@ def test_preview_impact_forwards_global_overrides(monkeypatch):
 
     monkeypatch.setattr(main, "clean_data", _spy)
 
-    cid = _seed(_kpm_frame())
-    resp = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=kpm", json={})
+    cid = _seed(_school_age_frame())
+    resp = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=school_age", json={})
     assert resp.status_code == 200
     assert captured["range_overrides"] == _OVERRIDE
 
@@ -68,7 +68,7 @@ def test_global_overrides_none_when_unset(monkeypatch):
 
     monkeypatch.setattr(main, "clean_data", _spy)
 
-    cid = _seed(_kpm_frame())
-    resp = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=kpm", json={})
+    cid = _seed(_school_age_frame())
+    resp = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=school_age", json={})
     assert resp.status_code == 200
     assert captured["range_overrides"] is None

@@ -189,7 +189,7 @@ def test_timeline_orders_measurements_ascending():
         _rec(ic="200512100001", source_type="Clinic",    measure_date="2024-12-15",
              weight_kg=10.5, dataset_id="ds-clinic"),
         _rec(ic="200512100001", source_type="NCDC",   measure_date="2026-01-20",
-             weight_kg=14.1, dataset_id="ds-ncdc"),
+             weight_kg=14.1, dataset_id="ds-wide_registry"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     g = next(grp for grp in groups if grp["ic"] == "200512100001")

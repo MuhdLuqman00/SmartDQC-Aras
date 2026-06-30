@@ -20,9 +20,9 @@ def test_quality_delta():
 
 def test_compare_datasets_returns_expected_keys():
     summaries = [
-        {"dataset_id": "ds1", "source_type": "myvass", "quality_score": 85,
+        {"dataset_id": "ds1", "source_type": "wide_multiyear", "quality_score": 85,
          "indicators": {"stunting_rate": 0.12, "wasting_rate": 0.05}},
-        {"dataset_id": "ds2", "source_type": "myvass", "quality_score": 78,
+        {"dataset_id": "ds2", "source_type": "wide_multiyear", "quality_score": 78,
          "indicators": {"stunting_rate": 0.15, "wasting_rate": 0.04}},
     ]
     result = compare_datasets(summaries)
@@ -33,9 +33,9 @@ def test_compare_datasets_returns_expected_keys():
 
 def test_compare_datasets_computes_stunting_delta():
     summaries = [
-        {"dataset_id": "ds1", "source_type": "myvass", "quality_score": 85,
+        {"dataset_id": "ds1", "source_type": "wide_multiyear", "quality_score": 85,
          "indicators": {"stunting_rate": 0.10}},
-        {"dataset_id": "ds2", "source_type": "myvass", "quality_score": 90,
+        {"dataset_id": "ds2", "source_type": "wide_multiyear", "quality_score": 90,
          "indicators": {"stunting_rate": 0.14}},
     ]
     result = compare_datasets(summaries)
@@ -44,11 +44,11 @@ def test_compare_datasets_computes_stunting_delta():
 
 def test_compare_datasets_trend_improving():
     summaries = [
-        {"dataset_id": "ds1", "source_type": "myvass", "quality_score": 70,
+        {"dataset_id": "ds1", "source_type": "wide_multiyear", "quality_score": 70,
          "indicators": {"stunting_rate": 0.20}},
-        {"dataset_id": "ds2", "source_type": "myvass", "quality_score": 75,
+        {"dataset_id": "ds2", "source_type": "wide_multiyear", "quality_score": 75,
          "indicators": {"stunting_rate": 0.17}},
-        {"dataset_id": "ds3", "source_type": "myvass", "quality_score": 80,
+        {"dataset_id": "ds3", "source_type": "wide_multiyear", "quality_score": 80,
          "indicators": {"stunting_rate": 0.14}},
     ]
     result = compare_datasets(summaries)

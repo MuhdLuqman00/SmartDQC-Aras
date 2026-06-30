@@ -7,7 +7,7 @@ _flag() (review_reason) only — never _exclude().
 """
 import pandas as pd
 
-from backend.eda.cleaning import clean_myvass, clean_ncdc
+from backend.eda.cleaning import clean_wide_multiyear, clean_wide_registry
 from backend.utils.ic_validator import extract_ic_birthdate
 
 
@@ -43,7 +43,7 @@ def test_ic_malformed_flags_short_ic():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_ic_malformed")
     assert not _has(cleaned.loc[1, "review_reason"], "review_ic_malformed")
 
@@ -57,7 +57,7 @@ def test_ic_malformed_does_not_flag_blank():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     # blank IC is "missing", not "malformed" — must not be flagged here
     assert not _has(cleaned.loc[0, "review_reason"], "review_ic_malformed")
 
@@ -73,7 +73,7 @@ def test_ic_dob_mismatch_flagged():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_ic_dob_mismatch")
     assert not _has(cleaned.loc[1, "review_reason"], "review_ic_dob_mismatch")
 
@@ -89,12 +89,12 @@ def test_ic_age_contradiction_parent_ic():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_ic_age_contradiction")
     assert not _has(cleaned.loc[1, "review_reason"], "review_ic_age_contradiction")
 
 
-# --- review_mykid_invalid (ncdc) ----------------------------------------------
+# --- review_mykid_invalid (wide_registry) ----------------------------------------------
 
 def test_mykid_invalid_flagged():
     df = pd.DataFrame({
@@ -105,12 +105,12 @@ def test_mykid_invalid_flagged():
         "Berat_kg": [12.0, 12.0],
         "Tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_ncdc(df)
+    cleaned, _ = clean_wide_registry(df)
     assert not _has(cleaned.loc[0, "review_reason"], "review_mykid_invalid")
     assert _has(cleaned.loc[1, "review_reason"], "review_mykid_invalid")
 
 
-# --- review_dose_date_mismatch (myvass, contoh-only) --------------------------
+# --- review_dose_date_mismatch (wide_multiyear, contoh-only) --------------------------
 
 def test_dose_date_mismatch_flagged():
     df = pd.DataFrame({
@@ -122,7 +122,7 @@ def test_dose_date_mismatch_flagged():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_dose_date_mismatch")
     assert not _has(cleaned.loc[1, "review_reason"], "review_dose_date_mismatch")
 
@@ -138,7 +138,7 @@ def test_family14_flags_never_set_exclude():
         "berat_kg": [12.0],
         "tinggi_cm": [85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_ic_malformed")
     # malformed IC alone is a flag, not an exclusion
     assert "review_ic_malformed" not in str(cleaned.loc[0, "exclude_reason"])

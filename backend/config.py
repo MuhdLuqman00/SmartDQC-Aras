@@ -272,7 +272,7 @@ DEFAULT_ID_COLUMN = os.environ.get("SMARTDQC_ID_COLUMN", "IC_NO_PASSPORT")
 # variants (lowercased). First match wins.
 
 AUTO_MAPPING_HINTS = {
-    "myvass": {
+    "wide_multiyear": {
         "id":             ["no. mykid", "no mykid", "mykid", "no.mykid", "id kanak-kanak",
                            "ic_no_passport", "ic no passport", "no_kp", "no kp",
                            "ic", "no_ic", "no. ic", "nric", "passport"],
@@ -308,8 +308,8 @@ AUTO_MAPPING_HINTS = {
     # NCDC (TASKA) currently uses the same year-prefixed wide TASKA layout as
     # MyVASS, so these hints mirror it. Kept as an independent set (not a shared
     # reference) so NCDC can diverge without affecting MyVASS, and vice versa.
-    # The NCDC-specific *cleaning* lives in clean_ncdc(); only mapping hints here.
-    "ncdc": {
+    # The NCDC-specific *cleaning* lives in clean_wide_registry(); only mapping hints here.
+    "wide_registry": {
         "id":             ["no. mykid", "no mykid", "mykid", "no.mykid", "id kanak-kanak",
                            "ic_no_passport", "ic no passport", "no_kp", "no kp",
                            "ic", "no_ic", "no. ic", "nric", "passport"],
@@ -344,7 +344,7 @@ AUTO_MAPPING_HINTS = {
     },
     # KPM (school-age) — distinct student/school schema. Note WHO infant
     # z-scores don't apply; the KPM cleaner uses school-age BMI categories.
-    "kpm": {
+    "school_age": {
         "id":             ["id_murid", "no. mykid", "no mykid", "mykid", "id",
                            "no_ic", "ic", "no. ic", "nric"],
         "nama":           ["nama murid", "nama", "name", "nama pelajar"],
@@ -400,7 +400,13 @@ _merge_schema_hints()
 # ─── SOURCE TYPE DETECTION ────────────────────────────────────────────────────
 
 # Legacy values used in older cached datasets / sessions.
-_SCHEMA_TYPE_ALIASES: dict[str, str] = {"unknown": "general", "generic": "general"}
+_SCHEMA_TYPE_ALIASES: dict[str, str] = {
+    "unknown": "general", "generic": "general",
+    # Legacy client schema names → neutral profile names (persisted DB values
+    # and cached sessions keep working after the Category 7 rename).
+    "myvass": "wide_multiyear", "ncdc": "wide_registry", "kpm": "school_age",
+    "klinik": "general",
+}
 
 
 def normalize_schema_type(t: str) -> str:
@@ -415,7 +421,7 @@ def normalize_schema_type(t: str) -> str:
 def detect_source_type(columns: list) -> str:
     """Detect data source from column names (case-insensitive).
 
-    Returns one of: "kpm" (school), "myvass" (real MyVAS vaccination export OR
+    Returns one of: "school_age" (school), "wide_multiyear" (real MyVAS vaccination export OR
     the TASKA wide format), or "general" (conservative safe-mode cleaner).
     NCDC is column-identical to the *TASKA wide* MyVASS variant (same schema) and
     is therefore not auto-distinguishable from it — it is chosen via the manual
@@ -429,9 +435,9 @@ def detect_source_type(columns: list) -> str:
     joined = " ".join(cols_normalized)
 
     # KPM / school signals — distinctive student & school columns
-    kpm_signals = ["id murid", "nama sekolah", "sekolah", "thn ting", "ting murid"]
-    if any(s in joined or s in cols_normalized for s in kpm_signals):
-        return "kpm"
+    school_age_signals = ["id murid", "nama sekolah", "sekolah", "thn ting", "ting murid"]
+    if any(s in joined or s in cols_normalized for s in school_age_signals):
+        return "school_age"
 
     # MyVAS (vaccination registry) signals — the real MyVAS export schema, which
     # is distinct from the TASKA wide format. Checked BEFORE the TASKA block
@@ -440,14 +446,14 @@ def detect_source_type(columns: list) -> str:
     myvas_signals = ["ic no passport", "dose date", "facility name",
                      "age at vaccination", "kategori fasiliti"]
     if sum(1 for s in myvas_signals if s in joined or s in cols_normalized) >= 2:
-        return "myvass"
+        return "wide_multiyear"
 
     # TASKA wide-format signals (shared by MyVASS and NCDC)
     taska_signals = ["nama taska", "no. mykid", "pendapatan keluarga", "kumpulan umur",
                      "2023 berat", "2024 berat", "2025 berat", "2026 berat",
                      "2023 status berat", "agensi"]
     if sum(1 for s in taska_signals if s in joined or s in cols_normalized) >= 2:
-        return "myvass"
+        return "wide_multiyear"
 
     return "general"
 
@@ -456,19 +462,19 @@ def detect_source_type(columns: list) -> str:
 # Each entry is a list of raw signal strings that are normalised with _norm_key
 # before matching, so separator style (space/underscore/dot) never blocks a hit.
 _SCHEMA_SIGNALS: dict[str, list[str]] = {
-    "kpm": [
+    "school_age": [
         "id murid", "nama sekolah", "sekolah", "thn ting", "ting murid",
         "nama murid", "nama pelajar",
     ],
-    "myvass": [
+    "wide_multiyear": [
         # MyVAS vaccination-registry (real export) signals
         "ic no passport", "dose date", "facility name",
         "age at vaccination", "kategori fasiliti",
-        # TASKA wide-format signals (also routes to myvass)
+        # TASKA wide-format signals (also routes to wide_multiyear)
         "nama taska", "no mykid", "pendapatan keluarga", "kumpulan umur",
         "2024 berat", "2025 berat", "2026 berat", "2023 status berat",
     ],
-    "ncdc": [
+    "wide_registry": [
         "nama taska", "no mykid", "pendapatan keluarga", "kumpulan umur",
         "2024 berat", "2025 berat", "2026 berat", "2023 status berat",
         "agensi",
@@ -571,7 +577,7 @@ def auto_suggest_mapping(columns: list, source_type: str) -> dict:
     hints = AUTO_MAPPING_HINTS.get(source_type, {})
 
     # For general (or any source with no hint set) reuse the column-name
-    # knowledge from ALL supported schemas (myvass/ncdc/kpm), so a near-known or
+    # knowledge from ALL supported schemas (wide_multiyear/wide_registry/school_age), so a near-known or
     # unsupported dataset gets deterministic per-field best-match hints instead
     # of depending 100% on the LLM.
     generic = (not hints) or normalize_schema_type(source_type) == "general"

@@ -15,7 +15,7 @@ def test_child_record_create_and_query(db_session):
         id=ds_id,
         name="test",
         filename="test.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=1,
         quality_score=50.0,
         created_at=now,
@@ -26,7 +26,7 @@ def test_child_record_create_and_query(db_session):
     # Create child record
     rec = ChildRecord(
         dataset_id=ds_id,
-        source_type="myvass",
+        source_type="wide_multiyear",
         ic_norm="900101010001",
         name="ALI BIN AHMAD",
         dob="2020-01-15",
@@ -67,7 +67,7 @@ def test_child_record_query_by_ic_norm(db_session):
             id=ds1_id,
             name="test1",
             filename="test1.csv",
-            source_type="myvass",
+            source_type="wide_multiyear",
             row_count=1,
             created_at=now,
         )
@@ -77,7 +77,7 @@ def test_child_record_query_by_ic_norm(db_session):
             id=ds2_id,
             name="test2",
             filename="test2.csv",
-            source_type="ncdc",
+            source_type="wide_registry",
             row_count=1,
             created_at=now,
         )
@@ -87,13 +87,13 @@ def test_child_record_query_by_ic_norm(db_session):
     # Create child records with same IC
     db_session.add(
         ChildRecord(
-            dataset_id=ds1_id, source_type="myvass", ic_norm="900101010001", name="ALI"
+            dataset_id=ds1_id, source_type="wide_multiyear", ic_norm="900101010001", name="ALI"
         )
     )
     db_session.add(
         ChildRecord(
             dataset_id=ds2_id,
-            source_type="ncdc",
+            source_type="wide_registry",
             ic_norm="900101010001",
             name="ALI BIN AHMAD",
         )
@@ -123,7 +123,7 @@ def test_child_record_cascade_delete(db_session):
             id=ds_id,
             name="test",
             filename="test.csv",
-            source_type="myvass",
+            source_type="wide_multiyear",
             row_count=1,
             created_at=now,
         )
@@ -131,7 +131,7 @@ def test_child_record_cascade_delete(db_session):
     db_session.flush()  # parent before child (FK ordering)
     db_session.add(
         ChildRecord(
-            dataset_id=ds_id, source_type="myvass", ic_norm="900101010001", name="ALI"
+            dataset_id=ds_id, source_type="wide_multiyear", ic_norm="900101010001", name="ALI"
         )
     )
     db_session.commit()

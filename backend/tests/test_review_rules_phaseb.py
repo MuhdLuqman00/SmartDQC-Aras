@@ -7,7 +7,7 @@ data with no triggers) is covered by test_review_rules.py and must stay green.
 """
 import pandas as pd
 
-from backend.eda.cleaning import clean_myvass, clean_ncdc
+from backend.eda.cleaning import clean_wide_multiyear, clean_wide_registry
 from backend.utils.ic_validator import extract_ic_gender_digit
 
 
@@ -41,7 +41,7 @@ def test_ic_gender_digit_missing_returns_none():
 
 # --- Family 4: review_future_measure_date -------------------------------------
 
-def test_future_measure_date_flagged_myvass():
+def test_future_measure_date_flagged_wide_multiyear():
     df = pd.DataFrame({
         "jantina": ["LELAKI", "PEREMPUAN"],
         "Tarikh_Lahir": ["2020-01-01", "2020-01-01"],
@@ -49,7 +49,7 @@ def test_future_measure_date_flagged_myvass():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_future_measure_date")
     assert not _has(cleaned.loc[1, "review_reason"], "review_future_measure_date")
 
@@ -62,14 +62,14 @@ def test_future_measure_date_keeps_row_analyzable_flag_not_drop():
         "berat_kg": [12.0],
         "tinggi_cm": [85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     # the flag itself must be present (analyzable may be False for other reasons)
     assert _has(cleaned.loc[0, "review_reason"], "review_future_measure_date")
 
 
-# --- Family 1: review_duplicate_ic (myvass) -----------------------------------
+# --- Family 1: review_duplicate_ic (wide_multiyear) -----------------------------------
 
-def test_duplicate_ic_flags_all_sharing_rows_myvass():
+def test_duplicate_ic_flags_all_sharing_rows_wide_multiyear():
     df = pd.DataFrame({
         "IC_NO_PASSPORT": ["200101010101", "200101010101", "200202020202"],
         "jantina": ["LELAKI", "LELAKI", "PEREMPUAN"],
@@ -78,15 +78,15 @@ def test_duplicate_ic_flags_all_sharing_rows_myvass():
         "berat_kg": [12.0, 12.0, 12.0],
         "tinggi_cm": [85.0, 85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_duplicate_ic")
     assert _has(cleaned.loc[1, "review_reason"], "review_duplicate_ic")
     assert not _has(cleaned.loc[2, "review_reason"], "review_duplicate_ic")
 
 
-# --- Family 1: review_ic_gender_mismatch (myvass) -----------------------------
+# --- Family 1: review_ic_gender_mismatch (wide_multiyear) -----------------------------
 
-def test_ic_gender_mismatch_flagged_myvass():
+def test_ic_gender_mismatch_flagged_wide_multiyear():
     df = pd.DataFrame({
         # row0 IC odd -> Male but jantina Female -> mismatch
         # row1 IC even -> Female and jantina Female -> ok
@@ -97,14 +97,14 @@ def test_ic_gender_mismatch_flagged_myvass():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_ic_gender_mismatch")
     assert not _has(cleaned.loc[1, "review_reason"], "review_ic_gender_mismatch")
 
 
 # --- Family 2: review_name_gender_mismatch ------------------------------------
 
-def test_name_gender_mismatch_flagged_myvass():
+def test_name_gender_mismatch_flagged_wide_multiyear():
     df = pd.DataFrame({
         "NAMA": ["SITI BINTI ALI", "MUHAMMAD BIN ALI"],
         "jantina": ["LELAKI", "LELAKI"],
@@ -113,7 +113,7 @@ def test_name_gender_mismatch_flagged_myvass():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     # row0 female honorific vs Male -> mismatch; row1 male honorific vs Male -> ok
     assert _has(cleaned.loc[0, "review_reason"], "review_name_gender_mismatch")
     assert not _has(cleaned.loc[1, "review_reason"], "review_name_gender_mismatch")
@@ -121,7 +121,7 @@ def test_name_gender_mismatch_flagged_myvass():
 
 # --- Family 3: review_gender_cols_disagree ------------------------------------
 
-def test_gender_cols_disagree_flagged_myvass():
+def test_gender_cols_disagree_flagged_wide_multiyear():
     df = pd.DataFrame({
         "jantina": ["LELAKI", "PEREMPUAN"],
         "GENDER": ["Female", "Female"],
@@ -130,7 +130,7 @@ def test_gender_cols_disagree_flagged_myvass():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     # row0 Male vs Female -> disagree; row1 Female vs Female -> agree
     assert _has(cleaned.loc[0, "review_reason"], "review_gender_cols_disagree")
     assert not _has(cleaned.loc[1, "review_reason"], "review_gender_cols_disagree")
@@ -138,7 +138,7 @@ def test_gender_cols_disagree_flagged_myvass():
 
 # --- Family 4: review_year_mismatch -------------------------------------------
 
-def test_year_mismatch_flagged_myvass_tahun_ukur():
+def test_year_mismatch_flagged_wide_multiyear_tahun_ukur():
     df = pd.DataFrame({
         "jantina": ["LELAKI", "PEREMPUAN"],
         "Tarikh_Lahir": ["2020-01-01", "2020-01-01"],
@@ -147,12 +147,12 @@ def test_year_mismatch_flagged_myvass_tahun_ukur():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert _has(cleaned.loc[0, "review_reason"], "review_year_mismatch")
     assert not _has(cleaned.loc[1, "review_reason"], "review_year_mismatch")
 
 
-def test_year_mismatch_flagged_ncdc():
+def test_year_mismatch_flagged_wide_registry():
     df = pd.DataFrame({
         "JANTINA": ["L", "P"],
         "TARIKH LAHIR": ["2019-01-01", "2019-01-01"],
@@ -160,7 +160,7 @@ def test_year_mismatch_flagged_ncdc():
         "2023 Tinggi": [110.0, 110.0],
         "2023 Tarikh": ["2022-06-01", "2023-06-01"],
     })
-    cleaned, _ = clean_ncdc(df)
+    cleaned, _ = clean_wide_registry(df)
     reasons = cleaned["review_reason"].tolist()
     assert any("review_year_mismatch" in str(r) for r in reasons)
     # exactly one row (the 2022 one) mismatches
@@ -169,7 +169,7 @@ def test_year_mismatch_flagged_ncdc():
 
 # --- Family 4: review_dob_dual_mismatch ---------------------------------------
 
-def test_dob_dual_mismatch_flagged_myvass():
+def test_dob_dual_mismatch_flagged_wide_multiyear():
     df = pd.DataFrame({
         "jantina": ["LELAKI", "PEREMPUAN"],
         "Tarikh_Lahir": ["2020-01-01", "2020-01-01"],
@@ -178,7 +178,7 @@ def test_dob_dual_mismatch_flagged_myvass():
         "berat_kg": [12.0, 12.0],
         "tinggi_cm": [85.0, 85.0],
     })
-    cleaned, _ = clean_myvass(df)
+    cleaned, _ = clean_wide_multiyear(df)
     assert not _has(cleaned.loc[0, "review_reason"], "review_dob_dual_mismatch")
     assert _has(cleaned.loc[1, "review_reason"], "review_dob_dual_mismatch")
 
@@ -194,7 +194,7 @@ def test_mykid_shared_placeholder_does_not_drop_differing_dob():
         "2023 Tinggi": [110.0, 100.0, 95.0],
         "2023 Tarikh": ["2023-06-01", "2023-06-01", "2023-06-01"],
     })
-    cleaned, stats = clean_ncdc(df)
+    cleaned, stats = clean_wide_registry(df)
     assert stats["dropped_duplicate_mykid"] == 0
     flagged = cleaned["review_reason"].apply(
         lambda r: "review_mykid_shared_placeholder" in str(r)
@@ -211,7 +211,7 @@ def test_mykid_same_dob_still_dedups():
         "2023 Tinggi": [110.0, 111.0],
         "2023 Tarikh": ["2023-01-01", "2023-06-01"],
     })
-    cleaned, stats = clean_ncdc(df)
+    cleaned, stats = clean_wide_registry(df)
     assert stats["dropped_duplicate_mykid"] == 1
     flagged = cleaned["review_reason"].apply(
         lambda r: "review_mykid_shared_placeholder" in str(r)
@@ -219,7 +219,7 @@ def test_mykid_same_dob_still_dedups():
     assert not flagged.any()
 # --- gating: review rules default ON (must not vanish on drop-only selection) ---
 
-def _future_myvass():
+def _future_wide_multiyear():
     return pd.DataFrame({
         "jantina": ["LELAKI"],
         "Tarikh_Lahir": ["2020-01-01"],
@@ -230,11 +230,11 @@ def _future_myvass():
 
 
 def test_review_flags_fire_with_drop_only_selection():
-    cleaned, _ = clean_myvass(_future_myvass(),
+    cleaned, _ = clean_wide_multiyear(_future_wide_multiyear(),
                               enabled_rules={"dropped_age_over5", "dropped_invalid_gender"})
     assert _has(cleaned.loc[0, "review_reason"], "review_future_measure_date")
 
 
 def test_review_flag_disabled_when_selection_manages_review():
-    cleaned, _ = clean_myvass(_future_myvass(), enabled_rules={"review_duplicate_ic"})
+    cleaned, _ = clean_wide_multiyear(_future_wide_multiyear(), enabled_rules={"review_duplicate_ic"})
     assert not _has(cleaned.loc[0, "review_reason"], "review_future_measure_date")

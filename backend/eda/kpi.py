@@ -29,7 +29,7 @@ _FLAG_TO_KPI: dict[str, str] = {
     "overweight":  "overweight_rate",
 }
 
-# Cleaners (clean_myvass/clean_kpm/clean_ncdc) emit Bahasa Ind_* boolean
+# Cleaners (clean_wide_multiyear/clean_school_age/clean_wide_registry) emit Bahasa Ind_* boolean
 # columns; analytics, specs, and tests use the canonical English flags.
 # Accept either so the KPI dashboard populates regardless of which cleaner
 # produced the frame. Canonical name is tried first so existing callers and

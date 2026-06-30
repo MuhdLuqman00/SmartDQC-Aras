@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from backend.main import app, _cache_cleaned
 
 SAMPLE_EDA = {
-    "summary": {"total_rows": 2, "source_type": "myvass"},
+    "summary": {"total_rows": 2, "source_type": "wide_multiyear"},
     "quality": {"overall_score": 0.78, "missing_rate": 0.12, "overall_completeness": 88.5},
     "indicators": {"stunting_rate": 0.24, "wasting_rate": 0.11, "underweight_rate": 0.18},
     "outliers": {"total_flagged": 1},

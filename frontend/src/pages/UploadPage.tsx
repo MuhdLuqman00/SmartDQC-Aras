@@ -259,7 +259,7 @@ export function UploadPage() {
     if (!cacheId) return;
     setLoading(true);
     try {
-      await api.post(`/transform/myvass-wide-to-long?cache_id=${cacheId}`);
+      await api.post(`/transform/wide_multiyear-wide-to-long?cache_id=${cacheId}`);
     } catch { /* non-fatal */ }
     finally { setLoading(false); }
   };
@@ -405,7 +405,7 @@ export function UploadPage() {
           {/* Multi-file toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
             <input type="checkbox" checked={multiMode} onChange={e => setMultiMode(e.target.checked)} />
-            {t('Merge multiple MyVASS files', 'Gabungkan beberapa fail MyVASS')}
+            {t('Merge multiple wide-format files', 'Gabungkan beberapa fail format lebar')}
           </label>
 
           {/* Source-type selector (single-file mode; merge is MyVASS-only) */}
@@ -425,14 +425,14 @@ export function UploadPage() {
                 }}
               >
                 <option value="auto">{t('Auto-detect (recommended)', 'Auto-kesan (disyorkan)')}</option>
-                <option value="myvass">{t('MyVASS (TASKA)', 'MyVASS (TASKA)')}</option>
-                <option value="ncdc">{t('NCDC (TASKA)', 'NCDC (TASKA)')}</option>
-                <option value="kpm">{t('KPM (School)', 'KPM (Sekolah)')}</option>
+                <option value="wide_multiyear">{t('Wide multi-year', 'Lebar berbilang tahun')}</option>
+                <option value="wide_registry">{t('Wide registry', 'Daftar lebar')}</option>
+                <option value="school_age">{t('School age', 'Umur sekolah')}</option>
                 <option value="general">{t('Other / General', 'Lain-lain / Umum')}</option>
               </select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                {t('Leave on Auto-detect unless detection picks the wrong schema. NCDC looks identical to MyVASS, so select it here if your file is NCDC. "Other" maps columns by best match across all schemas.',
-                   'Biarkan pada Auto-kesan melainkan pengesanan salah. NCDC kelihatan sama dengan MyVASS, jadi pilih di sini jika fail anda ialah NCDC. "Lain-lain" memetakan lajur mengikut padanan terbaik merentas semua skema.')}
+                {t('Leave on Auto-detect unless detection picks the wrong schema. The wide-registry format looks identical to wide multi-year, so select it here if that is your file. "Other" maps columns by best match across all schemas.',
+                   'Biarkan pada Auto-kesan melainkan pengesanan salah. Format daftar lebar kelihatan sama dengan lebar berbilang tahun, jadi pilih di sini jika itu fail anda. "Lain-lain" memetakan lajur mengikut padanan terbaik merentas semua skema.')}
               </p>
             </div>
           )}
@@ -541,8 +541,8 @@ export function UploadPage() {
               {t('Recognised schemas', 'Skema dikenali')}
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              {t('MyVASS and KPM are detected automatically. NCDC shares MyVASS’s columns, so pick it manually if your file is NCDC.',
-                 'MyVASS dan KPM dikesan secara automatik. NCDC berkongsi lajur yang sama dengan MyVASS, jadi pilih secara manual jika fail anda ialah NCDC.')}
+              {t('Wide multi-year and school-age files are detected automatically. The wide-registry format shares wide multi-year’s columns, so pick it manually if that is your file.',
+                 'Fail lebar berbilang tahun dan umur sekolah dikesan secara automatik. Format daftar lebar berkongsi lajur yang sama dengan lebar berbilang tahun, jadi pilih secara manual jika itu fail anda.')}
             </p>
           </div>
 
@@ -622,7 +622,7 @@ export function UploadPage() {
               color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10,
             }}>
               <AlertCircle size={16} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-              {t('MyVASS wide format detected.', 'Format MyVASS lebar dikesan.')}
+              {t('Wide multi-year format detected.', 'Format lebar berbilang tahun dikesan.')}
               <button
                 onClick={handleWideTransform}
                 disabled={loading}

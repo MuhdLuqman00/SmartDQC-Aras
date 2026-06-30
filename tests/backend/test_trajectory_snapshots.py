@@ -97,8 +97,8 @@ def test_snapshots_derive_year_from_date_column():
     assert {s["period"] for s in snaps} == {"2023", "2024"}
 
 
-def test_kpm_clean_does_not_bake_year_column():
-    """Regression for the B2 layering fix: clean_kpm no longer adds Tahun_Ukur;
+def test_school_age_clean_does_not_bake_year_column():
+    """Regression for the B2 layering fix: clean_school_age no longer adds Tahun_Ukur;
     trajectories still work because the snapshot layer derives the year itself."""
     rows = []
     for year in [2023, 2024]:
@@ -110,29 +110,29 @@ def test_kpm_clean_does_not_bake_year_column():
                     "Negeri": "Wilayah",
                 })
     df = pd.DataFrame(rows)
-    cleaned, _ = clean_data(df, "kpm")
+    cleaned, _ = clean_data(df, "school_age")
     assert "Tahun_Ukur" not in cleaned.columns  # cleaner stays year-agnostic
     snaps = compute_district_period_snapshots(cleaned)
     assert len(snaps) > 0
 
 
-def test_ncdc_integration_smoke():
+def test_wide_registry_integration_smoke():
     """Synthetic NCDC CSV must yield >0 trajectory snapshots after clean_data."""
-    path = "data/test/synthetic_ncdc_wide_4500.csv"
+    path = "data/test/synthetic_wide_registry_wide_4500.csv"
     if not os.path.exists(path):
         pytest.skip("Synthetic NCDC CSV not present")
     df = pd.read_csv(path, dtype=str)
-    cleaned, _ = clean_data(df.copy(), "ncdc")
+    cleaned, _ = clean_data(df.copy(), "wide_registry")
     snaps = compute_district_period_snapshots(cleaned)
     assert len(snaps) > 0, "NCDC must produce trajectory snapshots"
 
 
-def test_kpm_integration_smoke():
+def test_school_age_integration_smoke():
     """Synthetic KPM CSV must yield >0 trajectory snapshots after clean_data."""
-    path = "data/test/synthetic_kpm_10000.csv"
+    path = "data/test/synthetic_school_age_10000.csv"
     if not os.path.exists(path):
         pytest.skip("Synthetic KPM CSV not present")
     df = pd.read_csv(path, dtype=str)
-    cleaned, _ = clean_data(df.copy(), "kpm")
+    cleaned, _ = clean_data(df.copy(), "school_age")
     snaps = compute_district_period_snapshots(cleaned)
     assert len(snaps) > 0, "KPM must produce trajectory snapshots"

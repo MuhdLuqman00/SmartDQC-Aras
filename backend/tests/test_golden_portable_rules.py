@@ -22,9 +22,9 @@ def _codes(exclude_reason: str) -> set[str]:
     return {c.strip() for c in exclude_reason.split(";") if c.strip()}
 
 
-# ── 1. dropped_age_over5 — myvass ─────────────────────────────────────────────
+# ── 1. dropped_age_over5 — wide_multiyear ─────────────────────────────────────────────
 
-def test_dropped_age_over5_myvass():
+def test_dropped_age_over5_wide_multiyear():
     """Child born 2014-01-01, measured 2023-01-01 is ~108 months → excluded."""
     df = pd.DataFrame({
         "JANTINA":           ["LELAKI", "LELAKI"],
@@ -33,7 +33,7 @@ def test_dropped_age_over5_myvass():
         "BERAT (KG)":        [12.0, 12.0],
         "TINGGI (CM)":       [85.0, 85.0],
     })
-    cleaned, stats = cleaning.clean_data(df, "myvass")
+    cleaned, stats = cleaning.clean_data(df, "wide_multiyear")
     assert stats["dropped_age_over5"] == 1
     # Anchor row (24 months) is still analyzable.
     assert cleaned.iloc[0]["analyzable"]
@@ -42,9 +42,9 @@ def test_dropped_age_over5_myvass():
     assert "dropped_age_over5" in _codes(str(cleaned.iloc[1]["exclude_reason"]))
 
 
-# ── 2. dropped_date_before_dob — myvass ───────────────────────────────────────
+# ── 2. dropped_date_before_dob — wide_multiyear ───────────────────────────────────────
 
-def test_dropped_date_before_dob_myvass():
+def test_dropped_date_before_dob_wide_multiyear():
     """Measurement date 2020-01-01 is before DOB 2021-01-01 → excluded."""
     df = pd.DataFrame({
         "JANTINA":           ["LELAKI", "LELAKI"],
@@ -53,16 +53,16 @@ def test_dropped_date_before_dob_myvass():
         "BERAT (KG)":        [12.0, 12.0],
         "TINGGI (CM)":       [85.0, 85.0],
     })
-    cleaned, stats = cleaning.clean_data(df, "myvass")
+    cleaned, stats = cleaning.clean_data(df, "wide_multiyear")
     assert stats["dropped_date_before_dob"] == 1
     assert cleaned.iloc[0]["analyzable"]
     assert not cleaned.iloc[1]["analyzable"]
     assert "dropped_date_before_dob" in _codes(str(cleaned.iloc[1]["exclude_reason"]))
 
 
-# ── 3. dropped_pendapatan_x — ncdc ────────────────────────────────────────────
+# ── 3. dropped_pendapatan_x — wide_registry ────────────────────────────────────────────
 
-def test_dropped_pendapatan_x_ncdc():
+def test_dropped_pendapatan_x_wide_registry():
     """Income coded 'X' → excluded."""
     df = pd.DataFrame({
         "JANTINA":      ["L", "P"],
@@ -72,15 +72,15 @@ def test_dropped_pendapatan_x_ncdc():
         "2022 Tinggi":  [105.0, 105.0],
         "2022 Tarikh":  ["2022-06-01", "2022-06-01"],
     })
-    cleaned, stats = cleaning.clean_data(df, "ncdc")
+    cleaned, stats = cleaning.clean_data(df, "wide_registry")
     assert stats["dropped_pendapatan_x"] == 1
     flagged = cleaned[cleaned["exclude_reason"].str.contains("dropped_pendapatan_x", na=False)]
     assert len(flagged) == 1
 
 
-# ── 4. dropped_null_dob — ncdc ────────────────────────────────────────────────
+# ── 4. dropped_null_dob — wide_registry ────────────────────────────────────────────────
 
-def test_dropped_null_dob_ncdc():
+def test_dropped_null_dob_wide_registry():
     """Missing date of birth → excluded."""
     df = pd.DataFrame({
         "JANTINA":      ["L", "P"],
@@ -89,17 +89,17 @@ def test_dropped_null_dob_ncdc():
         "2022 Tinggi":  [105.0, 106.0],
         "2022 Tarikh":  ["2022-06-01", "2022-06-01"],
     })
-    cleaned, stats = cleaning.clean_data(df, "ncdc")
+    cleaned, stats = cleaning.clean_data(df, "wide_registry")
     assert stats["dropped_null_dob"] == 1
     flagged = cleaned[cleaned["exclude_reason"].str.contains("dropped_null_dob", na=False)]
     assert len(flagged) == 1
 
 
-# ── 5. dropped_duplicate_mykid — ncdc ─────────────────────────────────────────
+# ── 5. dropped_duplicate_mykid — wide_registry ─────────────────────────────────────────
 
-def test_dropped_duplicate_mykid_ncdc():
+def test_dropped_duplicate_mykid_wide_registry():
     """Same MyKID + same DOB with two measurement dates → keep most recent, drop older."""
-    # Pre-shaped long format (no year-prefix cols) so ncdc skips wide-to-long reshape.
+    # Pre-shaped long format (no year-prefix cols) so wide_registry skips wide-to-long reshape.
     df = pd.DataFrame({
         "No. MyKID":         ["KID001",     "KID001",     "KID002"],
         "JANTINA":           ["L",          "L",          "P"],
@@ -108,7 +108,7 @@ def test_dropped_duplicate_mykid_ncdc():
         "Tinggi_cm":         [105.0,        106.0,        105.0],
         "Tarikh_Pengukuran": ["2022-01-01", "2023-06-01", "2023-06-01"],
     })
-    cleaned, stats = cleaning.clean_data(df, "ncdc")
+    cleaned, stats = cleaning.clean_data(df, "wide_registry")
     assert stats["dropped_duplicate_mykid"] == 1
     dup_rows = cleaned[cleaned["exclude_reason"].str.contains("dropped_duplicate_mykid", na=False)]
     assert len(dup_rows) == 1
@@ -116,9 +116,9 @@ def test_dropped_duplicate_mykid_ncdc():
     assert dup_rows.iloc[0]["Tarikh_Pengukuran"] == pd.Timestamp("2022-01-01")
 
 
-# ── 6. dropped_ragu_gender — kpm ──────────────────────────────────────────────
+# ── 6. dropped_ragu_gender — school_age ──────────────────────────────────────────────
 
-def test_dropped_ragu_gender_kpm():
+def test_dropped_ragu_gender_school_age():
     """JANTINA = 'RAGU' → excluded."""
     df = pd.DataFrame({
         "ID_MURID":          ["A1",         "A2"],
@@ -128,7 +128,7 @@ def test_dropped_ragu_gender_kpm():
         "BERAT":             [30.0,         30.0],
         "TINGGI":            [130.0,        130.0],
     })
-    cleaned, stats = cleaning.clean_data(df, "kpm")
+    cleaned, stats = cleaning.clean_data(df, "school_age")
     assert stats["dropped_ragu_gender"] == 1
     # Anchor row ("L") is still analyzable.
     assert cleaned.iloc[0]["analyzable"]

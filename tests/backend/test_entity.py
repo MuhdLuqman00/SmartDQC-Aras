@@ -24,7 +24,7 @@ def test_ic_match_confidence_no_match():
 
 def test_link_records_exact_ic_match():
     records = [
-        {"ic": "880101145678", "source_type": "myvass",
+        {"ic": "880101145678", "source_type": "wide_multiyear",
          "dataset_id": "ds1", "name": "Ahmad", "dob": "1988-01-01"},
         {"ic": "880101145678", "source_type": "klinik",
          "dataset_id": "ds2", "name": "Ahmad Bin Ali", "dob": "1988-01-01"},
@@ -37,7 +37,7 @@ def test_link_records_exact_ic_match():
 
 def test_link_records_no_match_different_ic():
     records = [
-        {"ic": "880101145678", "source_type": "myvass",
+        {"ic": "880101145678", "source_type": "wide_multiyear",
          "dataset_id": "ds1", "name": "Ahmad", "dob": "1988-01-01"},
         {"ic": "990202246789", "source_type": "klinik",
          "dataset_id": "ds2", "name": "Siti", "dob": "1999-02-02"},
@@ -48,12 +48,12 @@ def test_link_records_no_match_different_ic():
 
 def test_link_records_unified_profile_has_source_types():
     records = [
-        {"ic": "880101145678", "source_type": "myvass",
+        {"ic": "880101145678", "source_type": "wide_multiyear",
          "dataset_id": "ds1", "name": "Ahmad", "dob": "1988-01-01"},
-        {"ic": "880101145678", "source_type": "ncdc",
+        {"ic": "880101145678", "source_type": "wide_registry",
          "dataset_id": "ds3", "name": "Ahmad", "dob": "1988-01-01"},
     ]
     groups = link_records(records)
     assert groups[0]["ic"] == "880101145678"
-    assert "myvass" in groups[0]["source_types"]
-    assert "ncdc" in groups[0]["source_types"]
+    assert "wide_multiyear" in groups[0]["source_types"]
+    assert "wide_registry" in groups[0]["source_types"]

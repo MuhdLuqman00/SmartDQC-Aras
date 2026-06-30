@@ -39,7 +39,7 @@ def client_and_cache(monkeypatch, tmp_path):
     cache_id = "aaaa0000-1111-2222-3333-444444444444"
     main._cleaned_cache[cache_id] = {
         "df": df,
-        "stats": {"filename": "test.csv", "source_type": "myvass"},
+        "stats": {"filename": "test.csv", "source_type": "wide_multiyear"},
     }
 
     client = TestClient(main.app)

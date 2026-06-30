@@ -1,5 +1,5 @@
 """Regression: an already-processed NCDC/TASKA export uses underscore date
-columns (Tarikh_Lahir / Tarikh_Pengukuran). clean_myvass.find_col matched DOB
+columns (Tarikh_Lahir / Tarikh_Pengukuran). clean_wide_multiyear.find_col matched DOB
 with the pattern "tarikh lahir" (a SPACE) which never matches "tarikh_lahir"
 (an UNDERSCORE), and had no "pengukuran" synonym. dob_col/measure_date_col
 resolved to None, the cleaner overwrote the file's valid dates with NaT,
@@ -46,7 +46,7 @@ def test_processed_file_with_underscore_date_columns_is_not_wiped():
         "WHO LMS tables must load for this test to isolate the find_col bug"
     )
 
-    cleaned, stats = cleaning.clean_data(_processed_shaped_df(), "myvass")
+    cleaned, stats = cleaning.clean_data(_processed_shaped_df(), "wide_multiyear")
 
     # The cleaner must recognise Tarikh_Lahir / Tarikh_Pengukuran, compute
     # Age_Days, and keep the valid rows — not null the dates and wipe via Rule 7.

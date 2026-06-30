@@ -15,7 +15,7 @@ def _seed(df: pd.DataFrame) -> str:
     return cid
 
 
-def _kpm_dups() -> pd.DataFrame:
+def _school_age_dups() -> pd.DataFrame:
     return pd.DataFrame({
         "ID_MURID":          ["A1", "A1"],
         "JANTINA":           ["L", "L"],
@@ -27,7 +27,7 @@ def _kpm_dups() -> pd.DataFrame:
 
 
 def test_clean_rules_lists_registry():
-    body = client.get("/clean/rules?data_type=kpm").json()
+    body = client.get("/clean/rules?data_type=school_age").json()
     codes = [x["code"] for x in body["rules"]]
     assert "dropped_duplicate_id" in codes
     nobmi = next(x for x in body["rules"] if x["code"] == "dropped_no_bmi")
@@ -36,8 +36,8 @@ def test_clean_rules_lists_registry():
 
 
 def test_preview_impact_all_rules():
-    cid = _seed(_kpm_dups())
-    body = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=kpm", json={}).json()
+    cid = _seed(_school_age_dups())
+    body = client.post(f"/clean/preview-impact?cache_id={cid}&data_type=school_age", json={}).json()
     assert body["rows_before"] == 2
     assert body["rows_after"] == 1
     dup = next(x for x in body["per_rule"] if x["code"] == "dropped_duplicate_id")
@@ -45,10 +45,10 @@ def test_preview_impact_all_rules():
 
 
 def test_preview_impact_disable_dedup():
-    cid = _seed(_kpm_dups())
-    enabled = [r["code"] for r in rules_for_source("kpm") if r["code"] != "dropped_duplicate_id"]
+    cid = _seed(_school_age_dups())
+    enabled = [r["code"] for r in rules_for_source("school_age") if r["code"] != "dropped_duplicate_id"]
     body = client.post(
-        f"/clean/preview-impact?cache_id={cid}&data_type=kpm",
+        f"/clean/preview-impact?cache_id={cid}&data_type=school_age",
         json={"enabled_rules": enabled},
     ).json()
     assert body["rows_after"] == 2  # dedup off → both rows kept

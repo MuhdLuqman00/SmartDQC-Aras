@@ -15,14 +15,14 @@ If a key is in clinical_ranges.EDITABLE_KEYS it MUST be covered here.
 
 import pandas as pd
 
-from backend.eda.cleaning import clean_myvass, clean_kpm, clean_data
+from backend.eda.cleaning import clean_wide_multiyear, clean_school_age, clean_data
 from backend.eda.quality_rules import analyze_quality
 import backend.clinical_ranges as CR
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
-def _myvass_row(berat=12.0, tinggi=85.0, dob="2020-01-01", measure="2023-01-01"):
+def _wide_multiyear_row(berat=12.0, tinggi=85.0, dob="2020-01-01", measure="2023-01-01"):
     """One fully-valid MyVASS row (~36mo, in-range weight/height, valid gender)."""
     return pd.DataFrame({
         "jantina": ["LELAKI"],
@@ -33,7 +33,7 @@ def _myvass_row(berat=12.0, tinggi=85.0, dob="2020-01-01", measure="2023-01-01")
     })
 
 
-def _kpm_row(berat=13.0, tinggi=120.0, dob="2016-01-01", measure="2023-01-01"):
+def _school_age_row(berat=13.0, tinggi=120.0, dob="2016-01-01", measure="2023-01-01"):
     """One fully-valid KPM/school row (~7y, in-range weight/height, valid gender)."""
     return pd.DataFrame({
         "jantina": ["LELAKI"],
@@ -54,18 +54,18 @@ def _br_rows(report, rule_id):
 
 def test_school_weight_override_flags_measurement_outlier():
     # default school_weight = 12–50 kg; 13 kg is valid. Raise min to 20 → 13 trips.
-    _, base = clean_kpm(_kpm_row(berat=13.0))
+    _, base = clean_school_age(_school_age_row(berat=13.0))
     assert base["dropped_measurement_outlier"] == 0
-    _, ov = clean_kpm(_kpm_row(berat=13.0),
+    _, ov = clean_school_age(_school_age_row(berat=13.0),
                       range_overrides={"school_weight": {"min": 20.0, "max": 50.0}})
     assert ov["dropped_measurement_outlier"] > base["dropped_measurement_outlier"]
 
 
 def test_infant_height_override_flags_measurement_outlier():
     # default infant_height = 30–130 cm; 85 cm is valid. Raise min to 90 → 85 trips.
-    _, base = clean_myvass(_myvass_row(tinggi=85.0))
+    _, base = clean_wide_multiyear(_wide_multiyear_row(tinggi=85.0))
     assert base["dropped_measurement_outlier"] == 0
-    _, ov = clean_myvass(_myvass_row(tinggi=85.0),
+    _, ov = clean_wide_multiyear(_wide_multiyear_row(tinggi=85.0),
                          range_overrides={"infant_height": {"min": 90.0, "max": 130.0}})
     assert ov["dropped_measurement_outlier"] > base["dropped_measurement_outlier"]
 
@@ -74,9 +74,9 @@ def test_infant_height_override_flags_measurement_outlier():
 
 def test_bmi_max_override_flags_bmi_outlier():
     # weight 30 / height 90 → BMI ≈ 37.0: under default 40 (ok), over an 18 override.
-    _, base = clean_myvass(_myvass_row(berat=30.0, tinggi=90.0))
+    _, base = clean_wide_multiyear(_wide_multiyear_row(berat=30.0, tinggi=90.0))
     assert base["dropped_bmi_outlier"] == 0
-    _, ov = clean_myvass(_myvass_row(berat=30.0, tinggi=90.0),
+    _, ov = clean_wide_multiyear(_wide_multiyear_row(berat=30.0, tinggi=90.0),
                          range_overrides={"bmi_max": {"value": 18.0}})
     assert ov["dropped_bmi_outlier"] > base["dropped_bmi_outlier"]
 
@@ -85,9 +85,9 @@ def test_bmi_max_override_flags_bmi_outlier():
 
 def test_infant_age_cap_override_flags_age_invalid():
     # ~48mo row: under default cap 60 (kept). Lower cap to 36 → 48 ≥ 36 → flagged.
-    _, base = clean_myvass(_myvass_row(dob="2019-01-01", measure="2023-01-01"))
+    _, base = clean_wide_multiyear(_wide_multiyear_row(dob="2019-01-01", measure="2023-01-01"))
     assert base["dropped_age_over5"] == 0
-    _, ov = clean_myvass(_myvass_row(dob="2019-01-01", measure="2023-01-01"),
+    _, ov = clean_wide_multiyear(_wide_multiyear_row(dob="2019-01-01", measure="2023-01-01"),
                          range_overrides={"infant_age_cap": {"value": 36.0}})
     assert ov["dropped_age_over5"] > base["dropped_age_over5"]
 
@@ -115,13 +115,13 @@ def test_br03_override_flags_impossible_height():
 # ── end-to-end: the DISPATCH layer the app actually uses (clean_run → clean_data) ─
 
 def test_clean_data_forwards_overrides_to_dispatched_cleaner():
-    """The running app never calls clean_myvass directly — it calls clean_data,
+    """The running app never calls clean_wide_multiyear directly — it calls clean_data,
     which dispatches by type. Prove range_overrides survives the dispatch so the
     editable keys take effect on the real /clean/run path, not just in unit tests."""
-    df = _myvass_row(berat=30.0, tinggi=90.0)  # BMI ≈ 37
-    _, base = clean_data(df.copy(), "myvass", None, None)
+    df = _wide_multiyear_row(berat=30.0, tinggi=90.0)  # BMI ≈ 37
+    _, base = clean_data(df.copy(), "wide_multiyear", None, None)
     assert base["dropped_bmi_outlier"] == 0
-    _, ov = clean_data(df.copy(), "myvass", None, {"bmi_max": {"value": 18.0}})
+    _, ov = clean_data(df.copy(), "wide_multiyear", None, {"bmi_max": {"value": 18.0}})
     assert ov["dropped_bmi_outlier"] > base["dropped_bmi_outlier"]
 
 

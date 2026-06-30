@@ -43,5 +43,5 @@ def test_ai_suggest_mapping_drift_scenario(monkeypatch):
     fake_response["tinggi_cm"] = "Tinggi2025"
     import backend.ai.schema_mapper as sm
     monkeypatch.setattr(sm, "generate", lambda *a, **kw: json.dumps(fake_response))
-    result = ai_suggest_mapping(columns, sample, source_type="myvass")
+    result = ai_suggest_mapping(columns, sample, source_type="wide_multiyear")
     assert result.get("id") == "No. MyKid"

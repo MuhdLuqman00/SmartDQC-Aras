@@ -22,7 +22,7 @@ from backend.main import app, get_db
 
 def _ds(name, quality, created):
     return SimpleNamespace(
-        id=str(uuid.uuid4()), name=name, source_type="myvass",
+        id=str(uuid.uuid4()), name=name, source_type="wide_multiyear",
         quality_score=quality, created_at=created,
     )
 

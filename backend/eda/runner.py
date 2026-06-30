@@ -121,7 +121,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
     # ── Data Grain ─────────────────────────────────────────────────────────
     id_col = next((c for c in ["id", "id_cleaned"] if has(c)), None)
     unique_ids = int(df[id_col].nunique()) if id_col else None
-    if source_type == "myvass":
+    if source_type == "wide_multiyear":
         grain_desc = "1 row = 1 child (wide format — multiple year columns per child)"
         grain_note = "Needs PIVOT to long format before Tableau: one row per child per measurement year."
     elif unique_ids and n_rows > 0 and (n_rows / max(unique_ids, 1)) > 1.5:
@@ -145,7 +145,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
         })
 
     # Pivot
-    if source_type == "myvass":
+    if source_type == "wide_multiyear":
         tfm("Wide → Long Pivot", "year columns", "needed",
             "MyVASS data is wide-format. Must pivot so each row is one measurement year.", "critical")
     else:
@@ -278,7 +278,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
 
 
 
-def myvass_wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
+def wide_multiyear_wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
     """Pivot NCDC/TASKA wide-format (one row = one child, columns per year) to long."""
     id_cols   = [c for c in df.columns if not re.match(r"^(2023|2024|2025|2026)\s", str(c))]
     year_cols = [c for c in df.columns if re.match(r"^(2023|2024|2025|2026)\s", str(c))]
@@ -378,11 +378,11 @@ def run_eda(df: pd.DataFrame, mapping: dict, source_type: str,
     # ── NCDC Wide-to-Long Pivot (BEFORE renaming) ────────────────────────────
     # Check if we have year-prefixed columns indicating wide format
     year_cols = [c for c in df.columns if re.match(r"^(2023|2024|2025|2026)\s", str(c))]
-    if year_cols and source_type == "myvass":
+    if year_cols and source_type == "wide_multiyear":
         report["changes_applied"].append(
             f"Pivoted wide-format NCDC data from {len(df)} rows to long format "
             f"(found {len(year_cols)} year-prefixed columns)")
-        df = myvass_wide_to_long(df)
+        df = wide_multiyear_wide_to_long(df)
         report["total_rows"] = len(df)
         
         # Update mapping to handle new column names after pivot
@@ -416,12 +416,12 @@ def run_eda(df: pd.DataFrame, mapping: dict, source_type: str,
 
     # ── Wide-to-long for MYVASS ───────────────────────────────────────────────
     year_cols = [c for c in df.columns if re.match(r"^(2023|2024|2025|2026)", c)]
-    if year_cols and source_type == "myvass":
+    if year_cols and source_type == "wide_multiyear":
         n_before = len(df)
-        df = myvass_wide_to_long(df)
+        df = wide_multiyear_wide_to_long(df)
         n_after = len(df)
         report["changes_applied"].append({
-            "action": "myvass_wide_to_long",
+            "action": "wide_multiyear_wide_to_long",
             "description": f"Format lebar → panjang: {n_before} baris → {n_after} baris",
             "column": "tahun_ukur",
             "before": {"n_rows": n_before}, "after": {"n_rows": n_after},

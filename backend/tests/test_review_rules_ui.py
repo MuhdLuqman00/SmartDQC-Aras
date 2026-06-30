@@ -23,7 +23,7 @@ from backend.eda.cleaning import (
     REVIEW_EVALUATED_RULES,
     _review_rule_on,
     _REVIEW_MANAGED_SENTINEL,
-    clean_myvass,
+    clean_wide_multiyear,
 )
 
 # Bare client — no DB. OK for /clean/rules (try-except fallback) and unit tests.
@@ -104,8 +104,8 @@ def test_settings_rules_review_not_locked(client_with_db):
 
 # ── Phase 1: /clean/rules endpoint (bare client, try-except fallback) ─────────
 
-def test_clean_rules_myvass_returns_both_kinds():
-    r = client.get("/clean/rules?data_type=myvass")
+def test_clean_rules_wide_multiyear_returns_both_kinds():
+    r = client.get("/clean/rules?data_type=wide_multiyear")
     assert r.status_code == 200
     rules = r.json()["rules"]
     kinds = {x["kind"] for x in rules}
@@ -113,8 +113,8 @@ def test_clean_rules_myvass_returns_both_kinds():
     assert "review" in kinds
 
 
-def test_clean_rules_ncdc_has_review_rules():
-    r = client.get("/clean/rules?data_type=ncdc")
+def test_clean_rules_wide_registry_has_review_rules():
+    r = client.get("/clean/rules?data_type=wide_registry")
     assert r.status_code == 200
     review = [x for x in r.json()["rules"] if x["kind"] == "review"]
     assert len(review) > 0
@@ -129,7 +129,7 @@ def test_clean_rules_general_has_review_rules():
 
 
 def test_clean_rules_no_deferred():
-    for dt in ("myvass", "ncdc", "general"):
+    for dt in ("wide_multiyear", "wide_registry", "general"):
         r = client.get(f"/clean/rules?data_type={dt}")
         codes = {x["code"] for x in r.json()["rules"]}
         for code in _DEFERRED:
@@ -212,7 +212,7 @@ def _future_date_df():
 
 def test_review_rule_fires_when_enabled():
     df = _future_date_df()
-    cleaned, _ = clean_myvass(df, enabled_rules=None)
+    cleaned, _ = clean_wide_multiyear(df, enabled_rules=None)
     assert "review_future_measure_date" in str(cleaned.loc[0, "review_reason"])
 
 
@@ -220,7 +220,7 @@ def test_review_rule_suppressed_when_disabled_via_sentinel():
     """Sentinel + code absent = rule is off; flag must not appear."""
     df = _future_date_df()
     rules = {_REVIEW_MANAGED_SENTINEL, "dropped_no_dob"}
-    cleaned, _ = clean_myvass(df, enabled_rules=rules)
+    cleaned, _ = clean_wide_multiyear(df, enabled_rules=rules)
     assert "review_future_measure_date" not in str(cleaned.loc[0, "review_reason"])
 
 
@@ -246,12 +246,12 @@ def test_disable_one_review_rule_others_still_fire(db_session):
     main._set_setting("cleaning.enabled_rules", {"review_daerah_null": False}, db_session)
     eff = main._effective_enabled_rules(None, db_session)
     path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "data", "test", "smartdqc_test_myvass.csv"
+        os.path.dirname(__file__), "..", "..", "data", "test", "smartdqc_test_wide_multiyear.csv"
     )
     if not os.path.exists(path):
         pytest.skip("fixture missing")
     df = pd.read_csv(path)
-    c, _ = clean_myvass(df, enabled_rules=eff)
+    c, _ = clean_wide_multiyear(df, enabled_rules=eff)
     rr = c["review_reason"].astype(str)
     assert rr.str.contains("review_daerah_null").sum() == 0      # disabled -> silent
     assert rr.str.contains("review_pendapatan_null").sum() > 0   # others still fire
@@ -285,9 +285,9 @@ def test_general_fallback_does_not_leak_schema_foreign_drop_rule(db_session):
 
 
 def test_named_cleaner_fallback_keeps_its_own_drop_rules(db_session):
-    # The scoping is per-source: a myvass run's fallback must STILL carry myvass's
-    # own dropped_age_over5 (it IS myvass schema) — the general fix doesn't over-reach.
+    # The scoping is per-source: a wide_multiyear run's fallback must STILL carry wide_multiyear's
+    # own dropped_age_over5 (it IS wide_multiyear schema) — the general fix doesn't over-reach.
     main._set_setting("cleaning.enabled_rules", {"review_daerah_null": False}, db_session)
-    eff = main._effective_enabled_rules(None, db_session, "myvass")
-    assert "dropped_age_over5" in eff              # myvass schema keeps it
+    eff = main._effective_enabled_rules(None, db_session, "wide_multiyear")
+    assert "dropped_age_over5" in eff              # wide_multiyear schema keeps it
     assert "dropped_invalid_gender" in eff

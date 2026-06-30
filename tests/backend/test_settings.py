@@ -31,9 +31,9 @@ def test_get_rules_returns_registry(client):
     assert "dropped_invalid_gender" in rules
     assert rules["dropped_null_zscore"]["locked"] is True
     assert {"en", "bm", "desc_en", "desc_bm", "enabled"} <= set(rules["dropped_invalid_gender"])
-    # schema applicability (B3 schema filter): no-BMI is KPM-only; null-zscore is myvass/ncdc
-    assert "kpm" in rules["dropped_no_bmi"]["source_types"]
-    assert "kpm" not in rules["dropped_null_zscore"]["source_types"]
+    # schema applicability (B3 schema filter): no-BMI is KPM-only; null-zscore is wide_multiyear/wide_registry
+    assert "school_age" in rules["dropped_no_bmi"]["source_types"]
+    assert "school_age" not in rules["dropped_null_zscore"]["source_types"]
 
 
 def test_toggle_rule_disables(client):

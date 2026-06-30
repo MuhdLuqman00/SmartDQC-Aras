@@ -8,8 +8,8 @@ import pytest
 
 from backend.eda.cleaning import (
     _flag,
-    clean_myvass,
-    clean_ncdc,
+    clean_wide_multiyear,
+    clean_wide_registry,
     REVIEW_RULE_REGISTRY,
     REVIEW_EVALUATED_RULES,
     review_rules_for_source,
@@ -18,7 +18,7 @@ from backend.eda.cleaning import (
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _myvass_df() -> pd.DataFrame:
+def _wide_multiyear_df() -> pd.DataFrame:
     return pd.DataFrame({
         "JANTINA":           ["LELAKI", "PEREMPUAN"],
         "TARIKH LAHIR":      ["2020-01-01", "2020-01-01"],
@@ -28,7 +28,7 @@ def _myvass_df() -> pd.DataFrame:
     })
 
 
-def _ncdc_df() -> pd.DataFrame:
+def _wide_registry_df() -> pd.DataFrame:
     return pd.DataFrame({
         "JANTINA":      ["L", "P"],
         "TARIKH LAHIR": ["2019-01-01", "2019-01-01"],
@@ -67,36 +67,36 @@ def test_flag_noop_when_mask_all_false():
 
 # ── INF-1: review_reason column in cleaners ───────────────────────────────────
 
-def test_clean_myvass_outputs_review_reason_column():
-    df, _ = clean_myvass(_myvass_df())
+def test_clean_wide_multiyear_outputs_review_reason_column():
+    df, _ = clean_wide_multiyear(_wide_multiyear_df())
     assert "review_reason" in df.columns
 
 
-def test_clean_myvass_review_reason_is_string_dtype():
+def test_clean_wide_multiyear_review_reason_is_string_dtype():
     import pandas as pd
-    df, _ = clean_myvass(_myvass_df())
+    df, _ = clean_wide_multiyear(_wide_multiyear_df())
     assert pd.api.types.is_string_dtype(df["review_reason"])
 
 
-def test_clean_ncdc_outputs_review_reason_column():
-    df, _ = clean_ncdc(_ncdc_df())
+def test_clean_wide_registry_outputs_review_reason_column():
+    df, _ = clean_wide_registry(_wide_registry_df())
     assert "review_reason" in df.columns
 
 
-def test_clean_myvass_stats_has_review_count():
-    _, stats = clean_myvass(_myvass_df())
+def test_clean_wide_multiyear_stats_has_review_count():
+    _, stats = clean_wide_multiyear(_wide_multiyear_df())
     assert "review_count" in stats
     assert isinstance(stats["review_count"], int)
 
 
-def test_clean_ncdc_stats_has_review_count():
-    _, stats = clean_ncdc(_ncdc_df())
+def test_clean_wide_registry_stats_has_review_count():
+    _, stats = clean_wide_registry(_wide_registry_df())
     assert "review_count" in stats
     assert isinstance(stats["review_count"], int)
 
 
-def test_clean_myvass_review_count_zero_for_clean_data():
-    _, stats = clean_myvass(_myvass_df())
+def test_clean_wide_multiyear_review_count_zero_for_clean_data():
+    _, stats = clean_wide_multiyear(_wide_multiyear_df())
     # No review rules fire yet (detection comes in Phase B-D); count must be 0
     assert stats["review_count"] == 0
 
@@ -113,9 +113,9 @@ def test_review_rule_registry_all_entries_have_en_bm():
         assert "bm" in entry, f"{code} missing 'bm'"
 
 
-def test_review_evaluated_rules_has_myvass_ncdc_general():
-    assert "myvass" in REVIEW_EVALUATED_RULES
-    assert "ncdc" in REVIEW_EVALUATED_RULES
+def test_review_evaluated_rules_has_wide_multiyear_wide_registry_general():
+    assert "wide_multiyear" in REVIEW_EVALUATED_RULES
+    assert "wide_registry" in REVIEW_EVALUATED_RULES
     assert "general" in REVIEW_EVALUATED_RULES
 
 
@@ -128,7 +128,7 @@ def test_review_evaluated_rules_all_codes_exist_in_registry():
 
 
 def test_review_rules_for_source_returns_list_of_dicts():
-    result = review_rules_for_source("myvass")
+    result = review_rules_for_source("wide_multiyear")
     assert isinstance(result, list)
     assert len(result) > 0
     for entry in result:

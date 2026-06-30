@@ -31,12 +31,12 @@ def _group_signature(groups):
 def test_symspell_equivalence_small():
     """New Pass 2 must produce identical groups to the all-pairs baseline on a mixed fixture."""
     recs = [
-        _rec("900101010001", src="myvass"),
-        _rec("900101010001", src="ncdc"),  # exact dup
-        _rec("900101010002", src="ncdc"),  # 1-digit typo of ...0001 (last digit)
-        _rec("910202020005", src="myvass"),  # unrelated
+        _rec("900101010001", src="wide_multiyear"),
+        _rec("900101010001", src="wide_registry"),  # exact dup
+        _rec("900101010002", src="wide_registry"),  # 1-digit typo of ...0001 (last digit)
+        _rec("910202020005", src="wide_multiyear"),  # unrelated
         _rec(
-            "010202020005", src="ncdc"
+            "010202020005", src="wide_registry"
         ),  # 1-digit typo in FIRST digit -> must still link
     ]
     groups = link_records_v2(

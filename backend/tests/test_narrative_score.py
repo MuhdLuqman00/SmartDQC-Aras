@@ -44,7 +44,7 @@ def _titlecase_cleaned_df() -> pd.DataFrame:
 
 def test_empty_mapping_starves_the_rubric_baseline():
     """Documents the bug: the OLD code path (empty mapping) is broken."""
-    starved = run_eda(_titlecase_cleaned_df(), {}, "myvass")
+    starved = run_eda(_titlecase_cleaned_df(), {}, "wide_multiyear")
     dq = starved["data_quality_score"]
     # The starvation signature: rubric collapses to grade D, no indicators.
     assert dq["grade"] == "D"
@@ -52,7 +52,7 @@ def test_empty_mapping_starves_the_rubric_baseline():
 
 
 def test_run_eda_auto_scores_the_data_it_actually_has():
-    result = run_eda_auto(_titlecase_cleaned_df(), "myvass")
+    result = run_eda_auto(_titlecase_cleaned_df(), "wide_multiyear")
     dq = result["data_quality_score"]
 
     # A dataset with valid IDs, weights, heights and computable z-scores
@@ -65,7 +65,7 @@ def test_run_eda_auto_scores_the_data_it_actually_has():
 
 
 def test_build_context_carries_real_score_and_indicators():
-    ctx = build_context(run_eda_auto(_titlecase_cleaned_df(), "myvass"))
+    ctx = build_context(run_eda_auto(_titlecase_cleaned_df(), "wide_multiyear"))
     assert "No structured context available." not in ctx
     assert "(grade D)" not in ctx
     assert "Nutrition indicators" in ctx

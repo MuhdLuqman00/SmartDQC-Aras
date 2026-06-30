@@ -46,7 +46,7 @@ vi.mock('../lib/issueFix', () => ({ suggestFix: () => null }));
 import { UploadPage } from './UploadPage';
 
 const REROUTE_CARD = {
-  kind: 'reroute', type: 'myvass', confidence: 0.8,
+  kind: 'reroute', type: 'wide_multiyear', confidence: 0.8,
   matched_count: 1, total_signals: 5,
   signals: [{ name: 'ic no passport', evidence: 'column IC_NO_PASSPORT matched', matched: true }],
   rationale_en: 'Column names closely match the MyVASS/TASKA wide format.',
@@ -63,7 +63,7 @@ const PREVIEW_GENERAL = {
 
 const PREVIEW_MYVASS = {
   ...PREVIEW_GENERAL,
-  source_type: 'myvass',
+  source_type: 'wide_multiyear',
   recommendations: [],
 };
 
@@ -73,7 +73,7 @@ describe('UploadPage — advisory reroute card (Track C)', () => {
   it('renders reroute card and re-previews with correct schema on Accept', async () => {
     mockPost
       .mockResolvedValueOnce({ data: PREVIEW_GENERAL })   // first preview (general + reroute card)
-      .mockResolvedValueOnce({ data: PREVIEW_MYVASS });   // accept re-preview (myvass, no card)
+      .mockResolvedValueOnce({ data: PREVIEW_MYVASS });   // accept re-preview (wide_multiyear, no card)
 
     render(<MemoryRouter><UploadPage /></MemoryRouter>);
 
@@ -92,14 +92,14 @@ describe('UploadPage — advisory reroute card (Track C)', () => {
     expect(screen.getByText(/resembles MYVASS/i)).toBeTruthy();
     expect(screen.getByText(/ic no passport/i)).toBeTruthy();
 
-    // Click Accept — triggers a second /upload/preview with source_type=myvass
+    // Click Accept — triggers a second /upload/preview with source_type=wide_multiyear
     fireEvent.click(screen.getByRole('button', { name: /Re-route as MYVASS/i }));
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledTimes(2);
     });
     const secondCallArgs = mockPost.mock.calls[1] as [string, FormData];
-    expect(secondCallArgs[1].get('source_type')).toBe('myvass');
+    expect(secondCallArgs[1].get('source_type')).toBe('wide_multiyear');
   });
 
   it('dismisses card and proceeds as general when Keep is clicked', async () => {

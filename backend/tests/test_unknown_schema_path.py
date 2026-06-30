@@ -91,8 +91,8 @@ def test_normalize_schema_type_aliases():
     assert normalize_schema_type("unknown") == "general"
     assert normalize_schema_type("generic") == "general"
     assert normalize_schema_type("general") == "general"
-    assert normalize_schema_type("myvass") == "myvass"
-    assert normalize_schema_type("kpm") == "kpm"
+    assert normalize_schema_type("wide_multiyear") == "wide_multiyear"
+    assert normalize_schema_type("school_age") == "school_age"
 
 
 def test_kpi_surfaces_unavailable_indicators_without_crashing():

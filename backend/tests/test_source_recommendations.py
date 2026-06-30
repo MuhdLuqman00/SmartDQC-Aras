@@ -9,11 +9,11 @@
 Design facts pinned here (verified empirically during the verification pass):
   - The gate is an absolute matched-signal count (>=1), BELOW the hard-detect bar,
     so the card can actually fire on a general-bound file. A fraction threshold
-    over the multi-signal myvass list sat above the bar and never triggered.
+    over the multi-signal wide_multiyear list sat above the bar and never triggered.
   - Signals are distinctive (nama taska, ic no passport, …), so a generic file
     scores zero and gets no card — the false-positive guard.
-  - Only one schema is recommended (rank by matched_count, tie -> myvass) so a
-    column-identical myvass/ncdc pair can't throw two competing cards.
+  - Only one schema is recommended (rank by matched_count, tie -> wide_multiyear) so a
+    column-identical wide_multiyear/wide_registry pair can't throw two competing cards.
 """
 import io
 
@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 # ─── 5A: score_source_types ───────────────────────────────────────────────────
 
-def test_score_source_types_ranks_myvass_with_evidence():
+def test_score_source_types_ranks_wide_multiyear_with_evidence():
     from backend.config import score_source_types
 
     cols = ["IC_NO_PASSPORT", "Nama", "Jantina", "Nama TASKA",
@@ -32,26 +32,26 @@ def test_score_source_types_ranks_myvass_with_evidence():
     scores = score_source_types(pd.DataFrame(columns=cols))
 
     by_type = {s["type"]: s for s in scores}
-    assert set(by_type) == {"myvass", "ncdc", "kpm"}  # all schemas scored
-    # myvass should have a cluster of matched distinctive signals
-    assert by_type["myvass"]["matched_count"] >= 2
-    matched_names = [s["name"] for s in by_type["myvass"]["signals"] if s["matched"]]
+    assert set(by_type) == {"wide_multiyear", "wide_registry", "school_age"}  # all schemas scored
+    # wide_multiyear should have a cluster of matched distinctive signals
+    assert by_type["wide_multiyear"]["matched_count"] >= 2
+    matched_names = [s["name"] for s in by_type["wide_multiyear"]["signals"] if s["matched"]]
     assert "nama taska" in matched_names
     assert "ic no passport" in matched_names
     # every matched signal carries human-readable evidence
-    for s in by_type["myvass"]["signals"]:
+    for s in by_type["wide_multiyear"]["signals"]:
         if s["matched"]:
             assert s["evidence"] and "column" in s["evidence"]
     # confidence is a 0-1 fraction
-    assert 0.0 < by_type["myvass"]["confidence"] <= 1.0
+    assert 0.0 < by_type["wide_multiyear"]["confidence"] <= 1.0
 
 
-def test_score_source_types_kpm_top_for_school_columns():
+def test_score_source_types_school_age_top_for_school_columns():
     from backend.config import score_source_types
 
     cols = ["ID_MURID", "Nama Sekolah", "THN_TING", "Jantina", "Berat (kg)"]
     scores = score_source_types(pd.DataFrame(columns=cols))
-    assert scores[0]["type"] == "kpm"  # sorted by confidence desc
+    assert scores[0]["type"] == "school_age"  # sorted by confidence desc
     assert scores[0]["matched_count"] >= 2
 
 
@@ -73,8 +73,8 @@ def test_score_source_types_sub_threshold_but_nonzero():
             "BMI", "Negeri", "Daerah", "Tahun_Ukur"]
     assert detect_source_type(cols) == "general"  # below hard-detect bar
     scores = score_source_types(pd.DataFrame(columns=cols))
-    myvass = next(s for s in scores if s["type"] == "myvass")
-    assert myvass["matched_count"] >= 1  # but not zero
+    wide_multiyear = next(s for s in scores if s["type"] == "wide_multiyear")
+    assert wide_multiyear["matched_count"] >= 1  # but not zero
 
 
 # ─── 5B: /clean/detect-type re-route recommendation ────────────────────────────
@@ -92,7 +92,7 @@ def _upload(client, headers: list[str], filename: str = "data.csv"):
     return client.post("/clean/detect-type", files=files)
 
 
-def test_detect_type_recommends_reroute_for_general_myvass(client):
+def test_detect_type_recommends_reroute_for_general_wide_multiyear(client):
     """A general-bound file resembling MyVASS yields one re-route card.
 
     Headers use soft TASKA signals (No. MyKID, Kumpulan Umur, Pendapatan
@@ -110,7 +110,7 @@ def test_detect_type_recommends_reroute_for_general_myvass(client):
     assert len(reroute_cards) == 1, f"expected exactly one reroute card, got {recs}"
     rec = reroute_cards[0]
     assert rec["kind"] == "reroute"
-    assert rec["type"] == "myvass"
+    assert rec["type"] == "wide_multiyear"
     assert rec["matched_count"] >= 1
     assert rec["signals"]  # matched-signal evidence present
     assert all(s["matched"] for s in rec["signals"])  # only matched signals surfaced
@@ -118,7 +118,7 @@ def test_detect_type_recommends_reroute_for_general_myvass(client):
 
 
 def test_detect_type_single_card_for_taska_overlap(client):
-    """A TASKA-shaped general file scores myvass AND ncdc; only ONE card shows."""
+    """A TASKA-shaped general file scores wide_multiyear AND wide_registry; only ONE card shows."""
     r = _upload(client, ["Nama TASKA", "Nama", "Jantina", "Berat", "Tinggi"])
     data = r.json()
     if data["detected_type"] == "general":
@@ -148,9 +148,9 @@ def test_detect_type_no_recommendation_when_already_detected(client):
 # verified for the right detector before being baked in.
 #
 # Fixture A: IC_NO_PASSPORT + anon cols — detect_source_type=='general',
-#   myvass matched_count==1 (sub-threshold for hard-detect, above reroute bar).
+#   wide_multiyear matched_count==1 (sub-threshold for hard-detect, above reroute bar).
 # Fixture B: generic patient_id cols — all matched_count==0.
-# Fixture C: adds Nama TASKA + year-prefix col — detect_source_type=='myvass'.
+# Fixture C: adds Nama TASKA + year-prefix col — detect_source_type=='wide_multiyear'.
 
 def _preview_upload(client, headers: list[str], filename: str = "data.csv"):
     """POST a tiny CSV with the given headers to /upload/preview."""
@@ -159,8 +159,8 @@ def _preview_upload(client, headers: list[str], filename: str = "data.csv"):
     return client.post("/upload/preview", files=files)
 
 
-def test_preview_reroute_card_for_general_myvass_file(client):
-    """General-bound file with one myvass signal → exactly one reroute card."""
+def test_preview_reroute_card_for_general_wide_multiyear_file(client):
+    """General-bound file with one wide_multiyear signal → exactly one reroute card."""
     headers = ["IC_NO_PASSPORT", "Nama", "Jantina", "Berat_kg",
                "Tinggi_cm", "BMI", "Negeri", "Daerah", "Tahun_Ukur"]
     r = _preview_upload(client, headers)
@@ -171,7 +171,7 @@ def test_preview_reroute_card_for_general_myvass_file(client):
     reroutes = [c for c in recs if c["kind"] == "reroute"]
     assert len(reroutes) == 1, f"expected exactly one reroute card, got {recs}"
     card = reroutes[0]
-    assert card["type"] == "myvass"
+    assert card["type"] == "wide_multiyear"
     assert card["matched_count"] >= 1
     assert card["signals"] and all(s["matched"] for s in card["signals"])
     assert card["rationale_en"] and card["rationale_bm"]
@@ -207,4 +207,4 @@ def test_preview_detect_type_endpoint_behavior_unchanged(client):
     assert data["detected_type"] == "general"
     reroutes = [c for c in data["recommendations"] if c["kind"] == "reroute"]
     assert len(reroutes) == 1
-    assert reroutes[0]["type"] == "myvass"
+    assert reroutes[0]["type"] == "wide_multiyear"

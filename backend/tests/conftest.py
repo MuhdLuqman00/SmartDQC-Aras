@@ -94,7 +94,7 @@ def test_dataset(db_session):
         id="test-ds-1",
         name="Test Dataset",
         filename="test.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=10,
         created_at=datetime.utcnow(),
     )
@@ -128,14 +128,14 @@ def test_cache_with_data(db_session, monkeypatch, tmp_path):
     monkeypatch.setattr(main, "_CACHE_DIR", tmp_path)
     main._cleaned_cache[cache_id] = {
         "df": df,
-        "stats": {"filename": "test.csv", "source_type": "myvass"},
+        "stats": {"filename": "test.csv", "source_type": "wide_multiyear"},
     }
 
     ds = Dataset(
         id=cache_id,
         name="Test",
         filename="test.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=3,
         created_at=datetime.utcnow(),
     )
@@ -163,7 +163,7 @@ def multiple_datasets_in_db(db_session):
                 id=ds_id,
                 name=f"Test {i}",
                 filename=f"test{i}.csv",
-                source_type="myvass",
+                source_type="wide_multiyear",
                 row_count=2,
                 created_at=datetime.utcnow(),
             )
@@ -173,7 +173,7 @@ def multiple_datasets_in_db(db_session):
             db_session.add(
                 ChildRecord(
                     dataset_id=ds_id,
-                    source_type="myvass",
+                    source_type="wide_multiyear",
                     ic_norm=f"90010101000{i}{j}",
                     name=f"Child {i}-{j}",
                     dob=f"2020-0{i + 1}-15",

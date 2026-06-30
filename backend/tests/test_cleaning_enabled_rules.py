@@ -4,7 +4,7 @@ import pandas as pd
 from backend.eda.cleaning import clean_data, rules_for_source, LOCKED_RULES
 
 
-def _kpm_dups() -> pd.DataFrame:
+def _school_age_dups() -> pd.DataFrame:
     # Two identical KPM rows (same student ID) that both clean successfully.
     return pd.DataFrame({
         "ID_MURID":          ["A1", "A1"],
@@ -17,22 +17,22 @@ def _kpm_dups() -> pd.DataFrame:
 
 
 def test_disable_rule_retains_rows():
-    df = _kpm_dups()
-    _, s_on = clean_data(df, "kpm")                       # all rules (None)
+    df = _school_age_dups()
+    _, s_on = clean_data(df, "school_age")                       # all rules (None)
     assert s_on["dropped_duplicate_id"] == 1
     assert s_on["final_count"] == 1
 
-    enabled = {r["code"] for r in rules_for_source("kpm")} - {"dropped_duplicate_id"}
-    _, s_off = clean_data(df, "kpm", enabled)             # dedup disabled
+    enabled = {r["code"] for r in rules_for_source("school_age")} - {"dropped_duplicate_id"}
+    _, s_off = clean_data(df, "school_age", enabled)             # dedup disabled
     assert s_off["dropped_duplicate_id"] == 0
     assert s_off["final_count"] == 2                       # both rows kept
 
 
 def test_none_equals_all_enabled():
-    df = _kpm_dups()
-    _, s_none = clean_data(df, "kpm")
-    all_codes = {r["code"] for r in rules_for_source("kpm")}
-    _, s_all = clean_data(df, "kpm", all_codes)
+    df = _school_age_dups()
+    _, s_none = clean_data(df, "school_age")
+    all_codes = {r["code"] for r in rules_for_source("school_age")}
+    _, s_all = clean_data(df, "school_age", all_codes)
     assert s_none["final_count"] == s_all["final_count"]
     assert s_none["dropped_duplicate_id"] == s_all["dropped_duplicate_id"]
 
@@ -48,5 +48,5 @@ def test_locked_rule_always_runs():
         "BERAT":             [None],          # no weight → no BMI → locked drop
         "TINGGI":            [115.0],
     })
-    _, s = clean_data(df, "kpm", enabled_rules=set())     # nothing user-enabled
+    _, s = clean_data(df, "school_age", enabled_rules=set())     # nothing user-enabled
     assert s["final_count"] == 0                           # locked gate still removed it

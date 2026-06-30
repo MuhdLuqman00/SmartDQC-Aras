@@ -546,7 +546,7 @@ def _summarise_cleaning(stats: dict, rows_before: int, rows_after: int) -> dict:
     """Derive a quality score, applied-rule list, and top issues from a
     cleaner's stats dict (per-rule removed/flagged row counts).
 
-    Generic across kpm/myvass/ncdc cleaners: any positive-integer stat
+    Generic across school_age/wide_multiyear/wide_registry cleaners: any positive-integer stat
     that isn't a survivor/transformation count is treated as an issue+rule.
     """
     score = round(rows_after / rows_before * 100, 1) if rows_before else 0.0
@@ -653,7 +653,7 @@ async def validate_mapping(
 async def run_eda_endpoint(
     file: UploadFile = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     sheet: Optional[str] = None,
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
     owner: str | None = Depends(_identity),
@@ -722,7 +722,7 @@ async def run_eda_endpoint(
 async def cleaned_preview(
     file: UploadFile = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     sheet: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=5, le=200),
@@ -762,7 +762,7 @@ async def cleaned_preview(
 async def download_cleaned(
     file: UploadFile = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     sheet: Optional[str] = None,
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
 ):
@@ -808,7 +808,7 @@ async def download_cleaned(
 async def export_aggregated(
     file: UploadFile = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     sheet: Optional[str] = None,
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
 ):
@@ -866,7 +866,7 @@ async def export_aggregated_cached(
         raise HTTPException(
             404, "cache_id not found — run /clean/run first or check the UUID"
         )
-    src = (entry.get("stats") or {}).get("source_type") or "myvass"
+    src = (entry.get("stats") or {}).get("source_type") or "wide_multiyear"
     report = run_eda_auto(entry["df"], src)
     agg_rows = report.get("_aggregated_full", build_aggregated_table(report))
     if not agg_rows:
@@ -895,8 +895,8 @@ async def export_aggregated_cached(
 # ─── MYVASS WIDE-TO-LONG PREVIEW ─────────────────────────────────────────────
 
 
-@app.post("/transform/myvass-wide-to-long")
-async def myvass_wide_to_long_endpoint(
+@app.post("/transform/wide_multiyear-wide-to-long")
+async def wide_multiyear_wide_to_long_endpoint(
     file: UploadFile = File(...),
     sheet: Optional[str] = None,
 ):
@@ -907,9 +907,9 @@ async def myvass_wide_to_long_endpoint(
     except Exception as e:
         raise HTTPException(400, str(e))
 
-    from .eda.runner import myvass_wide_to_long
+    from .eda.runner import wide_multiyear_wide_to_long
 
-    long_df = myvass_wide_to_long(df)
+    long_df = wide_multiyear_wide_to_long(df)
     return JSONResponse(
         content=json_safe(
             {
@@ -929,7 +929,7 @@ async def myvass_wide_to_long_endpoint(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _merge_myvass_files(
+def _merge_wide_multiyear_files(
     file_contents: list[tuple[str, bytes]],
     dose_date_col: str = "DOSE_DATE",
     ic_col: str = DEFAULT_ID_COLUMN,
@@ -1038,7 +1038,7 @@ async def merge_preview(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, stats = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, stats = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -1090,7 +1090,7 @@ async def merge_preview(
 async def run_eda_merged(
     files: List[UploadFile] = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
@@ -1104,7 +1104,7 @@ async def run_eda_merged(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, merge_stats = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, merge_stats = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -1137,7 +1137,7 @@ async def run_eda_merged(
 async def download_cleaned_merged(
     files: List[UploadFile] = File(...),
     mapping: str = "",
-    source_type: str = "myvass",
+    source_type: str = "wide_multiyear",
     ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
@@ -1149,7 +1149,7 @@ async def download_cleaned_merged(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, _ = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, _ = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -1167,16 +1167,16 @@ async def download_cleaned_merged(
             iter([data]),
             media_type="text/csv",
             headers={
-                "Content-Disposition": 'attachment; filename="cleaned_merged_myvass.csv"'
+                "Content-Disposition": 'attachment; filename="cleaned_merged_wide_multiyear.csv"'
             },
         )
     else:
-        data = cln_excel(cleaned_records, cleaned_cols, "merged_myvass")
+        data = cln_excel(cleaned_records, cleaned_cols, "merged_wide_multiyear")
         return StreamingResponse(
             iter([data]),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": 'attachment; filename="cleaned_merged_myvass.xlsx"'
+                "Content-Disposition": 'attachment; filename="cleaned_merged_wide_multiyear.xlsx"'
             },
         )
 
@@ -1637,7 +1637,7 @@ def _get_or_build_narrative(key: str, entry: dict) -> dict:
     if cached:
         return cached
     try:
-        source_type = (entry.get("stats") or {}).get("source_type") or "myvass"
+        source_type = (entry.get("stats") or {}).get("source_type") or "wide_multiyear"
         eda_result = run_eda_auto(entry["df"], source_type)
         narrative = generate_narrative(eda_result)
         _cache_set_narrative(key, narrative)
@@ -1877,7 +1877,7 @@ def _profile_columns(df: pd.DataFrame) -> list[dict]:
 
 # Bilingual rationale templates for re-route recommendations (5B).
 _REROUTE_RATIONALE: dict[str, tuple[str, str]] = {
-    "myvass": (
+    "wide_multiyear": (
         "Column names closely match the MyVASS/TASKA wide format. "
         "Re-routing applies the MyVASS cleaner: age-based outlier removal, "
         "WHO z-score computation, and duplicate identity checks.",
@@ -1885,13 +1885,13 @@ _REROUTE_RATIONALE: dict[str, tuple[str, str]] = {
         "Penghalaian semula menggunakan pembersih MyVASS: pembuangan nilai terpinggir "
         "berasaskan umur, pengiraan z-skor WHO, dan semakan identiti pendua.",
     ),
-    "ncdc": (
+    "wide_registry": (
         "Column names suggest an NCDC (TASKA) wide-format dataset. "
         "Re-routing applies NCDC-specific cleaning and quality rules.",
         "Nama lajur mencadangkan set data format lebar NCDC (TASKA). "
         "Penghalaian semula menggunakan pembersih dan peraturan kualiti khusus NCDC.",
     ),
-    "kpm": (
+    "school_age": (
         "Column names suggest a KPM school-age dataset. "
         "Re-routing applies school-age BMI categories and school identity validation.",
         "Nama lajur mencadangkan set data umur sekolah KPM. "
@@ -1916,7 +1916,7 @@ def _reroute_card(df) -> "dict | None":
     candidates = [s for s in scores if s["matched_count"] >= _REROUTE_MIN_SIGNALS]
     if not candidates:
         return None
-    candidates.sort(key=lambda s: (s["matched_count"], s["type"] == "myvass"), reverse=True)
+    candidates.sort(key=lambda s: (s["matched_count"], s["type"] == "wide_multiyear"), reverse=True)
     best = candidates[0]
     schema = best["type"]
     rationale_en, rationale_bm = _REROUTE_RATIONALE.get(
@@ -2152,7 +2152,7 @@ async def quality_check_endpoint(
 @app.post("/clean/run")
 async def clean_run_endpoint(
     cache_id: Optional[str] = Query(None),
-    data_type: str = Query("myvass"),
+    data_type: str = Query("wide_multiyear"),
     body: Optional[MappingBody] = None,
     owner: str | None = Depends(_identity),
     db=Depends(get_db),
@@ -2179,11 +2179,11 @@ async def clean_run_endpoint(
             df = df.rename(columns=rename)
 
     # Drive the cleaner from the detected source_type (cached at upload),
-    # not the hardcoded "myvass" default. An explicit non-default data_type
+    # not the hardcoded "wide_multiyear" default. An explicit non-default data_type
     # from the caller still overrides. Unrecognised/legacy types → general cleaner.
     cached_st = _entry_stats.get("source_type")
     effective_type = normalize_schema_type(
-        cached_st if (data_type == "myvass" and cached_st) else data_type
+        cached_st if (data_type == "wide_multiyear" and cached_st) else data_type
     )
 
     # D2: build effective rule set = body's drop selection UNION persisted review
@@ -2355,13 +2355,13 @@ class PreviewImpactBody(BaseModel):
 
 def _resolve_effective_type(cache_id: Optional[str], data_type: str) -> str:
     """Same precedence as /clean/run: cached detected type wins over the default
-    'myvass' query value; an explicit non-default caller value still overrides."""
+    'wide_multiyear' query value; an explicit non-default caller value still overrides."""
     cached_st = ((_cache_get(cache_id) or {}).get("stats", {}) or {}).get("source_type")
-    return cached_st if (data_type == "myvass" and cached_st) else data_type
+    return cached_st if (data_type == "wide_multiyear" and cached_st) else data_type
 
 
 @app.get("/clean/rules")
-def clean_rules(data_type: str = Query("myvass")):
+def clean_rules(data_type: str = Query("wide_multiyear")):
     """Registry view of drop + review rules for a source type, annotated with the
     user's persisted enabled state. Both groups share a vocabulary with Settings."""
     drop_state: dict = {}
@@ -2400,7 +2400,7 @@ def clean_rules(data_type: str = Query("myvass")):
 @app.post("/clean/preview-impact")
 async def clean_preview_impact(
     cache_id: Optional[str] = Query(None),
-    data_type: str = Query("myvass"),
+    data_type: str = Query("wide_multiyear"),
     body: Optional[PreviewImpactBody] = None,
 ):
     """B3.2 live row-impact: run the real cleaner with the proposed enabled_rules
@@ -2453,7 +2453,7 @@ async def clean_preview_impact(
 @app.post("/clean/download")
 async def clean_download_endpoint(
     file: UploadFile = File(...),
-    data_type: str = "myvass",
+    data_type: str = "wide_multiyear",
     sheet: Optional[str] = None,
     fmt: str = Query("xlsx", pattern="^(csv|xlsx)$"),
     view: str = Query("analysis", pattern="^(analysis|full)$"),
@@ -2520,7 +2520,7 @@ async def clean_download_endpoint(
 @app.post("/clean/quality-check-multi")
 async def quality_check_multi_endpoint(
     files: List[UploadFile] = File(...),
-    data_type: str = "myvass",
+    data_type: str = "wide_multiyear",
     ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
 ):
@@ -2531,7 +2531,7 @@ async def quality_check_multi_endpoint(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, merge_stats = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, merge_stats = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -2591,7 +2591,7 @@ async def quality_check_multi_endpoint(
 @app.post("/clean/run-multi")
 async def clean_run_multi_endpoint(
     files: List[UploadFile] = File(...),
-    data_type: str = "myvass",
+    data_type: str = "wide_multiyear",
     ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
 ):
@@ -2602,7 +2602,7 @@ async def clean_run_multi_endpoint(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, merge_stats = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, merge_stats = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -2637,7 +2637,7 @@ async def clean_run_multi_endpoint(
 @app.post("/clean/download-multi")
 async def clean_download_multi_endpoint(
     files: List[UploadFile] = File(...),
-    data_type: str = "myvass",
+    data_type: str = "wide_multiyear",
     ic_col: str = Query(DEFAULT_ID_COLUMN),
     dose_date_col: str = Query("DOSE_DATE"),
     fmt: str = Query("xlsx", pattern="^(csv|xlsx)$"),
@@ -2653,7 +2653,7 @@ async def clean_download_multi_endpoint(
         file_contents.append((f.filename or "unknown", content))
 
     try:
-        merged, merge_stats = _merge_myvass_files(file_contents, dose_date_col, ic_col)
+        merged, merge_stats = _merge_wide_multiyear_files(file_contents, dose_date_col, ic_col)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -2708,7 +2708,7 @@ async def clean_download_multi_endpoint(
 async def download_cached_endpoint(
     cache_id: str,
     fmt: str = Query("xlsx", pattern="^(csv|xlsx)$"),
-    data_type: str = Query("myvass"),
+    data_type: str = Query("wide_multiyear"),
     view: str = Query("analysis", pattern="^(analysis|full)$"),
 ):
     """Download previously cleaned data from cache — no file re-upload needed.
@@ -3169,7 +3169,7 @@ def report_pptx_endpoint(
     # quality overview / indicators / charts blank. Build the real EDA
     # report (same run_eda_auto the AI narrative uses) so the report is
     # populated and consistent with the narrative + dashboard score.
-    _src = (entry.get("stats") or {}).get("source_type") or "myvass"
+    _src = (entry.get("stats") or {}).get("source_type") or "wide_multiyear"
     eda_result = run_eda_auto(entry["df"], _src)
     _tgt = _load_kpi_targets(db)
     _amber, _ = _rag_tolerances(db)
@@ -3216,7 +3216,7 @@ def report_pdf_endpoint(
     # quality overview / indicators / charts blank. Build the real EDA
     # report (same run_eda_auto the AI narrative uses) so the report is
     # populated and consistent with the narrative + dashboard score.
-    _src = (entry.get("stats") or {}).get("source_type") or "myvass"
+    _src = (entry.get("stats") or {}).get("source_type") or "wide_multiyear"
     eda_result = run_eda_auto(entry["df"], _src)
     _tgt = _load_kpi_targets(db)
     _amber, _ = _rag_tolerances(db)
@@ -3350,7 +3350,7 @@ async def quality_breakdown_endpoint(
         raise HTTPException(
             404, "cache_id not found — run /clean/run first or check the UUID"
         )
-    source_type = ((entry.get("stats") or {}).get("source_type")) or "myvass"
+    source_type = ((entry.get("stats") or {}).get("source_type")) or "wide_multiyear"
     try:
         dq = run_eda_auto(entry["df"], source_type).get("data_quality_score") or {}
     except Exception as exc:  # pragma: no cover — defensive
@@ -4106,7 +4106,7 @@ def _build_quality_report(df: pd.DataFrame, stats: dict, data_type: str) -> io.B
 @app.get("/clean/download-report/{cache_id}")
 async def download_report_endpoint(
     cache_id: str,
-    data_type: str = Query("myvass"),
+    data_type: str = Query("wide_multiyear"),
 ):
     """Download Data Quality Report (5-tab Excel) from cached cleaning results."""
     entry = _cache_get(cache_id)
@@ -4214,7 +4214,7 @@ def ai_narrative(
     if entry is None:
         raise HTTPException(404, "cache_id not found — re-upload or re-run cleaning.")
     df = entry["df"]
-    source_type = (entry.get("stats") or {}).get("source_type") or "myvass"
+    source_type = (entry.get("stats") or {}).get("source_type") or "wide_multiyear"
     try:
         eda_result = run_eda_auto(df, source_type)
         narrative = generate_narrative(eda_result)

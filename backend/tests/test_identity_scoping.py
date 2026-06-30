@@ -22,7 +22,7 @@ def _seed(db, ds_id, owner):
             id=ds_id,
             name=ds_id,
             filename=f"{ds_id}.csv",
-            source_type="myvass",
+            source_type="wide_multiyear",
             row_count=1,
             created_at=datetime.utcnow(),
             owner=owner,
@@ -89,7 +89,7 @@ def test_persist_session_stamps_owner(db_session):
     main._persist_session(
         cache_id="cid-owner-1",
         filename="f.csv",
-        source_type="myvass",
+        source_type="wide_multiyear",
         row_count=5,
         result={"quality_score": 90.0, "issues": []},
         db=db_session,
