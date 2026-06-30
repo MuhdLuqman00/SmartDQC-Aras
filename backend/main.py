@@ -935,7 +935,7 @@ def _merge_wide_multiyear_files(
     ic_col: str = DEFAULT_ID_COLUMN,
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Merge multiple MyVASS files:
+    Merge multiple wide-format files:
     1. Validate all headers match
     2. Concatenate
     3. Deduplicate by IC — keep row with latest DOSE_DATE
@@ -1029,7 +1029,7 @@ async def merge_preview(
     page_size: int = Query(20, ge=5, le=100),
 ):
     """
-    Upload multiple MyVASS files, merge + dedup + remove nulls,
+    Upload multiple wide-format files, merge + dedup + remove nulls,
     and return a preview of the merged data.
     """
     file_contents = []
@@ -1096,7 +1096,7 @@ async def run_eda_merged(
     bmi_threshold: float = Query(1.0, ge=0.1, le=10.0),
 ):
     """
-    Upload multiple MyVASS files → merge + dedup + remove nulls → run full EDA.
+    Upload multiple wide-format files → merge + dedup + remove nulls → run full EDA.
     """
     file_contents = []
     for f in files:

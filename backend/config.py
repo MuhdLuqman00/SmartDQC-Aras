@@ -11,8 +11,8 @@ from backend.clinical_ranges import get_range as _cr_get_range, get_val as _cr_g
 
 def _norm_key(s: str) -> str:
     """Collapse a header to alphanumerics only so separator style (space vs
-    underscore vs dot) never blocks a hint match — e.g. 'Tarikh_Pengukuran',
-    'tarikh pengukuran' and 'tarikh.pengukuran' all become 'tarikhpengukuran'."""
+    underscore vs dot) never blocks a hint match — e.g. 'Measurement_Date',
+    'measurement date' and 'measurement.date' all become 'measurementdate'."""
     return re.sub(r"[^a-z0-9]+", "", str(s).lower().strip())
 
 # ─── STANDARD SCHEMA ──────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ STANDARD_SCHEMA = {
     # Metadata
     "tahun_ukur":       {"type": "categorical",  "description": "Measurement year"},
     "sumber":           {"type": "categorical",  "description": "Data source tag"},
-    # Klinik-specific
+    # Vaccination/clinic-specific
     "vaccine_name":     {"type": "categorical",  "description": "Vaccine administered (klinik data)"},
     "status_assessment":{"type": "categorical",  "description": "Assessment completion status"},
 }
@@ -305,10 +305,10 @@ AUTO_MAPPING_HINTS = {
         "vaccine_name":   ["vaksin", "vaccine", "nama vaksin", "jenis vaksin",
                            "jenis_vaksin", "vaccine_name"],
     },
-    # NCDC (TASKA) currently uses the same year-prefixed wide TASKA layout as
-    # MyVASS, so these hints mirror it. Kept as an independent set (not a shared
-    # reference) so NCDC can diverge without affecting MyVASS, and vice versa.
-    # The NCDC-specific *cleaning* lives in clean_wide_registry(); only mapping hints here.
+    # The wide_registry profile currently uses the same year-prefixed wide layout
+    # as wide_multiyear, so these hints mirror it. Kept as an independent set (not
+    # a shared reference) so it can diverge from wide_multiyear, and vice versa.
+    # The wide_registry-specific *cleaning* lives in clean_wide_registry(); only mapping hints here.
     "wide_registry": {
         "id":             ["no. mykid", "no mykid", "mykid", "no.mykid", "id kanak-kanak",
                            "ic_no_passport", "ic no passport", "no_kp", "no kp",
@@ -342,8 +342,8 @@ AUTO_MAPPING_HINTS = {
         "vaccine_name":   ["vaksin", "vaccine", "nama vaksin", "jenis vaksin",
                            "jenis_vaksin", "vaccine_name"],
     },
-    # KPM (school-age) — distinct student/school schema. Note WHO infant
-    # z-scores don't apply; the KPM cleaner uses school-age BMI categories.
+    # school_age — distinct student/school schema. Note WHO infant
+    # z-scores don't apply; the school-age cleaner uses BMI categories.
     "school_age": {
         "id":             ["id_murid", "no. mykid", "no mykid", "mykid", "id",
                            "no_ic", "ic", "no. ic", "nric"],
@@ -422,7 +422,7 @@ def detect_source_type(columns: list) -> str:
     """Detect data source from column names (case-insensitive).
 
     Returns one of: "school_age" (school), "wide_multiyear" (a vaccination-registry export OR
-    the TASKA wide format), or "general" (conservative safe-mode cleaner).
+    the wide multi-year format), or "general" (conservative safe-mode cleaner).
     wide_registry is column-identical to the wide_multiyear variant (same schema) and
     is therefore not auto-distinguishable from it — it is chosen via the manual
     source-type selector. The vaccination-registry schema (IC_NO_PASSPORT /
@@ -434,21 +434,21 @@ def detect_source_type(columns: list) -> str:
     cols_normalized = {c.replace('_', ' ') for c in cols_lower}
     joined = " ".join(cols_normalized)
 
-    # KPM / school signals — distinctive student & school columns
+    # School-age signals — distinctive student & school columns
     school_age_signals = ["id murid", "nama sekolah", "sekolah", "thn ting", "ting murid"]
     if any(s in joined or s in cols_normalized for s in school_age_signals):
         return "school_age"
 
-    # MyVAS (vaccination registry) signals — the real MyVAS export schema, which
-    # is distinct from the TASKA wide format. Checked BEFORE the TASKA block
-    # because a processed MyVAS sheet can carry both vaccination columns and
-    # TASKA-derived anthropometry columns; the vaccination signal must win.
+    # Vaccination-registry signals — the real vaccination export schema, which
+    # is distinct from the wide multi-year format. Checked BEFORE the wide block
+    # because a processed vaccination sheet can carry both vaccination columns and
+    # wide-format-derived anthropometry columns; the vaccination signal must win.
     myvas_signals = ["ic no passport", "dose date", "facility name",
                      "age at vaccination", "kategori fasiliti"]
     if sum(1 for s in myvas_signals if s in joined or s in cols_normalized) >= 2:
         return "wide_multiyear"
 
-    # TASKA wide-format signals (shared by MyVASS and NCDC)
+    # Wide-format signals (shared by the wide multi-year & wide registry profiles)
     taska_signals = ["nama taska", "no. mykid", "pendapatan keluarga", "kumpulan umur",
                      "2023 berat", "2024 berat", "2025 berat", "2026 berat",
                      "2023 status berat", "agensi"]
@@ -467,10 +467,10 @@ _SCHEMA_SIGNALS: dict[str, list[str]] = {
         "nama murid", "nama pelajar",
     ],
     "wide_multiyear": [
-        # MyVAS vaccination-registry (real export) signals
+        # Vaccination-registry (real export) signals
         "ic no passport", "dose date", "facility name",
         "age at vaccination", "kategori fasiliti",
-        # TASKA wide-format signals (also routes to wide_multiyear)
+        # Wide-format signals (also route to wide_multiyear)
         "nama taska", "no mykid", "pendapatan keluarga", "kumpulan umur",
         "2024 berat", "2025 berat", "2026 berat", "2023 status berat",
     ],

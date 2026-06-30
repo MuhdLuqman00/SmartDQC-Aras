@@ -36,8 +36,8 @@ def test_school_age_mapping_resolves_school_columns():
 
 
 def test_wide_registry_maps_taska_columns():
-    # NCDC has its own independent hint set that currently mirrors MyVASS's TASKA
-    # layout, so the two map shared columns equivalently (NCDC-specific cleaning
+    # wide_registry has its own independent hint set that currently mirrors wide_multiyear's
+    # layout, so the two map shared columns equivalently (wide_registry-specific cleaning
     # lives in clean_wide_registry, not in these hints).
     cols = ["No. MyKID", "Nama TASKA", "Jantina", "2025 Berat (kg)"]
     m = auto_suggest_mapping(cols, "wide_registry")

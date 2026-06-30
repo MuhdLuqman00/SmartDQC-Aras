@@ -40,7 +40,7 @@ def _wide_multiyear_base(n=2, **extra):
     return pd.DataFrame(base)
 
 
-# --- Family 10: NCDC ----------------------------------------------------------
+# --- Family 10: wide_registry -------------------------------------------------
 
 def test_vaccine_unknown():
     df = _wide_registry_base(vaccine_name=["BCG", "Quaxin"])  # known, unknown
@@ -65,7 +65,7 @@ def test_taska_blank():
     assert _has(c.loc[1, "review_reason"], "review_taska_blank")
 
 
-# --- Family 11: MyVASS --------------------------------------------------------
+# --- Family 11: wide_multiyear ------------------------------------------------
 
 def test_ethnicity_unknown_disabled():
     # DISABLED 2026-06-16: ETHNIC_VALID completeness unprovable from contoh data.
@@ -78,7 +78,7 @@ def test_ethnicity_unknown_disabled():
 
 def test_facility_unknown_disabled():
     # DISABLED 2026-06-16: FACILITY_SET demonstrably incomplete (real categories like
-    # "Hospital Kerajaan"/"Klinik Swasta" missing). An unknown facility must NOT be
+    # "government hospital"/"private clinic" missing). An unknown facility must NOT be
     # flagged while the rule is dormant.
     df = _wide_multiyear_base(Kategori_Fasiliti=["Klinik Kesihatan", "Spaceport"])
     c, _ = clean_wide_multiyear(df)

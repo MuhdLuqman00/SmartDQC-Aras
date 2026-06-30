@@ -41,7 +41,7 @@ def test_age_source_mismatch():
 
 
 def test_age_band_mismatch():
-    # source label says "Bawah 2 Tahun" but source age is 36 months (-> u5)
+    # source label says "under 2 years" but source age is 36 months (-> u5)
     df = _wide_multiyear_base(age_months_computed=[36.0, 12.0],
                       Kategori_Umur=["Bawah 2 Tahun", "Bawah 2 Tahun"])
     c, _ = clean_wide_multiyear(df)

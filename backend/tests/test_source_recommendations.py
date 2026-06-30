@@ -66,7 +66,7 @@ def test_score_source_types_generic_file_scores_zero():
 
 
 def test_score_source_types_sub_threshold_but_nonzero():
-    """A processed MyVASS export that fell into general still shows >=1 signal."""
+    """A processed wide multi-year export that fell into general still shows >=1 signal."""
     from backend.config import score_source_types, detect_source_type
 
     cols = ["IC_NO_PASSPORT", "Nama", "Jantina", "Berat_kg", "Tinggi_cm",
@@ -93,7 +93,7 @@ def _upload(client, headers: list[str], filename: str = "data.csv"):
 
 
 def test_detect_type_recommends_reroute_for_general_wide_multiyear(client):
-    """A general-bound file resembling MyVASS yields one re-route card.
+    """A general-bound file resembling wide multi-year yields one re-route card.
 
     Headers use soft TASKA signals (No. MyKID, Kumpulan Umur, Pendapatan
     Keluarga) that detect_data_type does NOT hard-match — it has no year-prefix,
@@ -118,7 +118,7 @@ def test_detect_type_recommends_reroute_for_general_wide_multiyear(client):
 
 
 def test_detect_type_single_card_for_taska_overlap(client):
-    """A TASKA-shaped general file scores wide_multiyear AND wide_registry; only ONE card shows."""
+    """A wide-format general file scores wide_multiyear AND wide_registry; only ONE card shows."""
     r = _upload(client, ["Nama TASKA", "Nama", "Jantina", "Berat", "Tinggi"])
     data = r.json()
     if data["detected_type"] == "general":
@@ -150,7 +150,7 @@ def test_detect_type_no_recommendation_when_already_detected(client):
 # Fixture A: IC_NO_PASSPORT + anon cols — detect_source_type=='general',
 #   wide_multiyear matched_count==1 (sub-threshold for hard-detect, above reroute bar).
 # Fixture B: generic patient_id cols — all matched_count==0.
-# Fixture C: adds Nama TASKA + year-prefix col — detect_source_type=='wide_multiyear'.
+# Fixture C: adds a childcare-centre-name + year-prefix col — detect_source_type=='wide_multiyear'.
 
 def _preview_upload(client, headers: list[str], filename: str = "data.csv"):
     """POST a tiny CSV with the given headers to /upload/preview."""

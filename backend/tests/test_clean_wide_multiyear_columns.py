@@ -1,4 +1,4 @@
-"""Regression: an already-processed NCDC/TASKA export uses underscore date
+"""Regression: an already-processed wide-format export uses underscore date
 columns (Tarikh_Lahir / Tarikh_Pengukuran). clean_wide_multiyear.find_col matched DOB
 with the pattern "tarikh lahir" (a SPACE) which never matches "tarikh_lahir"
 (an UNDERSCORE), and had no "pengukuran" synonym. dob_col/measure_date_col
@@ -76,7 +76,7 @@ def test_parse_date_handles_iso_datetime_without_dayfirst_misparse():
 
 
 def test_parse_date_keeps_dayfirst_for_ambiguous_raw_dates():
-    """Raw MyVASS dates are dd/mm/yyyy. When day <= 12 the value is
+    """Raw wide multi-year dates are dd/mm/yyyy. When day <= 12 the value is
     ambiguous; it must still be read day-first, not month-first."""
     out = cleaning._parse_date(pd.Series(["05/06/2024", "11/02/2023"]))
     assert out.iloc[0] == pd.Timestamp("2024-06-05"), out.iloc[0]

@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _raw_wide_multiyear_df() -> pd.DataFrame:
-    """Df shaped like the REAL /clean/run cache output for a MyVASS file.
+    """Df shaped like the REAL /clean/run cache output for a wide multi-year file.
 
     This deliberately mirrors what clean_data() actually emits (verified against
     synthetic_wide_multiyear_12000.csv), NOT a convenience fixture:

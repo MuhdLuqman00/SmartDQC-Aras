@@ -408,7 +408,7 @@ export function UploadPage() {
             {t('Merge multiple wide-format files', 'Gabungkan beberapa fail format lebar')}
           </label>
 
-          {/* Source-type selector (single-file mode; merge is MyVASS-only) */}
+          {/* Source-type selector (single-file mode; merge is wide-format-only) */}
           {!multiMode && (
             <div style={{ marginBottom: 20 }}>
               <label htmlFor="src-type" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>

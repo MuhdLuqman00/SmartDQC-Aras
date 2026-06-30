@@ -5,7 +5,7 @@ from backend.eda.cleaning import clean_data, rules_for_source, LOCKED_RULES
 
 
 def _school_age_dups() -> pd.DataFrame:
-    # Two identical KPM rows (same student ID) that both clean successfully.
+    # Two identical school-age rows (same student ID) that both clean successfully.
     return pd.DataFrame({
         "ID_MURID":          ["A1", "A1"],
         "JANTINA":           ["L", "L"],

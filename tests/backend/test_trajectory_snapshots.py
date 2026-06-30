@@ -67,7 +67,7 @@ def test_rising_district_is_off_or_at_risk():
 
 
 def test_capital_Y_year_column_yields_snapshots():
-    """Regression: NCDC melt emits 'Year' (capital Y); resolver must match case-insensitively."""
+    """Regression: wide_registry melt emits 'Year' (capital Y); resolver must match case-insensitively."""
     rows = []
     for year in ["2023", "2024"]:
         for district in ["Beaufort", "KK"]:

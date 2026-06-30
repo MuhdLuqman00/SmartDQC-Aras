@@ -279,7 +279,7 @@ def _build_tableau_prep(df: pd.DataFrame, report: dict, mapping: dict,
 
 
 def wide_multiyear_wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
-    """Pivot NCDC/TASKA wide-format (one row = one child, columns per year) to long."""
+    """Pivot wide_registry wide-format (one row = one child, columns per year) to long."""
     id_cols   = [c for c in df.columns if not re.match(r"^(2023|2024|2025|2026)\s", str(c))]
     year_cols = [c for c in df.columns if re.match(r"^(2023|2024|2025|2026)\s", str(c))]
     if not year_cols:
@@ -375,7 +375,7 @@ def run_eda(df: pd.DataFrame, mapping: dict, source_type: str,
         "unmapped_critical_fields": [],
     }
 
-    # ── NCDC Wide-to-Long Pivot (BEFORE renaming) ────────────────────────────
+    # ── Wide registry Wide-to-Long Pivot (BEFORE renaming) ───────────────────
     # Check if we have year-prefixed columns indicating wide format
     year_cols = [c for c in df.columns if re.match(r"^(2023|2024|2025|2026)\s", str(c))]
     if year_cols and source_type == "wide_multiyear":
@@ -613,7 +613,7 @@ def run_eda(df: pd.DataFrame, mapping: dict, source_type: str,
                 "rows_affected": n_dups,
             })
 
-    # ── Tahun_ukur from date ───────────────────────────────────────────────────
+    # ── Measurement year from date ─────────────────────────────────────────────
     if "tahun_ukur" not in df.columns and "tarikh_ukur" in df.columns:
         dt = pd.to_datetime(df["tarikh_ukur"], errors="coerce", dayfirst=True, format="mixed")
         df["tahun_ukur"] = dt.dt.year

@@ -151,7 +151,7 @@ _REVIEW_MANAGED_SENTINEL = "__reviews_managed"
 # grounded in the only authoritative sample we have (Docs/Contoh data.xlsx).
 # Disabled 2026-06-16 until the data provider supplies the canonical lists. Keeping them on
 # produces false "needs review" flags on legitimate values — e.g. FACILITY_SET is
-# demonstrably missing real categories ("Hospital Kerajaan", "Klinik Swasta"), and
+# demonstrably missing real categories ("government hospital", "private clinic"), and
 # ETHNIC_VALID / AGENSI_SET completeness is unprovable from a 19+13-row sample.
 # Force-OFF on every path (incl. the legacy all-on default); also removed from
 # REVIEW_EVALUATED_RULES so they are not ghost toggles. Bodies kept for revival.
@@ -640,7 +640,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
             _got = _src_band.apply(_band_from_label)
             _flag(df, (_exp.notna() & _got.notna() & (_exp != _got)).fillna(False).astype(bool),
                   "review_age_band_mismatch")
-        # AGE_AT_VACCINATION (MyVASS contoh). Unit is ASSUMED completed years
+        # AGE_AT_VACCINATION (wide multi-year sample). Unit is ASSUMED completed years
         # (contoh values are 0-3, consistent with an under-5 cohort) — not
         # independently confirmed. [0,5] is the plausible band; revisit if a
         # source documents the unit as months or dose-count.
@@ -771,7 +771,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
         _known = _s.str.lower().isin(valid_set)
         return _present & ~_known
 
-    # Family 10 — NCDC-SPECIFIC
+    # Family 10 — wide_registry-SPECIFIC
     if source == "wide_registry":
         if _on("review_vaccine_unknown"):
             _vc = find_col(["vaccine_name", "vaksin", "vaccine"])
@@ -791,7 +791,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
                 _tblank = df[_tc].isna() | _tv.str.lower().isin(["", "nan", "none", "<na>"])
                 _flag(df, _ap & _tblank, "review_taska_blank")
 
-    # Family 11 — MyVASS-SPECIFIC
+    # Family 11 — wide_multiyear-SPECIFIC
     if source == "wide_multiyear":
         if _on("review_ethnicity_unknown"):
             _ec = find_col(["ethnicity", "etnik", "kaum", "bangsa"])
@@ -810,7 +810,7 @@ def _apply_review_flags(df, source, src_cols, find_col, enabled_rules, src_raw=N
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_wide_multiyear(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
-    """Clean MyVASS data and compute WHO z-scores.
+    """Clean wide multi-year data and compute WHO z-scores.
 
     Flag-then-filter: rows that fail quality rules are tagged with
     `analyzable=False` and `exclude_reason` instead of being physically
@@ -942,11 +942,11 @@ def clean_wide_multiyear(df: pd.DataFrame, enabled_rules=None, range_overrides: 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# NCDC CLEANING
+# WIDE REGISTRY CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_wide_registry(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
-    """Clean NCDC (TASKA) data and compute WHO z-scores.
+    """Clean wide registry data and compute WHO z-scores.
 
     Flag-then-filter: rows that fail quality rules are tagged with
     `analyzable=False` and `exclude_reason` instead of being physically
@@ -1143,17 +1143,17 @@ def clean_wide_registry(df: pd.DataFrame, enabled_rules=None, range_overrides: d
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# KPM CLEANING
+# SCHOOL-AGE CLEANING
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_school_age(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | None = None) -> tuple[pd.DataFrame, dict]:
-    """Clean KPM (school) data and calculate BMI categories.
+    """Clean school-age data and calculate BMI categories.
 
     Flag-then-filter: rows that fail quality rules are tagged with
     `analyzable=False` and `exclude_reason` instead of being physically
     dropped.
 
-    Note: KPM data is for 7-year-olds (school age), which is beyond WHO infant
+    Note: school-age data is for older children, which is beyond WHO infant
     z-score tables, so we use BMI thresholds instead of z-scores.
 
     Returns:
@@ -1268,7 +1268,7 @@ def clean_school_age(df: pd.DataFrame, enabled_rules=None, range_overrides: dict
     profile = make_school_profile(range_overrides)
     _apply_measurement_outlier(df, stats, profile, _on)
 
-    # Calculate BMI (KPM source carries no raw BMI column to discard)
+    # Calculate BMI (school-age source carries no raw BMI column to discard)
     df = _compute_bmi(df, drop_raw=False)
 
     # Rule 9: BMI Categories
@@ -1558,7 +1558,7 @@ def clean_general(df: pd.DataFrame, enabled_rules=None, range_overrides: dict | 
         _gap("wasting")
         _gap("overweight")
 
-    # School-age cohort: BMI categories (KPM-style) replace WHO infant z-scores.
+    # School-age cohort: BMI categories replace WHO infant z-scores.
     # Emit the same Ind_* / BMI_Category columns clean_school_age produces so analytics
     # treat general school-age data identically. Requires both measurements.
     if cohort == "school" and coverage["berat_kg"] and coverage["tinggi_cm"]:
@@ -2195,17 +2195,17 @@ def detect_data_type(columns: list[str], filename: str = "") -> str:
     col_set = set(c.upper() for c in columns)
     fname = filename.lower()
     
-    # Check for NCDC pattern (year-prefixed columns)
+    # Check for wide_registry pattern (year-prefixed columns)
     if any("2023" in c or "2024" in c or "2025" in c for c in columns):
         return "wide_registry"
     
-    # Check for KPM pattern
+    # Check for school_age pattern
     if any(p in col_set for p in ["ID_MURID", "THN_TING", "NAMA SEKOLAH"]):
         return "school_age"
     if "school_age" in fname or ("berat" in fname and "tinggi" in fname):
         return "school_age"
     
-    # Check for MyVASS pattern
+    # Check for wide_multiyear pattern
     if any(p in col_set for p in ["VACCINE_NAME", "NAMA KLINIK", "PANJANG LAHIR (KG)"]):
         return "wide_multiyear"
     if any(p in col_set for p in ["IC_NO_PASSPORT", "DOSE_DATE", "FACILITY_NAME"]):

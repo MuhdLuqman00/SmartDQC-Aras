@@ -71,7 +71,7 @@ def _general() -> pd.DataFrame:
 def test_cleaner_flags_instead_of_dropping(source, frame_fn):
     cleaned, stats = clean_data(frame_fn(), source)
 
-    # Full frame returned — len matches raw_count (post-reshape for NCDC).
+    # Full frame returned — len matches raw_count (post-reshape for wide_registry).
     assert len(cleaned) == stats["raw_count"]
 
     # Bookkeeping columns present and correctly typed.

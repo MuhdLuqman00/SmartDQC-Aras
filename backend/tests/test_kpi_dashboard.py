@@ -82,7 +82,7 @@ def test_compute_missing_optional_columns():
     assert len(out["by_state"]) == 2
 
 
-# ── Daerah drill-down (Feature 6 / 11 / 16 — district-level analytics) ───────
+# ── District drill-down (Feature 6 / 11 / 16 — district-level analytics) ─────
 
 def _df_with_daerah():
     return pd.DataFrame({

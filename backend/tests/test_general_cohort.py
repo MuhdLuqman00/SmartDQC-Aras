@@ -66,7 +66,7 @@ def test_general_school_height_not_nulled_against_infant_bounds():
 
 
 def test_general_school_uses_bmi_categories_not_infant_zscores():
-    """Phase 4b: school-age children get KPM-style BMI categories, not WHO
+    """Phase 4b: school-age children get BMI categories, not WHO
     infant z-scores. under/overweight become available via BMI categories;
     weight/height-for-age (stunting/wasting) stay unavailable; no infant
     z-score columns are fabricated."""

@@ -23,7 +23,7 @@ import backend.clinical_ranges as CR
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 def _wide_multiyear_row(berat=12.0, tinggi=85.0, dob="2020-01-01", measure="2023-01-01"):
-    """One fully-valid MyVASS row (~36mo, in-range weight/height, valid gender)."""
+    """One fully-valid wide multi-year row (~36mo, in-range weight/height, valid gender)."""
     return pd.DataFrame({
         "jantina": ["LELAKI"],
         "Tarikh_Lahir": [dob],
@@ -34,7 +34,7 @@ def _wide_multiyear_row(berat=12.0, tinggi=85.0, dob="2020-01-01", measure="2023
 
 
 def _school_age_row(berat=13.0, tinggi=120.0, dob="2016-01-01", measure="2023-01-01"):
-    """One fully-valid KPM/school row (~7y, in-range weight/height, valid gender)."""
+    """One fully-valid school-age row (~7y, in-range weight/height, valid gender)."""
     return pd.DataFrame({
         "jantina": ["LELAKI"],
         "id_murid": ["S001"],
