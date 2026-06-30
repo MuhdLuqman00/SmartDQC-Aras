@@ -181,7 +181,7 @@ export function LoginPage() {
             marginTop: 26, paddingTop: 18, borderTop: '1px solid var(--border)',
             fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center', letterSpacing: '0.02em',
           }}>
-            {t('Access is restricted to the ministry network.', 'Akses terhad kepada rangkaian kementerian.')}
+            {t('Access is restricted to the internal network.', 'Akses terhad kepada rangkaian dalaman.')}
           </div>
         </div>
       </div>

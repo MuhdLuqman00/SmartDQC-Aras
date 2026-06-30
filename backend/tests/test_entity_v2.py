@@ -72,7 +72,7 @@ def test_name_fuzzy_groups_records_via_pass4():
     """Two IC-less records with fuzzy-name and same DOB should link."""
     records = [
         _rec(name="Ali bin Ahmad", dob="2020-05-12", source_type="MyVASS"),
-        _rec(name="Ali Ahmad",     dob="2020-05-12", source_type="KKM",   dataset_id="ds-kkm"),
+        _rec(name="Ali Ahmad",     dob="2020-05-12", source_type="Clinic",   dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     matched = [g for g in groups if len(g["sources"]) > 1]
@@ -89,7 +89,7 @@ def test_name_fuzzy_does_not_match_unrelated_names():
 
     records = [
         _rec(name="Aiman Iskandar",     dob="2021-01-15", source_type="MyVASS"),
-        _rec(name="Pankaj Subramaniam", dob="2021-01-15", source_type="KKM", dataset_id="ds-kkm"),
+        _rec(name="Pankaj Subramaniam", dob="2021-01-15", source_type="Clinic", dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     # Different children → two single-source groups, not one merged group.
@@ -107,7 +107,7 @@ def test_dob_tolerance_links_one_day_apart():
     """Same-name records 1 day apart on DOB should link with tol=1."""
     records = [
         _rec(name="Sofea Lim", dob="2020-05-12", source_type="MyVASS"),
-        _rec(name="Sofea Lim", dob="2020-05-13", source_type="KKM", dataset_id="ds-kkm"),
+        _rec(name="Sofea Lim", dob="2020-05-13", source_type="Clinic", dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, dob_tolerance_days=1, min_confidence=0.0)
     matched = [g for g in groups if len(g["sources"]) > 1]
@@ -117,7 +117,7 @@ def test_dob_tolerance_links_one_day_apart():
 def test_dob_tolerance_misses_two_days_apart_when_tol_is_one():
     records = [
         _rec(name="Sofea Lim", dob="2020-05-12", source_type="MyVASS"),
-        _rec(name="Sofea Lim", dob="2020-05-14", source_type="KKM", dataset_id="ds-kkm"),
+        _rec(name="Sofea Lim", dob="2020-05-14", source_type="Clinic", dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, dob_tolerance_days=1, min_confidence=0.0)
     assert all(len(g["sources"]) == 1 for g in groups)
@@ -131,8 +131,8 @@ def test_location_boost_raises_confidence_when_states_agree():
     # +0.10 boost is observable (1.0 cap doesn't hide it).
     records = [
         _rec(ic="200512100001", name="A", state="Selangor", source_type="MyVASS"),
-        _rec(ic="200512100002", name="A", state="Selangor", source_type="KKM",
-             dataset_id="ds-kkm"),
+        _rec(ic="200512100002", name="A", state="Selangor", source_type="Clinic",
+             dataset_id="ds-clinic"),
     ]
     boosted = link_records_v2(
         records, fuzzy_ic=True, fuzzy_ic_max_distance=1,
@@ -154,8 +154,8 @@ def test_contradiction_hard_gender_mismatch():
     """Same IC, opposite gender → conflicts list with severity=hard."""
     records = [
         _rec(ic="200512100001", name="Sofea", gender="L", source_type="MyVASS"),
-        _rec(ic="200512100001", name="Sofea", gender="P", source_type="KKM",
-             dataset_id="ds-kkm"),
+        _rec(ic="200512100001", name="Sofea", gender="P", source_type="Clinic",
+             dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     g = next(grp for grp in groups if grp["ic"] == "200512100001")
@@ -170,8 +170,8 @@ def test_contradiction_soft_name_fuzzy_not_exact():
     """Same IC, names match fuzzy but differ in particles → soft."""
     records = [
         _rec(ic="200512100001", name="Ali bin Ahmad", source_type="MyVASS"),
-        _rec(ic="200512100001", name="Ali Ahmad",     source_type="KKM",
-             dataset_id="ds-kkm"),
+        _rec(ic="200512100001", name="Ali Ahmad",     source_type="Clinic",
+             dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     g = next(grp for grp in groups if grp["ic"] == "200512100001")
@@ -186,8 +186,8 @@ def test_timeline_orders_measurements_ascending():
     records = [
         _rec(ic="200512100001", source_type="MyVASS", measure_date="2025-06-01",
              weight_kg=12.0),
-        _rec(ic="200512100001", source_type="KKM",    measure_date="2024-12-15",
-             weight_kg=10.5, dataset_id="ds-kkm"),
+        _rec(ic="200512100001", source_type="Clinic",    measure_date="2024-12-15",
+             weight_kg=10.5, dataset_id="ds-clinic"),
         _rec(ic="200512100001", source_type="NCDC",   measure_date="2026-01-20",
              weight_kg=14.1, dataset_id="ds-ncdc"),
     ]
@@ -227,7 +227,7 @@ def test_nan_district_does_not_trigger_false_conflict():
         _rec(ic="200512100001", state="Selangor", district="Shah Alam",
              source_type="MyVASS"),
         _rec(ic="200512100001", state="Selangor", district=None,
-             source_type="KKM", dataset_id="ds-kkm"),
+             source_type="Clinic", dataset_id="ds-clinic"),
     ]
     groups = link_records_v2(records, min_confidence=0.0)
     g = next(grp for grp in groups if grp["ic"] == "200512100001")
